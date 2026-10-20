@@ -5,6 +5,7 @@ import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
 import { readData } from './lib.mjs'
 import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
+import { requireProductionRun } from './review-guard.mjs'
 
 const args = process.argv.slice(2)
 const slideId = args.find((a) => !a.startsWith('--'))
@@ -28,6 +29,8 @@ Options:
   --index <n>             zero-based index in the current deck (for section-filtered decks)
   --next-selector <css>   optional next control
   --debug-go              navigate with COURSEWARE_DEBUG.go(index) instead of keys
+  --manual                allow a manual/test render outside the production workflow
+  --alpha                 alias of --manual for whole-deck Alpha screenshots
 `)
   process.exit(2)
 }
@@ -41,11 +44,13 @@ const waitMs = Number(opt('--wait', '500'))
 const explicitIndex = opt('--index', '')
 const nextSelector = opt('--next-selector', '')
 const debugGo = flag('--debug-go')
+const manual = flag('--manual') || flag('--alpha')
 
 if (!url) {
   console.log(`build screen ${slideId} (stub: no --url)`)
   process.exit(0)
 }
+requireProductionRun({ tool: `build-screen ${slideId}`, manual })
 if (!storyboardPath) {
   console.error('--storyboard is required when --url is provided')
   process.exit(2)

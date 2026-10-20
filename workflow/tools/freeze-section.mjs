@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { readData } from './lib.mjs'
 import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
+import { requirePageGateApproval } from './review-guard.mjs'
 import { parseScript } from './script-lib.mjs'
 import {
   approvalProblems,
@@ -19,6 +20,9 @@ const args = process.argv.slice(2)
 function opt(name, fallback = '') {
   const i = args.indexOf(name)
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback
+}
+function flag(name) {
+  return args.includes(name)
 }
 
 const sectionsPath = opt('--sections')
@@ -43,9 +47,16 @@ Options:
   --screenshots <dir>   rendered screenshots (default: screenshots)
   --approvals <path>    approval ledger (default: review/page-approvals.json)
   --approval <path>     whole-script approval ledger (default: review/script-approval.json)
+  --manual              allow a manual/test freeze without a review-page gate
 `)
   process.exit(2)
 }
+
+requirePageGateApproval({
+  tool: `freeze-section ${sectionId}`,
+  sectionId,
+  manual: flag('--manual'),
+})
 
 try {
   assertScriptApproved(scriptPath, { approvalPath })

@@ -555,9 +555,30 @@ try {
     0,
   )
   run(
-    'freeze rendered section',
+    'build-screen rejects outside the production workflow',
+    'build-screen.mjs',
+    ['S01', '--url', 'http://127.0.0.1:9', '--storyboard', storyboard, '--script', tmpScript, '--approval', scriptApproval, '--out', tmpShots],
+    1,
+    'courseware-production',
+  )
+  run(
+    'check-rendered-section rejects outside the production workflow',
+    'check-rendered-section.mjs',
+    ['--sections', reviewSections, '--storyboard', storyboard, '--section', 'A', '--screenshots', tmpShots],
+    1,
+    'courseware-production',
+  )
+  run(
+    'freeze-section rejects outside the production workflow',
     'freeze-section.mjs',
     ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--approval', scriptApproval, '--id', 'A', '--approved-by', 'smoke', '--screenshots', tmpShots, '--approvals', tmpApprovals],
+    1,
+    'courseware-production',
+  )
+  run(
+    'freeze rendered section (explicit manual test)',
+    'freeze-section.mjs',
+    ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--approval', scriptApproval, '--id', 'A', '--approved-by', 'smoke', '--screenshots', tmpShots, '--approvals', tmpApprovals, '--manual'],
     0,
   )
   run(
@@ -855,6 +876,13 @@ try {
       [],
       0,
       'OK review gate resume guard',
+    )
+    run(
+      'page-level tools fail closed outside the production workflow',
+      'test-review-guard.mjs',
+      [],
+      0,
+      'OK review guard',
     )
   } else {
     skip('workflow wrapper fail-closed', 'specify CLI not on PATH')
