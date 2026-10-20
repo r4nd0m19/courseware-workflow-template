@@ -55,6 +55,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 - 工作流在 `approve-script` 之后立刻运行 `verify-script-approval`，并用 `--expect-run` 要求账本来自当前 run；不匹配会让整次运行失败，而不是等到几阶段之后。
 - `approve-script` 现在要求 production run 证据：同一 run 的 `self-review-script` 与 `check-self-review-script` 都已完成，且 `review/self-review-script.json` 的 `verdict` 为 `pass`、`reviewedArtifacts` 绑定当前 `courseware.md` 哈希。只有 gate 的最小 workflow 不能铸造账本；测试/调试才加 `--manual`。
 - `register-staged-components` 也只允许在 production run 内、且当前 run 的 `review-page` gate 已 `approve` 时注册；手工注册必须显式 `--manual`。
+- `script-to-storyboard --out` 只允许从已批准脚本投影；`--check` / `--print` 不受影响。测试/调试用 `--manual`。
 - 本地文件无法证明“某个真人按了键”：能改文件的人也能改账本。上面的检查保证正常路径不会误放行、暂停的 gate 不能被当成批准。`gate-review.mjs decide` 只在老师明确回答后由 agent 调用，verdict 记录 `source: chat` / `decidedBy: teacher` 并绑定 run/step/digest/nonce；真正的信任边界是老师在自己面前的 harness 里做出的选择，agent 不代答、不伪造 verdict。
 - 页循环内的 `review-page` 有 resume guard：Spec Kit 恢复嵌套步骤时会重跑父 body；`check-pending-gui-gate.mjs` 用 wrapper 设置的 `SPECKIT_WORKFLOW_RUN_ID` 认出同一 run 的 pending/decided gate，跳过页重建与自审后再进入 gate，避免 `reviewedAt` 改写使已批准的 digest 失效。不要手工删 pending/verdict、改 run 状态或绕过 guard；guard 不是批准来源，verdict 仍由 `gate-review.mjs` 按 nonce/digest 写入并一次性消费。
 

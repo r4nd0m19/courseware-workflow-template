@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import { parseScript, compareStoryboardSlides } from './script-lib.mjs'
 
 const argv = process.argv.slice(2)
@@ -24,10 +25,22 @@ const scriptPath = (() => {
 const out = option('--out')
 const check = option('--check')
 const print = argv.includes('--print')
+const approvalPath = option('--approval', DEFAULT_SCRIPT_APPROVAL)
+const manual = argv.includes('--manual')
 
 if (!scriptPath) {
-  console.error('usage: node script-to-storyboard.mjs <courseware.md> [--out storyboard.yml] [--check storyboard.yml] [--print]')
+  console.error('usage: node script-to-storyboard.mjs <courseware.md> [--out storyboard.yml] [--check storyboard.yml] [--print] [--approval review/script-approval.json] [--manual]')
   process.exit(2)
+}
+if (out && !manual) {
+  try {
+    assertScriptApproved(scriptPath, { approvalPath })
+  } catch (error) {
+    fail('storyboard projection', [
+      `${error.message}; project a storyboard only from an APPROVED script (use --manual only for tests)`,
+    ])
+    process.exit(1)
+  }
 }
 
 let parsed
