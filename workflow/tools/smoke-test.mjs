@@ -8,9 +8,12 @@ import { fileURLToPath } from 'node:url'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(toolsDir, '..')
+const projectRoot = path.resolve(root, '..')
 const examples = path.join(root, 'examples')
 const schemas = path.join(root, 'schemas')
+const hasBranchChoiceShell = fs.existsSync(path.join(projectRoot, 'shells/branch-choice'))
 let failed = 0
+let skipped = 0
 let total = 0
 
 function run(name, script, args, expected, expectedText) {
@@ -35,6 +38,11 @@ function run(name, script, args, expected, expectedText) {
 
 function sha256File(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+}
+
+function skip(name, reason) {
+  skipped += 1
+  console.log(`SKIP ${name} (${reason})`)
 }
 
 function scriptDensity(scriptPath) {
@@ -436,18 +444,22 @@ try {
   )
   const smokeArt = path.join(tmpRoot, 'shell-art-empty.json')
   fs.writeFileSync(smokeArt, JSON.stringify({ schemaVersion: '1.0', shell: 'branch-choice', images: {} }))
-  run(
-    'prepare shell site fail-closed on missing art',
-    'prepare-shell-site.mjs',
-    ['--shell', 'branch-choice', '--deck', smokeDeck, '--art', smokeArt, '--out', path.join(tmpRoot, 'shell-site-no-art')],
-    1,
-  )
-  run(
-    'build shell site fail-closed on missing art',
-    'build-shell-site.mjs',
-    ['--shell', 'branch-choice', '--deck', smokeDeck, '--art', smokeArt, '--out', path.join(tmpRoot, 'shell-site-no-art-build')],
-    1,
-  )
+  if (hasBranchChoiceShell) {
+    run(
+      'prepare shell site fail-closed on missing art',
+      'prepare-shell-site.mjs',
+      ['--shell', 'branch-choice', '--deck', smokeDeck, '--art', smokeArt, '--out', path.join(tmpRoot, 'shell-site-no-art')],
+      1,
+    )
+    run(
+      'build shell site fail-closed on missing art',
+      'build-shell-site.mjs',
+      ['--shell', 'branch-choice', '--deck', smokeDeck, '--art', smokeArt, '--out', path.join(tmpRoot, 'shell-site-no-art-build')],
+      1,
+    )
+  } else {
+    skip('shell art fail-closed', 'no shells/branch-choice in this project')
+  }
 
   // ---- registration on a temp copy ----
   run('ensure empty registry', 'ensure-registry.mjs', [emptyRegistry, style], 0)
@@ -497,5 +509,7 @@ try {
   fs.rmSync(tmpRoot, { recursive: true, force: true })
 }
 
-console.log(`\n${total - failed}/${total} smoke tests passed`)
+console.log(
+  `\n${total - failed}/${total} smoke tests passed${skipped ? `, ${skipped} skipped` : ''}`,
+)
 if (failed) process.exit(1)
