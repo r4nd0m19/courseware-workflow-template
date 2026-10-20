@@ -405,6 +405,13 @@ try {
     [script, '--check', storyboardRegistry],
     1,
   )
+  run(
+    'script-to-storyboard rejects an unapproved projection',
+    'script-to-storyboard.mjs',
+    [script, '--out', path.join(tmpRoot, 'never-storyboard.yml')],
+    1,
+    'approval',
+  )
 
   // ---- component registry ----
   run('component package pass', 'check-component-package.mjs', [componentPkg, '--project-root', examples], 0)
