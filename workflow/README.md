@@ -2,9 +2,9 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.14.1 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
+当前版本：**workflow 0.15.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
 
-- **人工闸门全部走 ZCode 面板**：13 个 `gui-gate` 在非 TTY 运行时写哈希绑定的 pending 请求并暂停；agent 调用 `courseware_gate_open`，老师在 ZCode 内联 MCP App 面板点击，MCP 服务器校验 token/nonce/digest 后自动 resume。agent 不能 `-i` 代答，也没有 verdict 工具入口。详见 [mcp/README.md](mcp/README.md)。
+- **人工审核 = 文件地址 + 原生选择**：13 个 `gui-gate` 在非 TTY 运行时写哈希绑定的 pending 请求并暂停；agent 把审核文件绝对路径/课件 URL 发给老师，用 harness 原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject，再用 `tools/gate-review.mjs decide` 记录，最后用 `tools/run-workflow.mjs resume` 继续。verdict 绑定 run/step/gate/digest/nonce 并一次性消费；agent 不能 `-i` 代答。
 - **人工闸门 fail-closed**：非交互运行必须通过 `tools/run-workflow.mjs`；Spec Kit 的 `paused` 被映射为退出码 3，agent 不能再把“停在 gate”当成成功。脚本批准与 `courseware.md` 的整份 SHA-256、每屏哈希绑定（`review/script-approval.json`），编辑脚本即失效；所有下游工具和 `verify-script-approval` 步骤都会重新校验。
 - **逐页 gate 的 resume 幂等保护**：Spec Kit 在嵌套步骤暂停后会重跑父 body（引擎明确说明，精确嵌套 resume 尚未实现）。页循环因此在 `implement-section`/AI 页自审之前运行 `tools/check-pending-gui-gate.mjs`；同一 run 已有 pending/decided 的 `review-page` gate 时跳过重建与自审，直接回到 gate，避免自审的 `reviewedAt` 改写导致 digest 变化、老师刚点的 verdict 失效。run id 由 wrapper 通过 Spec Kit 自带的 `SPECKIT_WORKFLOW_RUN_ID` 传给 shell 步骤。
 
@@ -23,7 +23,7 @@
 | `preset/` | courseware preset：模板 + 命令（`speckit.script`、`component-plan`、`component-build`、`implement` 等） |
 | `workflows/courseware-production.yml` | 91 步生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套） |
 | `steps/gui-gate/` | Spec Kit 自定义 gate step：非 TTY 写 pending 并暂停；TTY 退化为终端提问；校验 `verdict_input` 禁用与证据哈希 |
-| `mcp/approval-server.mjs` / `mcp/panel.template.html` / `mcp/build-panel.mjs` | ZCode MCP App 审核面板：MCP stdio server、面板模板、内联 ext-apps 运行时的构建脚本；详见 [mcp/README.md](mcp/README.md) |
+| `tools/gate-review.mjs` | 人工审核助手：`show` 打印审核文件/链接/证据；`decide` 在老师明确回答后写入一次性 verdict；`status` 查看 run/gate |
 | `schemas/` | content-pack、courseware-script、storyboard、style-pack、component-package/registry、narration、self-review 等 schema |
 | `tools/build-style-pack-source.mjs` | 从参考课件目录逐字节复制 CSS/JS，写 `SOURCE.json` |
 | `tools/check-source-fidelity.mjs` | 源码哈希 + site 副本 + inline base CSS + DOM 几何/选择器 + 动画/APNG 门禁 |
@@ -50,10 +50,10 @@
 | `tools/section-lib.mjs` / `check-review-sections.mjs` / `next-section.mjs` / `freeze-section.mjs` / `check-section-freeze.mjs` | 逐页清单（强制每节恰好一屏）、批准账本、哈希冻结、重开 |
 | `tools/approve-script.mjs` | 只接受 `review-script` gate 的 `approve` 结果，并核对 run state 中该 gate 已完成；记录整份脚本哈希、每屏哈希与 gate run id 并置为 APPROVED |
 | `tools/check-script-approval.mjs` / `approval-lib.mjs` | 校验批准账本：schema、人工批准人、gate 结果与 run 状态、整份/每屏哈希、APPROVED 状态 |
-| `tools/run-workflow.mjs` | fail-closed 运行 `specify workflow run/resume`；`paused` → 退出码 3；GUI gate 打印 `courseware_gate_open` 调用与禁止 `resume`/`-i` 的说明，内置 gate 仍打印人工恢复命令 |
+| `tools/run-workflow.mjs` | fail-closed 运行 `specify workflow run/resume`；`paused` → 退出码 3；人工 gate 打印审核文件绝对路径、链接、`gate-review.mjs show/decide` 与 `resume` 命令，内置 gate 仍打印人工恢复命令 |
 | `tools/build-narration.mjs` / `check-narration.mjs` | Edge TTS 语音生成与校验 |
-| `tools/smoke-test.mjs` | 全量工具回归（含 gui-gate 静态检查与端到端） |
-| `tools/test-gui-gate.mjs` | GUI gate 端到端：暂停 → pending → MCP open/verdict → 自动 resume → completed |
+| `tools/smoke-test.mjs` | 全量工具回归（含人工 gate 静态检查与端到端） |
+| `tools/test-gui-gate.mjs` | 人工 gate 端到端：暂停 → pending → `gate-review show/decide` → `run-workflow resume` → completed |
 | `examples/` | 脚本/组件计划/注册表/组件包/故事板的通过/失败 fixture |
 
 ## 一键安装
@@ -61,12 +61,12 @@
 从课件仓库根目录：
 
 ```bash
-node workflow/install.mjs --integration codex --zcode
-# 或（Claude Code，同样安装 GUI 面板）
-node workflow/install.mjs --integration claude --zcode
+node workflow/install.mjs --integration codex
+# 或
+node workflow/install.mjs --integration claude
 ```
 
-它会复制 `workflow/`、初始化 Spec Kit（若没有 `.specify`）、安装 `gui-gate` step、安装 preset 与 workflow、安装 tools 依赖并构建 MCP 面板、合并 `.zcode/config.json`（若存在或传了 `--zcode`）、检测 Chromium、跑 smoke test。常用选项：`--project <path>`、`--force`、`--skip-deps`、`--no-smoke`、`--zcode`、`--no-zcode`、`--dry-run`。安装器可重复运行：已安装的 preset 走 `preset update`，workflow 用 `workflow add --dev` 覆盖，`.zcode/config.json` 只合并 `courseware-approval`。Windows 上 `specify` 不在 PATH 时先设 `SPECIFY_BIN`（安装器、smoke tests 与自动 resume 都使用它）。
+它会复制 `workflow/`、初始化 Spec Kit（若没有 `.specify`）、安装 `gui-gate` step、安装 preset 与 workflow、安装 tools 依赖、移除旧版 `.zcode/config.json` 的 `courseware-approval` MCP server 条目、检测 Chromium、跑 smoke test。常用选项：`--project <path>`、`--force`、`--skip-deps`、`--no-smoke`、`--no-zcode`、`--dry-run`。安装器可重复运行：已安装的 preset 走 `preset update`，workflow 用 `workflow add --dev` 覆盖，`.zcode/config.json` 只删除遗留的 `courseware-approval` 条目。Windows 上 `specify` 不在 PATH 时先设 `SPECIFY_BIN`（安装器、smoke tests 与包装器都使用它）。
 
 已有项目要**并装 Codex、保留 Claude** 时，不要用 `install.mjs --integration codex`（它检测到 `.specify` 会保留当前集成），而是：
 
@@ -76,7 +76,7 @@ specify integration use codex     # 把 preset 技能渲染到 .agents/skills
 specify integration use claude    # 恢复默认；Codex 技能保留
 ```
 
-之后运行 workflow 时传 `-i integration=codex`（输入默认 `auto` 跟随项目默认）。Codex 需要项目是 git 仓库。非交互运行必须用 `node workflow/tools/run-workflow.mjs ...`，不要直接 `specify workflow run`：Spec Kit 在 gate 处会以 exit 0 返回 `paused`，包装器则返回 exit 3。GUI gate 的 exit 3 会打印 `courseware_gate_open` 调用，agent 打开面板后由老师点击、服务器自动 resume；内置 gate 仍打印终端恢复命令。详见 [integrations/README.md](integrations/README.md) 与 [mcp/README.md](mcp/README.md)。
+之后运行 workflow 时传 `-i integration=codex`（输入默认 `auto` 跟随项目默认）。Codex 需要项目是 git 仓库。非交互运行必须用 `node workflow/tools/run-workflow.mjs ...`，不要直接 `specify workflow run`：Spec Kit 在 gate 处会以 exit 0 返回 `paused`，包装器则返回 exit 3。人工 gate 的 exit 3 会打印审核文件绝对路径、链接、`gate-review.mjs show/decide` 与 `resume` 命令；内置 gate 仍打印终端恢复命令。详见 [integrations/README.md](integrations/README.md)。
 
 ## 核心架构（先读这一节）
 
@@ -291,9 +291,9 @@ approve-script（DRAFT → APPROVED，记录脚本哈希）
     --id B --reason "S12 的反馈太难，需要重做"
   ```
 - 批准账本：`review/script-approval.json`、`review/page-approvals.json`、`review/page-approvals.md`、`review/page-reopens.json`。不要手改。`script-approval.json` 与整份 `courseware.md` 文本绑定：任何编辑（包括旁白、制作字段或 frontmatter）都会让批准失效，必须重新走 `review-script` 人工 gate。账本同时记录 gate run id；`approve-script` 会拒绝 `paused` 或没有完成 `review-script` 的 run，`verify-script-approval` 用 `--expect-run` 要求账本来自当前 run。
-- 本地文件无法证明按键的是真人；检查保证“暂停的 gate 不会被当成批准、批准后改稿会失效”。真正的信任边界是老师在自己的终端回答 gate，agent 不代答或手动铸造账本。
+- 本地文件无法证明按键的是真人；检查保证“暂停的 gate 不会被当成批准、批准后改稿会失效”。`gate-review.mjs decide` 只在老师明确回答后由 agent 调用，verdict 记录 `source: chat` / `decidedBy: teacher`；真正的信任边界是老师在自己面前的 harness 里做出的选择，agent 不代答或手动铸造账本。
 - `node workflow/tools/check-script-approval.mjs <courseware.md>` 必须通过；失败时下游工具（component-plan、narration、storyboard、组件、deck、截图、冻结）都会拒绝继续。
-- 非交互运行停在 gate 时，包装器返回 exit 3，并打印 gate 的审核请求（逐页 gate 会带课件 URL）与 `show_file` 审核文件路径；老师在自己的终端运行 `node workflow/tools/run-workflow.mjs resume <run-id>` 交互式回答 gate。不要由 agent 代答。
+- 非交互运行停在 gate 时，包装器返回 exit 3，并打印审核文件绝对路径、课件/预览链接和 gate options。agent 把材料发给老师，用原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject 后运行 `node workflow/tools/gate-review.mjs decide <run-id> --step <step> --choice <choice> --by teacher`，再用 `node workflow/tools/run-workflow.mjs resume <run-id>` 继续。不要由 agent 代答，也不要在老师回答前调用 `decide`。
 
 ## Deck 数据与语音
 
@@ -445,12 +445,12 @@ prompt self-review → check-self-review → human gate
 - `specify preset add` / `workflow add` 在 Claude Code 与 Codex 两个 integration 实测安装成功。
 - 一键安装 `node workflow/install.mjs --project … --integration …` 实测 exit 0。
 - `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、逐页清单（含“多屏合并成一个 section”被拒绝，防止绕过逐页人工审核）、截图列表、`next-section`、`approve-script`、`check-script-approval`（批准通过、缺账本、批准后编辑、伪造 `reject` gate、DRAFT 状态、paused run 均拒绝）、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration），workflow 逐页人工审核 gate 静态检查（`review-page` 位于每页实现与自审之后，消息带课件 URL、附本页自审文件；resume guard 位于实现/自审之前），13 个人工 gate 全部为 `gui-gate` 且无 `verdict_input` 的静态检查，占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 92/92 通过，只含 workflow 的模板仓库安装后 88/88 通过，1 个壳检查 SKIP）。
-- GUI 闸门端到端实测（`tools/test-gui-gate.mjs`）：非 TTY 运行 exit 3 并写 pending（show/review 角色与哈希）；MCP `initialize`、resource 读取、`courseware_gate_open` 不含 token；带 panel token + nonce 的 `courseware_gate_verdict` 被接受；服务器自动 resume，run `completed`，verdict 与 pending 均标记消费，`resume/<runId>.log` 记录完成。
-- 逐页 gate resume 实测（`tools/test-gui-gate-resume.mjs`）：嵌套 `do-while → if` 中，gate 前的步骤每次执行都会改写证据；首次运行写 pending 后暂停，老师批准并自动 resume 后，`check-pending-gui-gate.mjs` 认出同一 run 的 pending gate，跳过 gate 前重建，原始 verdict 被消费，run `completed`，证据只被改写 1 次、没有第二个 pending。该用例防止 Spec Kit 重跑父 body 时自审 `reviewedAt` 变化导致批准失效。上述两个用例在 Spec Kit 1.0.10（WSL）与 1.2.2（Windows）各跑一遍，均通过；两个平台全量 smoke 均为 92/92。
+- 人工审核端到端实测（`tools/test-gui-gate.mjs`）：非 TTY 运行 exit 3，包装器打印审核文件绝对路径与 `gate-review.mjs show/decide`；pending 绑定 show/review 角色与哈希；`gate-review show` 打印审核文件与 options；`gate-review decide` 记录 `source: chat` / `decidedBy: teacher` 的 verdict；`run-workflow.mjs resume` 后 run `completed`，verdict 与 pending 均标记消费。
+- 逐页 gate resume 实测（`tools/test-gui-gate-resume.mjs`）：嵌套 `do-while → if` 中，gate 前的步骤每次执行都会改写证据；首次运行写 pending 后暂停，老师批准并 resume 后，`check-pending-gui-gate.mjs` 认出同一 run 的 pending gate，跳过 gate 前重建，原始 verdict 被消费，run `completed`，证据只被改写 1 次、没有第二个 pending。该用例防止 Spec Kit 重跑父 body 时自审 `reviewedAt` 变化导致批准失效。上述两个用例在 Spec Kit 1.0.10（WSL）与 1.2.2（Windows）各跑一遍，均通过；两个平台全量 smoke 均为 92/92。
 - Windows 兼容修复实测：`fs.cpSync` 的 filter 收到 `\\?\` 前缀路径，`path.relative` 因此把祖先目录（如 `staging`）当成相对路径的一部分，注册组件时只复制了 `component.json`；现在统一去掉长路径前缀并按“目标必须在源内”失败关闭。包装器非交互分支改用管道 stdin（不是 NUL），避免 Python `isatty()` 在 Windows 上误判为交互式而卡在终端 gate。
 - `check-source-fidelity --source-only` 与完整 DOM 模式已对 `style-pack/source` + `prototype/site` 实测通过（含 26 个组件选择器与 3 个自定义组件）；壳路径的 source 闸门对 `shells/branch-choice/SOURCE.json` 实测通过（15 个源文件哈希一致）。
 - 壳路径已在 001 Section A 实测：`build-shell-site`（插画 provenance → fail-closed 站点 → bundle/宿主 → 壳/插画站点闸门）、`check-deck-data --shell`、`check-shell --site prototype/shell-site --require-art`、`check-shell-art --site --require-all`、`check-overflow --debug-go`、`check-rendered-section` 与 68 项运行时检查全部通过；7 屏 × 4 声线 = 28 个非空 MP3，站点 `missingArt: []`。
-- 0.14.1 workflow YAML 经 `specify workflow info` 解析成功：91 个顶层步骤、含逐页循环嵌套，无重复 ID；13 个人工 gate 均为 `gui-gate`，自定义 step 由 `.specify/workflows/steps/gui-gate/` 加载；`review-shell` 门禁能读取 `validate-shell` 的 JSON 输出（`previewUrl` / `reviewFile` / `slideCount` / `typeCount` / `narration.voiceCount` / `narration.pageCount`）；`approve-script` 读取 `steps.review-script.output.choice` 与 `context.run_id` 并核对 run state，`verify-script-approval` 紧随其后且要求当前 run。
+- 0.15.0 workflow YAML 经 `specify workflow info` 解析成功：91 个顶层步骤、含逐页循环嵌套，无重复 ID；13 个人工 gate 均为 `gui-gate`，自定义 step 由 `.specify/workflows/steps/gui-gate/` 加载；`review-shell` 门禁能读取 `validate-shell` 的 JSON 输出（`previewUrl` / `reviewFile` / `slideCount` / `typeCount` / `narration.voiceCount` / `narration.pageCount`）；`approve-script` 读取 `steps.review-script.output.choice` 与 `context.run_id` 并核对 run state，`verify-script-approval` 紧随其后且要求当前 run。
 - `check-shell --shots review/shell-shots --review-out review/shell-preview.md --serve-preview` 实测：30 页占位内容、30 张截图、21 种原生类型、29 项互动自检通过；所有标题含“占位”，4 个音色共 32 个占位 MP3 全部解码成功，并在真实壳里播放了 `xiaolai` 与 `xiaozhi`；自动播放会在互动页停住并提示“下一页”，点“下一页”后才继续；detached 预览服务可复用（第二次运行 `previewReused: true`）。
 - 双 harness 已实测：Claude Code 与 Codex 并装后 `.claude/skills` 与 `.agents/skills` 并存；workflow 的 `prompt` 与 `command` 步骤都能经 `codex exec` 调度（command 步骤发送 `$speckit-<name>`）；Codex 在非 git 目录报 `Not inside a trusted directory`，`git init` 后通过；非交互运行必须经 `run-workflow.mjs`，`paused` 返回 exit 3 而不是 0。
 - `generate-shell-art --reuse` 已在 001 实测：prompt / 参考图哈希 / 输出哈希 / provenance 全部匹配时复用 cover、end，不读 API key；`check-shell-art --require-all` 仍通过。

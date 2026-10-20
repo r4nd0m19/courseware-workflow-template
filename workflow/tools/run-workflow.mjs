@@ -11,11 +11,12 @@
 // This mirrors how CI runners treat a job that is waiting for approval: the
 // pipeline is not green until the protected environment actually authorizes it.
 //
-// `gui-gate` steps pause the same way, but their verdict comes from the ZCode
-// MCP App panel, not from a terminal. For those we print the MCP tool call the
-// agent must make and explicitly forbid `resume` / `-i`, because a single
-// approve passed there would persist in the run inputs and pre-answer later
-// gates (including every page in the review loop).
+// `gui-gate` steps pause the same way, but their verdict comes from the
+// teacher's explicit answer recorded with `workflow/tools/gate-review.mjs`.
+// For those we print the review file, the decide command, and the resume
+// command. The agent must not use `specify workflow resume` or `-i`, because a
+// single approve passed there would persist in the run inputs and pre-answer
+// later gates (including every page in the review loop).
 import { randomBytes } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -170,17 +171,36 @@ if (status === 'paused') {
 
   if (guiGate) {
     const message = typeof guiGate.message === 'string' ? guiGate.message.trim() : ''
+    const reviewFile =
+      typeof guiGate.reviewFile === 'string' && guiGate.reviewFile
+        ? guiGate.reviewFile
+        : typeof guiGate.showFile === 'string'
+          ? guiGate.showFile
+          : ''
+    const absoluteReviewFile = reviewFile
+      ? path.resolve(process.cwd(), reviewFile.replace(/[\\/]+/g, path.sep))
+      : ''
+    const gateStep =
+      typeof guiGate.stepId === 'string' && guiGate.stepId ? guiGate.stepId : step
     const lines = [
       `PAUSED workflow ${outcome.workflow_id || ''} at step ${step} (run ${runId})`,
-      'This is a GUI gate. A human must answer it in the ZCode approval panel; the agent must stop here.',
-      `Call the MCP tool courseware_gate_open with {"runId":"${runId}"} to show the panel.`,
-      'Do not run `specify workflow resume`, do not pass -i, and do not call courseware_gate_verdict.',
-      'When the human clicks a choice, the panel records the verdict and the MCP server resumes the run automatically.',
+      'This is a human review gate. Show the review file/link to the teacher and wait for their explicit choice; the agent must not answer it.',
+      `Get the gate details: node workflow/tools/gate-review.mjs show ${runId}`,
+      `Record the teacher's answer: node workflow/tools/gate-review.mjs decide ${runId} --step ${gateStep} --choice <approve|reject>`,
+      `Then resume the workflow: node workflow/tools/run-workflow.mjs resume ${runId}`,
+      'Do not call `specify workflow resume` directly, do not pass -i, and do not edit pending/verdict files by hand.',
       Array.isArray(guiGate.options) ? `Gate options: ${guiGate.options.join(' / ')}` : '',
     ]
     if (message) lines.push('', 'Review request:', message)
-    if (typeof guiGate.showFile === 'string' && guiGate.showFile) {
-      lines.push('', `Review file: ${guiGate.showFile}`)
+    if (absoluteReviewFile) {
+      lines.push('', `Review file: ${absoluteReviewFile}`)
+    }
+    if (Array.isArray(guiGate.links) && guiGate.links.length) {
+      lines.push('', 'Review links:')
+      for (const link of guiGate.links) {
+        if (!link || typeof link.url !== 'string' || !link.url) continue
+        lines.push(`  - ${link.label || 'link'}: ${link.url}`)
+      }
     }
     if (Array.isArray(guiGate.files) && guiGate.files.length) {
       lines.push('', 'Hash-bound evidence:')

@@ -747,7 +747,7 @@ try {
     )
   }
 
-  // ---- every human gate goes through the GUI panel ----
+  // ---- every human gate is a hash-bound review gate ----
   total += 1
   const humanGates = []
   function collectHumanGates(steps) {
@@ -760,11 +760,11 @@ try {
     }
   }
   collectHumanGates(workflowData.steps)
-  const guiOnlyPass =
+  const humanGatePass =
     humanGates.length === 13 &&
     humanGates.every((gate) => gate.type === 'gui-gate' && !('verdict_input' in gate))
-  console.log(`${guiOnlyPass ? 'PASS' : 'FAIL'} workflow human gates use gui-gate without verdict_input`)
-  if (!guiOnlyPass) {
+  console.log(`${humanGatePass ? 'PASS' : 'FAIL'} workflow human gates use hash-bound gui-gate without verdict_input`)
+  if (!humanGatePass) {
     failed += 1
     console.error(
       `expected all 13 human gates to be gui-gate with no verdict_input, found: ` +
@@ -843,18 +843,18 @@ try {
       'OK workflow smoke-ok completed',
     )
     run(
-      'gui-gate end-to-end with MCP approval server',
+      'review gate end-to-end with gate-review.mjs',
       'test-gui-gate.mjs',
       [],
       0,
-      'OK gui-gate end-to-end',
+      'OK review gate end-to-end',
     )
     run(
-      'gui-gate resume keeps the verdict when the pre-gate body would rewrite evidence',
+      'review gate resume keeps the verdict when the pre-gate body would rewrite evidence',
       'test-gui-gate-resume.mjs',
       [],
       0,
-      'OK gui-gate resume guard',
+      'OK review gate resume guard',
     )
   } else {
     skip('workflow wrapper fail-closed', 'specify CLI not on PATH')

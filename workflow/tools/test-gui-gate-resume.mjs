@@ -14,36 +14,21 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(toolsDir, '..', '..')
 const wrapper = path.join(projectRoot, 'workflow/tools/run-workflow.mjs')
-const serverScript = path.join(projectRoot, 'workflow/mcp/approval-server.mjs')
+const reviewTool = path.join(projectRoot, 'workflow/tools/gate-review.mjs')
 const guardScript = path.join(projectRoot, 'workflow/tools/check-pending-gui-gate.mjs')
-const panelFile = path.join(projectRoot, 'workflow/mcp/panel.html')
 const stepDir = path.join(projectRoot, '.specify/workflows/steps/gui-gate')
 
-let server = null
 let tmpRoot = null
 let runId = null
 const fixtureFiles = []
 
 function cleanup() {
-  if (server) {
-    try {
-      server.stdin.end()
-    } catch {
-      // already closed
-    }
-    try {
-      server.kill()
-    } catch {
-      // already exited
-    }
-    server = null
-  }
   for (const file of fixtureFiles) fs.rmSync(file, { force: true })
   if (runId && /^[A-Za-z0-9._-]+$/.test(runId) && !runId.includes('..')) {
     fs.rmSync(path.join(projectRoot, '.specify/workflows/runs', runId), {
@@ -56,32 +41,26 @@ function cleanup() {
 }
 
 function fail(message) {
-  console.error(`FAIL gui-gate resume: ${message}`)
+  console.error(`FAIL review gate resume: ${message}`)
   cleanup()
   process.exit(1)
 }
 
 function pass(message) {
-  console.log(`PASS gui-gate resume: ${message}`)
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  console.log(`PASS review gate resume: ${message}`)
 }
 
 const specifyBin = process.env.SPECIFY_BIN || 'specify'
 const specify = spawnSync(specifyBin, ['--version'], { encoding: 'utf8' })
 if (specify.status !== 0) {
-  console.log('SKIP gui-gate resume (specify CLI not on PATH)')
+  console.log('SKIP review gate resume (specify CLI not on PATH)')
   process.exit(0)
 }
 if (!fs.existsSync(path.join(stepDir, 'step.yml')) || !fs.existsSync(path.join(stepDir, '__init__.py'))) {
-  console.log('SKIP gui-gate resume (run workflow/install.mjs to install the step type)')
+  console.log('SKIP review gate resume (run workflow/install.mjs to install the step type)')
   process.exit(0)
 }
-if (!fs.existsSync(panelFile)) {
-  fail('workflow/mcp/panel.html is missing; run node workflow/mcp/build-panel.mjs')
-}
+if (!fs.existsSync(reviewTool)) fail('workflow/tools/gate-review.mjs is missing')
 if (!fs.existsSync(guardScript)) fail('check-pending-gui-gate.mjs is missing')
 
 tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'courseware-gui-gate-resume-'))
@@ -232,129 +211,62 @@ const ticksAfterPause = JSON.parse(fs.readFileSync(tickFile, 'utf8'))
 if (ticksAfterPause.before !== 1) fail(`pre-gate step ran ${ticksAfterPause.before} times before the pause`)
 pass('first entry runs the pre-gate step once and pauses')
 
-server = spawn(process.execPath, [serverScript], {
-  cwd: projectRoot,
-  env: { ...process.env, COURSEWARE_PROJECT_ROOT: projectRoot, COURSEWARE_GATE_STATE_DIR: stateDir },
-  stdio: ['pipe', 'pipe', 'pipe'],
-})
-let buffer = ''
-let nextId = 1
-const waiting = new Map()
-let serverErr = ''
-server.stderr.on('data', (chunk) => {
-  serverErr += chunk.toString()
-})
-server.stdout.on('data', (chunk) => {
-  buffer += chunk.toString()
-  let index
-  while ((index = buffer.indexOf('\n')) >= 0) {
-    const line = buffer.slice(0, index).trim()
-    buffer = buffer.slice(index + 1)
-    if (!line) continue
-    let message
-    try {
-      message = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (message.id !== undefined && waiting.has(message.id)) {
-      waiting.get(message.id)(message)
-      waiting.delete(message.id)
-    }
-  }
-})
-function rpc(method, params) {
-  const id = nextId
-  nextId += 1
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timeout waiting for ${method}`)), 20000)
-    waiting.set(id, (message) => {
-      clearTimeout(timer)
-      resolve(message)
-    })
-    server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
-  })
-}
-function notify(method, params) {
-  server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`)
-}
-function callTool(name, args) {
-  return rpc('tools/call', { name, arguments: args })
-}
-
-try {
-  const init = await rpc('initialize', {
-    protocolVersion: '2025-11-25',
-    capabilities: {},
-    clientInfo: { name: 'gui-gate-resume-smoke', version: '1' },
-  })
-  if (!init.result || !init.result.protocolVersion) fail(`initialize failed: ${JSON.stringify(init)}`)
-  notify('notifications/initialized', {})
-
-  const resource = await rpc('resources/read', { uri: 'ui://courseware-approval/gate.html' })
-  const html =
-    (resource.result && resource.result.contents && resource.result.contents[0] &&
-      resource.result.contents[0].text) || ''
-  const token = (html.match(/name="courseware-gate-token" content="([0-9a-f]{32})"/) || [])[1]
-  if (!token) fail('panel resource has no token')
-
-  const opened = await callTool('courseware_gate_open', { runId })
-  const openedBody = opened.result && opened.result.structuredContent
-  if (!openedBody || openedBody.status !== 'pending') {
-    fail(`courseware_gate_open did not return the pending gate: ${JSON.stringify(opened)}`)
-  }
-  if (openedBody.gate.nonce !== request.nonce) fail('open returned a different nonce')
-
-  const verdict = await callTool('courseware_gate_verdict', {
-    choice: 'approve',
-    nonce: request.nonce,
-    gateKey: request.gateKey,
-    panelToken: token,
+const decided = spawnSync(
+  process.execPath,
+  [
+    reviewTool,
+    'decide',
     runId,
-  })
-  const verdictBody = verdict.result && verdict.result.structuredContent
-  if (!verdictBody || verdictBody.accepted !== true) {
-    fail(`verdict was not accepted: ${JSON.stringify(verdict)}`)
-  }
-
-  let last = null
-  const deadline = Date.now() + 120000
-  while (Date.now() < deadline) {
-    const next = await callTool('courseware_gate_next', { runId })
-    last = next.result && next.result.structuredContent
-    if (last && ['completed', 'failed', 'aborted'].includes(last.status)) break
-    await sleep(500)
-  }
-  if (!last || last.status !== 'completed') {
-    fail(`auto-resume did not complete the run: ${JSON.stringify(last)}\n${serverErr}`)
-  }
-
-  const ticks = JSON.parse(fs.readFileSync(tickFile, 'utf8'))
-  if (ticks.before !== 1) {
-    fail(`pre-gate step ran ${ticks.before} times; resume must not regenerate the evidence`)
-  }
-  if (ticks.after !== 1) fail(`post-gate step ran ${ticks.after} times, expected 1`)
-  const state = JSON.parse(
-    fs.readFileSync(path.join(projectRoot, '.specify/workflows/runs', runId, 'state.json'), 'utf8'),
-  )
-  if (state.status !== 'completed') fail(`run state is ${state.status}`)
-  const gateResult = state.step_results.inner
-  if (!gateResult || gateResult.output.choice !== 'approve') fail('gate choice was not approve')
-  const consumedPending = JSON.parse(fs.readFileSync(pendingFile, 'utf8'))
-  if (consumedPending.status !== 'consumed') {
-    fail(`pending request is ${consumedPending.status}, expected consumed`)
-  }
-  const requestCount = fs
-    .readdirSync(pendingDir)
-    .filter((name) => name.endsWith('.json'))
-    .map((name) => JSON.parse(fs.readFileSync(path.join(pendingDir, name), 'utf8')))
-    .filter((record) => record.runId === runId).length
-  if (requestCount !== 1) fail(`run has ${requestCount} pending requests, expected 1`)
-  pass('resume skips the pre-gate rebuild and consumes the original verdict')
-  if (serverErr.includes(token)) fail('panel token leaked into server logs')
-} catch (error) {
-  fail(error && error.message ? error.message : String(error))
+    '--step',
+    'inner',
+    '--choice',
+    'approve',
+    '--by',
+    'teacher',
+    '--project',
+    projectRoot,
+    '--state-dir',
+    stateDir,
+  ],
+  { cwd: projectRoot, encoding: 'utf8' },
+)
+if (decided.status !== 0) {
+  fail(`gate-review decide failed: ${decided.stderr || decided.stdout}`)
 }
+
+const resumed = spawnSync(process.execPath, [wrapper, 'resume', runId], {
+  cwd: projectRoot,
+  encoding: 'utf8',
+  env,
+})
+const resumeOut = `${resumed.stdout || ''}\n${resumed.stderr || ''}`
+if (resumed.status !== 0) fail(`resume failed (${resumed.status})\n${resumeOut}`)
+if (!resumeOut.includes('OK workflow smoke-gui-gate-resume completed')) {
+  fail(`resume did not complete the run\n${resumeOut}`)
+}
+
+const ticks = JSON.parse(fs.readFileSync(tickFile, 'utf8'))
+if (ticks.before !== 1) {
+  fail(`pre-gate step ran ${ticks.before} times; resume must not regenerate the evidence`)
+}
+if (ticks.after !== 1) fail(`post-gate step ran ${ticks.after} times, expected 1`)
+const state = JSON.parse(
+  fs.readFileSync(path.join(projectRoot, '.specify/workflows/runs', runId, 'state.json'), 'utf8'),
+)
+if (state.status !== 'completed') fail(`run state is ${state.status}`)
+const gateResult = state.step_results.inner
+if (!gateResult || gateResult.output.choice !== 'approve') fail('gate choice was not approve')
+const consumedPending = JSON.parse(fs.readFileSync(pendingFile, 'utf8'))
+if (consumedPending.status !== 'consumed') {
+  fail(`pending request is ${consumedPending.status}, expected consumed`)
+}
+const requestCount = fs
+  .readdirSync(pendingDir)
+  .filter((name) => name.endsWith('.json'))
+  .map((name) => JSON.parse(fs.readFileSync(path.join(pendingDir, name), 'utf8')))
+  .filter((record) => record.runId === runId).length
+if (requestCount !== 1) fail(`run has ${requestCount} pending requests, expected 1`)
+pass('resume skips the pre-gate rebuild and consumes the original verdict')
 
 cleanup()
-console.log('OK gui-gate resume guard')
+console.log('OK review gate resume guard')
