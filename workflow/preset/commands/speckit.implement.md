@@ -35,6 +35,8 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
 
+脚本批准必须由 `courseware-production` workflow 的 `self-review-script` → `check-self-review-script` → `review-script` 产生；`approve-script` 会核对同一 run 的这两步和 `review/self-review-script.json` 的哈希绑定。只有 gate 的最小审批 workflow 会被拒绝。
+
 ## Outline
 
 1. 读取 `tasks.md`、`courseware.md`、`review-sections.yml`、`storyboard.yml`、`component-plan.md`、`style-pack/source/SOURCE.json`、`style-pack/source/fidelity.json`、风格包 manifest、组件注册表和 `plan.md`；从参数解析 `--section`、`--sections`、`--storyboard`、`--deck-data`、`--staging`。

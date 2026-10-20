@@ -3,7 +3,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseScript } from './script-lib.mjs'
 import { slideScriptHash } from './section-lib.mjs'
-import { reviewRunProblems, sha256Text } from './approval-lib.mjs'
+import {
+  reviewRunProblems,
+  scriptSelfReviewProblems,
+  sha256Text,
+} from './approval-lib.mjs'
 
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
@@ -17,6 +21,7 @@ const gateStep = opt('--gate-step', 'review-script')
 const runId = opt('--run-id').trim()
 const runStatePath = opt('--run-state')
 const out = opt('--out', 'review/script-approval.json')
+const manual = args.includes('--manual')
 
 if (!scriptPath || !approvedBy || !runId) {
   console.error(`usage: node approve-script.mjs <courseware.md> --approved-by <name> --gate-choice approve --run-id <workflow-run-id> [options]
@@ -27,6 +32,7 @@ Options:
   --run-id <id>          workflow run that contains the completed review-script gate
   --run-state <path>     run state.json (default: .specify/workflows/runs/<id>/state.json)
   --out <path>           approval ledger (default: review/script-approval.json)
+  --manual               test/debug only: skip the self-review evidence check
 
 Run only from the workflow step immediately after the human review-script
 gate. This verifies the run state proves that gate completed with "approve",
@@ -62,6 +68,24 @@ if (runProblems.length) {
 
 const absolute = path.resolve(scriptPath)
 const text = fs.readFileSync(absolute, 'utf8')
+
+if (!manual) {
+  const selfReviewProblems = scriptSelfReviewProblems({
+    runId,
+    ...(runStatePath ? { runStatePath } : {}),
+    scriptPath: absolute,
+    scriptText: text,
+  })
+  if (selfReviewProblems.length) {
+    console.error(
+      `FAIL script approval — the run cannot prove a completed script self-review:\n${selfReviewProblems
+        .map((problem) => `  ${problem}`)
+        .join('\n')}\n` +
+        'Run the full courseware-production workflow so self-review-script and check-self-review-script complete before the gate; a minimal gate-only workflow is not enough. Use --manual only for tests.',
+    )
+    process.exit(1)
+  }
+}
 const fmMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
 if (!fmMatch) {
   console.error(`FAIL ${scriptPath}: missing YAML frontmatter`)

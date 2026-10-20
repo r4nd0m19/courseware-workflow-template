@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.14.1"
+  version: "0.15.1"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -895,7 +895,7 @@ steps:
             then:
               - id: register-staged-page-components
                 type: shell
-                run: "node workflow/tools/register-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --only {{ steps.load-page-components.output.data.unregistered | join(',') }} --lesson {{ inputs.lesson }} --approved-by \"{{ inputs.approver }}\" --project-root . --script {{ inputs.courseware_script }} --clean"
+                run: "node workflow/tools/register-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --only {{ steps.load-page-components.output.data.unregistered | join(',') }} --lesson {{ inputs.lesson }} --approved-by \"{{ inputs.approver }}\" --project-root . --script {{ inputs.courseware_script }} --section {{ steps.advance_section.output.data.section.id }} --clean"
 
               - id: check-registry-after-page
                 type: shell

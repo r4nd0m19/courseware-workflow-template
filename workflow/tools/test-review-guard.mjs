@@ -9,6 +9,7 @@ import {
   productionRun,
   requirePageGateApproval,
 } from './review-guard.mjs'
+import { scriptSelfReviewProblems, sha256Text } from './approval-lib.mjs'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'courseware-review-guard-'))
 const runId = 'guard-test'
@@ -22,6 +23,8 @@ fs.writeFileSync(
       workflow_id: 'courseware-production',
       status: 'running',
       step_results: {
+        'self-review-script': { type: 'prompt', status: 'completed' },
+        'check-self-review-script': { type: 'shell', status: 'completed' },
         'section_review_loop:S01:review-page': {
           type: 'gui-gate',
           status: 'completed',
@@ -77,6 +80,50 @@ const manual = requirePageGateApproval({
   projectRoot: tmp,
 })
 assert(manual.mode === 'manual', 'the manual bypass must be explicit')
+
+const scriptText = '# guard test script\n'
+const scriptPath = path.join(tmp, 'courseware.md')
+fs.writeFileSync(scriptPath, scriptText)
+const selfReviewPath = path.join(tmp, 'review/self-review-script.json')
+fs.mkdirSync(path.dirname(selfReviewPath), { recursive: true })
+const writeSelfReview = (verdict) =>
+  fs.writeFileSync(
+    selfReviewPath,
+    `${JSON.stringify(
+      {
+        stage: 'script',
+        verdict,
+        reviewedArtifacts: [{ path: scriptPath, sha256: sha256Text(scriptText) }],
+      },
+      null,
+      2,
+    )}\n`,
+  )
+const runStatePath = path.join(runDir, 'state.json')
+writeSelfReview('pass')
+const selfReviewOk = scriptSelfReviewProblems({
+  runId,
+  runStatePath,
+  scriptPath,
+  scriptText,
+  selfReviewPath,
+})
+assert(
+  selfReviewOk.length === 0,
+  `scriptSelfReviewProblems should accept a bound passing review: ${JSON.stringify(selfReviewOk)}`,
+)
+writeSelfReview('fail')
+const selfReviewFail = scriptSelfReviewProblems({
+  runId,
+  runStatePath,
+  scriptPath,
+  scriptText,
+  selfReviewPath,
+})
+assert(
+  selfReviewFail.some((problem) => problem.includes('verdict')),
+  'scriptSelfReviewProblems must reject a non-pass verdict',
+)
 
 delete process.env.SPECKIT_WORKFLOW_RUN_ID
 const missingEnv = productionRun(tmp)

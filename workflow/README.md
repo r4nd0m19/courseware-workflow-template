@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.15.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
+当前版本：**workflow 0.15.1 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
 
 - **人工审核 = 文件地址 + 原生选择**：13 个 `gui-gate` 在非 TTY 运行时写哈希绑定的 pending 请求并暂停；agent 把审核文件绝对路径/课件 URL 发给老师，用 harness 原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject，再用 `tools/gate-review.mjs decide` 记录，最后用 `tools/run-workflow.mjs resume` 继续。verdict 绑定 run/step/gate/digest/nonce 并一次性消费；agent 不能 `-i` 代答。
 - **人工闸门 fail-closed**：非交互运行必须通过 `tools/run-workflow.mjs`；Spec Kit 的 `paused` 被映射为退出码 3，agent 不能再把“停在 gate”当成成功。脚本批准与 `courseware.md` 的整份 SHA-256、每屏哈希绑定（`review/script-approval.json`），编辑脚本即失效；所有下游工具和 `verify-script-approval` 步骤都会重新校验。
@@ -295,6 +295,7 @@ approve-script（DRAFT → APPROVED，记录脚本哈希）
 - `node workflow/tools/check-script-approval.mjs <courseware.md>` 必须通过；失败时下游工具（component-plan、narration、storyboard、组件、deck、截图、冻结）都会拒绝继续。
 - 非交互运行停在 gate 时，包装器返回 exit 3，并打印审核文件绝对路径、课件/预览链接和 gate options。agent 把材料发给老师，用原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject 后运行 `node workflow/tools/gate-review.mjs decide <run-id> --step <step> --choice <choice> --by teacher`，再用 `node workflow/tools/run-workflow.mjs resume <run-id>` 继续。不要由 agent 代答，也不要在老师回答前调用 `decide`。
 - 页级工具 fail closed：`build-screen` / `check-rendered-section` / `freeze-section` 只在 `SPECKIT_WORKFLOW_RUN_ID` 指向 `courseware-production` 的 run 内运行；`freeze-section` 还要求同一 run 最近的 `review-page` gate 已 `approve` 且消息包含本页 section id。手工调试/测试必须显式加 `--manual`（`build-screen` 也可 `--alpha`），不能把批量渲染当成正常流程。
+- 脚本与组件批准 fail closed：`approve-script` 要求同一 production run 的 `self-review-script`、`check-self-review-script` 均完成，且 `review/self-review-script.json` 为 `pass` 并绑定当前 `courseware.md` 哈希；`register-staged-components` 要求同一 run 的 `review-page` gate 已 `approve`。只有 gate 的最小 workflow 不能批准；测试/调试才加 `--manual`。
 
 ## Deck 数据与语音
 

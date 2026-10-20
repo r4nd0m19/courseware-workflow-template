@@ -89,6 +89,96 @@ export function reviewRunProblems(runId, options = {}) {
   return problems
 }
 
+// A script approval minted by a minimal gate-only workflow is not enough: the
+// production workflow runs self-review-script and check-self-review-script
+// before review-script. Require those step results in the same run and a
+// passing self-review bound to the exact pre-approval courseware.md text.
+export const SELF_REVIEW_SCRIPT_PATH = 'review/self-review-script.json'
+
+export function scriptSelfReviewProblems(options = {}) {
+  const {
+    runId,
+    runStatePath,
+    scriptPath,
+    scriptText,
+    selfReviewPath = SELF_REVIEW_SCRIPT_PATH,
+    requireProductionWorkflow = true,
+  } = options
+  const statePath = reviewRunStatePath(runId, { runStatePath })
+  let state
+  try {
+    state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
+  } catch (error) {
+    return [
+      `cannot read workflow run state for ${runId}: ${statePath} (${error.code || error.message})`,
+    ]
+  }
+  const problems = []
+  if (requireProductionWorkflow && state.workflow_id !== 'courseware-production') {
+    problems.push(
+      `workflow run ${runId} is ${JSON.stringify(state.workflow_id)}, expected "courseware-production"; a minimal gate-only workflow cannot approve a script`,
+    )
+  }
+  const results = state.step_results || state.steps || {}
+  for (const stepId of ['self-review-script', 'check-self-review-script']) {
+    const step = results[stepId]
+    if (!step) {
+      problems.push(`workflow run ${runId} has no ${stepId} step result`)
+    } else if (step.status !== 'completed') {
+      problems.push(
+        `${stepId} in run ${runId} is ${JSON.stringify(step.status)}, expected "completed"`,
+      )
+    }
+  }
+
+  const reviewFile = path.resolve(selfReviewPath)
+  let review
+  try {
+    review = JSON.parse(fs.readFileSync(reviewFile, 'utf8'))
+  } catch (error) {
+    problems.push(`cannot read ${selfReviewPath}: ${error.code || error.message}`)
+    return problems
+  }
+  if (review.stage !== 'script') {
+    problems.push(`${selfReviewPath} stage is ${JSON.stringify(review.stage)}, expected "script"`)
+  }
+  if (String(review.verdict || '').toLowerCase() !== 'pass') {
+    problems.push(
+      `${selfReviewPath} verdict is ${JSON.stringify(review.verdict)}, expected "pass"`,
+    )
+  }
+
+  const expected =
+    scriptText !== undefined
+      ? sha256Text(scriptText)
+      : scriptPath
+        ? sha256File(scriptPath)
+        : null
+  if (!expected) {
+    problems.push('cannot verify the self-review without the script text or path')
+    return problems
+  }
+  const normalize = (value) =>
+    path.resolve(String(value).replace(/[\\/]+/g, path.sep))
+  const scriptAbs = path.resolve(scriptPath)
+  const reviewed = Array.isArray(review.reviewedArtifacts)
+    ? review.reviewedArtifacts
+    : []
+  const match = reviewed.find(
+    (item) =>
+      item &&
+      typeof item.path === 'string' &&
+      normalize(item.path) === scriptAbs &&
+      String(item.sha256 || '').toLowerCase() === expected.toLowerCase(),
+  )
+  if (!match) {
+    problems.push(
+      `${selfReviewPath} does not bind the current ${scriptPath} (sha256 ${expected})`,
+    )
+  }
+  return problems
+}
+
 function resolveLedgerScript(ledger, approvalPath) {
   if (!ledger || typeof ledger.script !== 'string' || !ledger.script.trim()) return []
   const raw = ledger.script.trim()

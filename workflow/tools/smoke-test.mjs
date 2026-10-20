@@ -430,7 +430,7 @@ try {
   run(
     'approve component plan script',
     'approve-script.mjs',
-    [tmpComponentScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', componentApproval],
+    [tmpComponentScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', componentApproval, '--manual'],
     0,
   )
   run(
@@ -462,9 +462,16 @@ try {
   fs.mkdirSync(tmpShots, { recursive: true })
   fs.writeFileSync(path.join(tmpShots, 'S01.png'), 'smoke-png-S01')
   run(
+    'approve script rejects a run without self-review',
+    'approve-script.mjs',
+    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', path.join(tmpRoot, 'review/never-written-self-review.json')],
+    1,
+    'self-review',
+  )
+  run(
     'approve script',
     'approve-script.mjs',
-    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', scriptApproval],
+    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', scriptApproval, '--manual'],
     0,
   )
   run(
@@ -476,14 +483,14 @@ try {
   run(
     'approve script rejects a non-approve gate',
     'approve-script.mjs',
-    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'revise', '--run-id', 'smoke', '--out', path.join(tmpRoot, 'review/never-written.json')],
+    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'revise', '--run-id', 'smoke', '--out', path.join(tmpRoot, 'review/never-written.json'), '--manual'],
     1,
     'not "approve"',
   )
   run(
     'approve script rejects a paused workflow gate',
     'approve-script.mjs',
-    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke-paused', '--out', path.join(tmpRoot, 'review/never-written-paused.json')],
+    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke-paused', '--out', path.join(tmpRoot, 'review/never-written-paused.json'), '--manual'],
     1,
     'expected "completed"',
   )
@@ -533,7 +540,7 @@ try {
   run(
     'approve draft copy before reverting it',
     'approve-script.mjs',
-    [draftScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', draftApproval],
+    [draftScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', draftApproval, '--manual'],
     0,
   )
   fs.writeFileSync(
@@ -650,9 +657,16 @@ try {
   // ---- registration on a temp copy ----
   run('ensure empty registry', 'ensure-registry.mjs', [emptyRegistry, style], 0)
   run(
-    'register staged components',
+    'register-staged-components rejects outside the production workflow',
     'register-staged-components.mjs',
     ['--registry', tmpRegistry, '--lesson', 'smoke-lesson', '--approved-by', 'smoke', '--project-root', examples, '--script', tmpScript, '--approval', scriptApproval],
+    1,
+    'courseware-production',
+  )
+  run(
+    'register staged components',
+    'register-staged-components.mjs',
+    ['--registry', tmpRegistry, '--lesson', 'smoke-lesson', '--approved-by', 'smoke', '--project-root', examples, '--script', tmpScript, '--approval', scriptApproval, '--manual'],
     0,
   )
   run(
