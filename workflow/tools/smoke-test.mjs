@@ -700,7 +700,7 @@ try {
   ).length
   const hasIntegrationInput =
     /^  integration:\n    type: string\n    default: "auto"/m.test(workflowYaml)
-  const hasHardcodedIntegration = /integration:\s*"(?:claude|codex)"/.test(workflowYaml)
+  const hasHardcodedIntegration = /integration:\s*"(?:claude|codex|zcode)"/.test(workflowYaml)
   const harnessPass =
     hasIntegrationInput && integrationExpressions >= 20 && !hasHardcodedIntegration
   console.log(
@@ -711,6 +711,21 @@ try {
     console.error(
       'workflow must declare an integration input defaulting to auto and use it for every command/prompt step',
     )
+  }
+
+  // ---- installer harness support ----
+  total += 1
+  const installerHelp = spawnSync(process.execPath, [path.join(root, 'install.mjs'), '--help'], {
+    encoding: 'utf8',
+  })
+  const installerHelpPass =
+    installerHelp.status === 0 && /claude\|codex\|zcode/.test(installerHelp.stdout || '')
+  console.log(
+    `${installerHelpPass ? 'PASS' : 'FAIL'} installer supports the zcode integration`,
+  )
+  if (!installerHelpPass) {
+    failed += 1
+    console.error('install.mjs --help must document --integration <claude|codex|zcode>')
   }
 
   // ---- per-page human review gate ----

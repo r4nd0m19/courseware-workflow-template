@@ -6,7 +6,7 @@
 
 - 工作流版本：`0.15.1`（91 个顶层步骤）
 - preset：`courseware` `0.3.5`
-- 模板版本：`0.2.1`（2026-10-20）
+- 模板版本：`0.2.2`（2026-10-20）
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
 ## 在 Codex 图形界面里使用
@@ -34,20 +34,41 @@
 
 如果项目在 Windows 盘符下、通过 WSL 访问，路径会变成 `/mnt/c/...`；浏览器、TTS 和 Node 都应在同一个 WSL 环境里。建议把项目放在 WSL 家目录（如 `~/code/...`）。
 
+## 在 ZCode 里使用
+
+ZCode 是 Spec Kit 的内置 integration（`zcode`），AI 步骤由 `zcode -p` 执行，技能渲染到 `.zcode/skills`。
+
+```bash
+# 在项目根目录；确保 zcode CLI 在 PATH 上
+bash bootstrap-codex-courseware.sh --integration zcode
+
+# 已有 Spec Kit 项目
+specify integration install zcode
+specify integration use zcode
+```
+
+安装后运行 workflow 时传 `-i integration=zcode`。人工审核仍用 ZCode 的原生 `AskUserQuestion`，不需要 MCP 面板。
+
 ## 命令行安装
 
 ```bash
-# 在项目根目录
+# 在项目根目录（默认 Codex）
 bash bootstrap-codex-courseware.sh
 
 # 或从任意位置指定项目
 bash bootstrap-codex-courseware.sh --target /path/to/project
 
-# 已有 Spec Kit 项目：补装 Codex 集成并保留原集成
-bash bootstrap-codex-courseware.sh --target /path/to/project
+# ZCode 项目
+bash bootstrap-codex-courseware.sh --integration zcode --target /path/to/project
+
+# Claude Code 项目
+bash bootstrap-codex-courseware.sh --integration claude --target /path/to/project
+
+# 已有 Spec Kit 项目：补装所选集成并保留其他集成
+bash bootstrap-codex-courseware.sh --target /path/to/project --integration zcode
 
 # 更新工作流（覆盖已有 workflow/）
-bash bootstrap-codex-courseware.sh --force
+bash bootstrap-codex-courseware.sh --integration zcode --force
 ```
 
 脚本会：
@@ -68,7 +89,7 @@ bash bootstrap-codex-courseware.sh --force
 | `--repo <url\|path>` | 指定模板仓库（默认本机 `file://$HOME/code/courseware-workflow-template`） |
 | `--ref <branch\|tag>` | 指定模板分支/标签 |
 | `--target <dir>` | 安装到指定项目目录（默认脚本所在目录） |
-| `--integration <codex\|claude>` | 安装的集成（默认 `codex`） |
+| `--integration <codex\|zcode\|claude>` | 安装的集成（默认 `codex`） |
 | `--no-browser` | 跳过 Chromium 下载/检测 |
 | `--force` | 覆盖已有 `workflow/` |
 

@@ -1,12 +1,12 @@
 # AGENTS.md
 
-本仓库是信奥互动课件的生产工作流（Spec Kit preset + workflow + Node 门禁）。Codex 在本仓库工作时，先读本文件，再按任务读 `工作流说明.md` 与 `workflow/README.md`。
+本仓库是信奥互动课件的生产工作流（Spec Kit preset + workflow + Node 门禁）。Claude Code、Codex 或 ZCode 在本仓库工作时，先读本文件，再按任务读 `工作流说明.md` 与 `workflow/README.md`。
 
 ## 运行模型
 
-- 工作流引擎是 Spec Kit，不绑定单一 harness。项目同时安装了 Claude Code（`.claude/skills`）与 Codex（`.agents/skills`）。
-- Claude Code 调用命令用 `/speckit-*`；Codex 用 `$speckit-*`。不要手动编辑这两个目录里的 `SKILL.md`，它们由 `specify preset add` / `specify integration use` 生成。
-- 工作流的 `integration` 输入默认 `auto`（跟随 `.specify/integration.json` 的项目默认）。在 Codex 中运行完整流程时显式传 `-i integration=codex`，不要修改默认集成。
+- 工作流引擎是 Spec Kit，不绑定单一 harness。按项目 integration 安装：Claude Code（`.claude/skills`）、Codex（`.agents/skills`）或 ZCode（`.zcode/skills`）。
+- Claude Code 调用命令用 `/speckit-*`；Codex 用 `$speckit-*`；ZCode 用 `$speckit-*` 或 `/skill <name>`。不要手动编辑这些技能目录里的 `SKILL.md`，它们由 `specify preset add` / `specify integration use` 生成。
+- 工作流的 `integration` 输入默认 `auto`（跟随 `.specify/integration.json` 的项目默认）。运行完整流程时显式传 `-i integration=codex` 或 `-i integration=zcode`，不要修改默认集成。ZCode 的 AI 步骤由 `zcode -p` 执行，Codex 由 `codex exec` 执行。
 - 非交互/脚本化运行必须通过 `node workflow/tools/run-workflow.mjs`，不要直接调用 `specify workflow run`。包装器会忽略非 TTY stdin，把 Spec Kit 的 `paused` 变成退出码 3，并打印 gate 的审核请求（逐页 gate 含课件 URL）与审核文件路径；直接调用 `specify workflow run` 在 gate 处会以退出码 0 返回 `paused`，容易被误判为成功。
 - 看到退出码 3 表示工作流停在人工审核闸门。包装器会打印 `Review file:`（绝对路径）、`Review links:`（课件/预览 URL）、gate options，以及 `gate-review.mjs show/decide` 与 `run-workflow.mjs resume` 命令。
 - 每次人工 gate 都按同一顺序处理：

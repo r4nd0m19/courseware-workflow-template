@@ -62,11 +62,12 @@
 
 ```bash
 node workflow/install.mjs --integration codex
+node workflow/install.mjs --integration zcode
 # 或
 node workflow/install.mjs --integration claude
 ```
 
-它会复制 `workflow/`、初始化 Spec Kit（若没有 `.specify`）、安装 `gui-gate` step、安装 preset 与 workflow、安装 tools 依赖、移除旧版 `.zcode/config.json` 的 `courseware-approval` MCP server 条目、检测 Chromium、跑 smoke test。常用选项：`--project <path>`、`--force`、`--skip-deps`、`--no-smoke`、`--no-zcode`、`--dry-run`。安装器可重复运行：已安装的 preset 走 `preset update`，workflow 用 `workflow add --dev` 覆盖，`.zcode/config.json` 只删除遗留的 `courseware-approval` 条目。Windows 上 `specify` 不在 PATH 时先设 `SPECIFY_BIN`（安装器、smoke tests 与包装器都使用它）。
+它会复制 `workflow/`、初始化 Spec Kit（若没有 `.specify`）、安装 `gui-gate` step、安装 preset 与 workflow、安装 tools 依赖、移除旧版 `.zcode/config.json` 的 `courseware-approval` MCP server 条目、检测 Chromium、跑 smoke test。`zcode` 集成会把 workflow 的 AI 步骤交给 `zcode -p` 执行，技能渲染到 `.zcode/skills`；确保 `zcode` 在 PATH 上。常用选项：`--project <path>`、`--force`、`--skip-deps`、`--no-smoke`、`--no-zcode`、`--dry-run`。安装器可重复运行：已安装的 preset 走 `preset update`，workflow 用 `workflow add --dev` 覆盖，`.zcode/config.json` 只删除遗留的 `courseware-approval` 条目。Windows 上 `specify` 不在 PATH 时先设 `SPECIFY_BIN`（安装器、smoke tests 与包装器都使用它）。
 
 已有项目要**并装 Codex、保留 Claude** 时，不要用 `install.mjs --integration codex`（它检测到 `.specify` 会保留当前集成），而是：
 

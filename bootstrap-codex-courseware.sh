@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# 信奥互动课件工作流：Codex 项目一键安装
+# 信奥互动课件工作流：Codex / ZCode / Claude Code 项目一键安装
 #
-# 在 Codex 图形界面打开的项目根目录里放入本脚本，然后执行：
+# 在 Codex 或 ZCode 打开的项目根目录里放入本脚本，然后执行：
 #   bash bootstrap-codex-courseware.sh
+#   bash bootstrap-codex-courseware.sh --integration zcode
+#   bash bootstrap-codex-courseware.sh --integration claude
 #
 # 脚本会：检查 Node/git → 安装 Spec Kit CLI（如缺失）→ 克隆模板 →
 # 初始化 git → 安装 workflow/preset → 安装工具依赖 → 准备 Chromium →
@@ -25,7 +27,7 @@ usage() {
   --repo <url|path>       模板仓库（默认: 本机 courseware-workflow-template）
   --ref <branch|tag>      模板分支或标签（默认: 默认分支）
   --target <dir>          安装到指定项目目录（默认: 脚本所在目录）
-  --integration <name>    安装的集成，codex 或 claude（默认: codex）
+  --integration <name>    安装的集成，codex、zcode 或 claude（默认: codex）
   --no-browser            跳过 Playwright Chromium 下载/检测
   --force                 覆盖已有 workflow/（默认保留）
   -h, --help              显示帮助
@@ -83,8 +85,26 @@ while (($# > 0)); do
   esac
 done
 
-[[ "$INTEGRATION" == "codex" || "$INTEGRATION" == "claude" ]] ||
-  die "--integration 只能是 codex 或 claude"
+case "$INTEGRATION" in
+  codex)
+    SKILLS_DIR=".agents/skills"
+    INVOKE='$speckit-*'
+    HARNESS="Codex"
+    ;;
+  zcode)
+    SKILLS_DIR=".zcode/skills"
+    INVOKE='$speckit-* 或 /skill <name>'
+    HARNESS="ZCode"
+    ;;
+  claude)
+    SKILLS_DIR=".claude/skills"
+    INVOKE='/speckit-*'
+    HARNESS="Claude Code"
+    ;;
+  *)
+    die "--integration 只能是 codex、zcode 或 claude"
+    ;;
+esac
 
 mkdir -p "$TARGET"
 TARGET="$(cd -- "$TARGET" && pwd)"
@@ -126,7 +146,7 @@ git clone "${clone_args[@]}" "$TEMPLATE_REPO" "$TMP/template"
 log "准备项目: $TARGET"
 if [[ ! -d "$TARGET/.git" ]]; then
   git -C "$TARGET" init -q
-  printf '已 git init（Codex 需要可信任的 git 目录）\n'
+  printf '已 git init（Codex 需要可信任的 git 目录；其他 harness 也建议保留）\n'
 fi
 if [[ ! -f "$TARGET/.gitignore" ]]; then
   cp "$TMP/template/project.gitignore" "$TARGET/.gitignore"
@@ -188,15 +208,17 @@ fi
 
 if [[ -d "$TARGET/.specify" ]]; then
   if ! specify integration status --json 2>/dev/null |
-    node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const j=JSON.parse(s);process.exit(j.installed_integrations.includes("codex")?0:1)}catch{process.exit(1)}})'; then
-    log "为已有 Spec Kit 项目补装 Codex 集成"
-    (cd "$TARGET" && specify integration install codex)
+    node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const j=JSON.parse(s);process.exit((j.installed_integrations||[]).includes(process.argv[1])?0:1)}catch{process.exit(1)}})' "$INTEGRATION"; then
+    log "为已有 Spec Kit 项目补装 $INTEGRATION 集成"
+    (cd "$TARGET" && specify integration install "$INTEGRATION")
   fi
+  log "设置默认集成为 $INTEGRATION"
+  (cd "$TARGET" && specify integration use "$INTEGRATION")
 fi
 
 log "验证安装"
-[[ -f "$TARGET/.agents/skills/speckit-script/SKILL.md" ]] ||
-  die "Codex skill 未生成：缺少 .agents/skills/speckit-script/SKILL.md"
+[[ -f "$TARGET/$SKILLS_DIR/speckit-script/SKILL.md" ]] ||
+  die "$HARNESS skill 未生成：缺少 $SKILLS_DIR/speckit-script/SKILL.md"
 [[ -f "$TARGET/AGENTS.md" ]] || die "缺少 AGENTS.md"
 node "$TARGET/workflow/tools/smoke-test.mjs"
 (
@@ -209,12 +231,12 @@ cat <<EOF
 项目:     $TARGET
 集成:     $INTEGRATION
 工作流:   workflow/workflows/courseware-production.yml
-技能:     .agents/skills/（Codex 中用 \$speckit-* 调用）
+技能:     $SKILLS_DIR（$HARNESS 中用 $INVOKE 调用）
 说明:     AGENTS.md
 
 下一步:
-  1. 在 Codex 中重新打开该项目，或执行 Force Reload Skills，确认能看到 speckit-* 技能。
+  1. 在 $HARNESS 中重新打开该项目，或执行 Force Reload Skills，确认能看到 speckit-* 技能。
   2. 本模板只含工作流，不含具体课件的壳、注册表、研究资料和插画；把本项目的 shell/style pack 放到 shells/ 后再跑完整流程。
-  3. 完整流程示例见 AGENTS.md；Codex 中运行 workflow 时加 -i integration=codex，并使用 node workflow/tools/run-workflow.mjs（退出码 3 = 停在人工 gate）。agent 把审核文件/链接发给老师，用原生提问拿到 approve/reject 后运行 gate-review.mjs decide，再用 run-workflow.mjs resume 继续。
-  4. 更新工作流: bash bootstrap-codex-courseware.sh --force
+  3. 完整流程示例见 AGENTS.md；运行 workflow 时加 -i integration=$INTEGRATION，并使用 node workflow/tools/run-workflow.mjs（退出码 3 = 停在人工 gate）。agent 把审核文件/链接发给老师，用原生提问拿到 approve/reject 后运行 gate-review.mjs decide，再用 run-workflow.mjs resume 继续。
+  4. 更新工作流: bash bootstrap-codex-courseware.sh --integration $INTEGRATION --force
 EOF
