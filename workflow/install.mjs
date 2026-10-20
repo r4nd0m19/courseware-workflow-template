@@ -21,7 +21,7 @@ function help() {
 One-click install for the courseware workflow (harness-agnostic).
 
 Options:
-  --integration <claude|codex>  Spec Kit integration (default: claude)
+  --integration <claude|codex|zcode>  Spec Kit integration (default: claude)
   --project <path>              Project root (default: parent of workflow/)
   --force                       Re-copy workflow/ and re-init if needed
   --skip-deps                   Skip npm install for workflow/tools
@@ -38,8 +38,8 @@ Run from the courseware repo, or pass --project for another Spec Kit project.
 if (flag('-h') || flag('--help')) help()
 
 const integration = option('--integration', 'claude')
-if (!['claude', 'codex'].includes(integration)) {
-  console.error(`Unsupported integration "${integration}". Use claude or codex.`)
+if (!['claude', 'codex', 'zcode'].includes(integration)) {
+  console.error(`Unsupported integration "${integration}". Use claude, codex, or zcode.`)
   process.exit(2)
 }
 const projectRoot = path.resolve(option('--project', path.resolve(workflowSource, '..')))
@@ -206,6 +206,19 @@ if (spec.status !== 0) {
   process.exit(2)
 }
 console.log(`Spec Kit: ${spec.stdout || 'detected'}`)
+
+// The zcode integration dispatches workflow prompt/command steps through the
+// ZCode CLI (`zcode -p`). Warn early instead of letting AI steps fail later.
+if (integration === 'zcode') {
+  const zcodeCli = capture(process.platform === 'win32' ? 'where.exe' : 'which', ['zcode'])
+  if (zcodeCli.status !== 0) {
+    console.warn(
+      'zcode CLI was not found on PATH. Install the ZCode CLI and ensure `zcode -p` works before running workflow prompt steps.',
+    )
+  } else {
+    console.log(`ZCode CLI: ${zcodeCli.stdout}`)
+  }
+}
 
 const workflowDir = copyWorkflow()
 const toolsDir = path.join(workflowDir, 'tools')

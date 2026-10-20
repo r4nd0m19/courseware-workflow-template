@@ -1,10 +1,11 @@
 # Harness 集成说明
 
-一键安装（Claude Code 或 Codex）：
+一键安装（Claude Code、Codex 或 ZCode）：
 
 ```bash
 node workflow/install.mjs --integration claude
 node workflow/install.mjs --integration codex
+node workflow/install.mjs --integration zcode
 ```
 
 安装器会复制 `workflow/`、初始化 Spec Kit、安装 preset/workflow、安装工具依赖、检测 Chromium 并跑 smoke tests。
@@ -16,13 +17,14 @@ node workflow/install.mjs --integration codex
 
 ## 映射
 
-| 内容 | Claude Code | Codex |
-|---|---|---|
-| 命令/技能安装位置 | `.claude/skills/speckit-*` | `.agents/skills/speckit-*` |
-| 调用方式 | `/speckit-specify`、`/speckit-plan`、`/speckit-coverage` | `$speckit-specify`、`$speckit-plan`、`$speckit-coverage` |
-| 项目内集成清单 | `.specify/integrations/claude.manifest.json` | `.specify/integrations/codex.manifest.json` |
-| workflow 命令解析 | `integration: "{{ inputs.integration }}"`（默认 `auto` → 项目默认） | 同左；运行 Codex 时传 `-i integration=codex` |
-| 门禁脚本 | `node workflow/tools/*.mjs` | `node workflow/tools/*.mjs` |
+| 内容 | Claude Code | Codex | ZCode |
+|---|---|---|---|
+| 命令/技能安装位置 | `.claude/skills/speckit-*` | `.agents/skills/speckit-*` | `.zcode/skills/speckit-*` |
+| 调用方式 | `/speckit-specify`、`/speckit-plan`、`/speckit-coverage` | `$speckit-specify`、`$speckit-plan`、`$speckit-coverage` | `$speckit-*` 或 `/skill <name>` |
+| 项目内集成清单 | `.specify/integrations/claude.manifest.json` | `.specify/integrations/codex.manifest.json` | `.specify/integrations/zcode.manifest.json` |
+| workflow 命令解析 | `integration: "{{ inputs.integration }}"`（默认 `auto` → 项目默认） | 同左；运行 Codex 时传 `-i integration=codex` | 同左；运行 ZCode 时传 `-i integration=zcode` |
+| AI 步骤执行 CLI | `claude -p` | `codex exec` | `zcode -p` |
+| 门禁脚本 | `node workflow/tools/*.mjs` | `node workflow/tools/*.mjs` | `node workflow/tools/*.mjs` |
 
 ## 不依赖的东西
 
@@ -65,6 +67,20 @@ node workflow/tools/run-workflow.mjs courseware-production \
 ```
 
 包装器已忽略 stdin，不需要再写 `</dev/null`。它在 gate 处返回 **exit 3**（Spec Kit 原生返回 `paused` + exit 0），并打印 `specify workflow resume <run_id>`。agent 看到 exit 3 必须停止；老师在自己的终端用 `node workflow/tools/run-workflow.mjs resume <run_id>` 交互式回答 gate。
+
+## 在 ZCode 中启用
+
+```bash
+# 新项目
+node workflow/install.mjs --project /path/to/project --integration zcode
+
+# 已有 Spec Kit 项目
+cd /path/to/project
+specify integration install zcode
+specify integration use zcode
+```
+
+ZCode 的技能在 `.zcode/skills`；workflow 的 `prompt` / `command` 步骤由 `zcode -p` 执行。运行 workflow 时传 `-i integration=zcode`。`zcode` CLI 必须在 PATH 上（Windows 常见位置：`C:\Users\<you>\.local\bin\zcode.cmd`）。
 
 ## 新项目：Codex GUI 一键安装（模板仓库）
 
