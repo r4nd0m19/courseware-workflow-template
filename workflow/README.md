@@ -2,13 +2,14 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.8.1 / 89 步（含小节循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
+当前版本：**workflow 0.10.0 / 90 步（含小节循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
 
+- **先审壳，再审内容**：`validate-shell` 渲染 30 页**占位内容**预览 deck、4 音色**占位语音**、逐页截图和审核清单，并启动 detached 本地预览服务；`review-shell` 门禁直接把真实壳 URL 交给老师。壳没批准，不进入内容生产。
 - **风格包 = 参考课件源码逐字节直拷**，不是“看截图重画”。CSS/JS 哈希、舞台几何、DOM 选择器、动画（含 APNG 帧数）都由门禁锚定。
 - **课件 = 壳包 + 声明式 deck**：生产路径写 `specs/<lesson>/deck.json`（`COURSEWARE_SHELL_DATA`），由 `build-shell-site.mjs` 一条命令完成插画 provenance、站点装配、组件 bundle/宿主注入与壳/插画站点闸门。旧 `prototype/site`（`slides.js`）只作历史路径保留。
 - **每课插画必须重新生成**：壳内的参考角色只作生图参考；`generate-shell-art.mjs --prompt-file` 按本课提示词生成不同角色，`check-shell-art --require-all` 校验哈希、透明像素、尺寸与提示词/种子/模型溯源。构建默认 fail-closed，缺图即失败。
 - **内容定制组件仍在库里**：参考已有的交互标为 `reference-verbatim` 直接复制；参考没有的走 component-brief → build → review → core，再由 `build-shell-site` 注入 bundle。
-- **两次人工审核**：整份 `courseware.md` 审一次；之后每小节渲染完再逐节审，上一节未批准不得进入下一节。插画单独有一次生成后审核。
+- **三次人工审核**：壳先审一次（真实预览 URL + 30 页占位内容 deck + 4 音色占位语音）；整份 `courseware.md` 审一次；之后每小节渲染完再逐节审，上一节未批准不得进入下一节。插画单独有一次生成后审核。
 
 ## 文件地图
 
@@ -16,13 +17,16 @@
 |---|---|
 | `install.mjs` | 一键安装：复制 workflow、初始化 Spec Kit、装 preset/workflow/依赖、检测 Chromium、smoke tests |
 | `preset/` | courseware preset：模板 + 命令（`speckit.script`、`component-plan`、`component-build`、`implement` 等） |
-| `workflows/courseware-production.yml` | 89 步生产 workflow（shell / gate / command / fan-out / do-while + if；含小节循环嵌套） |
+| `workflows/courseware-production.yml` | 90 步生产 workflow（shell / gate / command / fan-out / do-while + if；含小节循环嵌套） |
 | `schemas/` | content-pack、courseware-script、storyboard、style-pack、component-package/registry、narration、self-review 等 schema |
 | `tools/build-style-pack-source.mjs` | 从参考课件目录逐字节复制 CSS/JS，写 `SOURCE.json` |
 | `tools/check-source-fidelity.mjs` | 源码哈希 + site 副本 + inline base CSS + DOM 几何/选择器 + 动画/APNG 门禁 |
-| `tools/extract-shell.mjs` | 把一个参考课件提取成可复用壳包（`shells/<id>/`） |
-| `tools/shell-profiles/` | 壳提取 profile：复制清单、lesson.js 数据化变换、slide 类型、组件表、插图槽位 |
-| `tools/shell-lib.mjs` / `list-shells.mjs` / `check-shell.mjs` | 壳包校验、库清单、Playwright 逐页渲染检查 |
+| `tools/extract-shell.mjs` | 把一个参考课件提取成可复用壳包（`shells/<id>/`）；`--preview-only` 只刷新占位预览数据 |
+| `tools/shell-profiles/` | 壳提取 profile：复制清单、lesson.js 数据化变换、slide 类型、组件表、插图槽位；含 `preview-deck.mjs` / `preview-narration.mjs` 占位 fixture |
+| `tools/make-preview-voice.mjs` | 用 Edge TTS 生成壳预览的占位语音（8 句 × 4 音色），写字节数/SHA-256/实测时长 manifest |
+| `tools/shell-preview-lib.mjs` | 校验占位 deck/旁白标记、页数、音频哈希/大小/时长，并写 `deck.js` / `narration-plan.js` / `voice-manifest.js` / `preview-audio/` |
+| `tools/shell-lib.mjs` / `list-shells.mjs` / `check-shell.mjs` | 壳包校验、库清单、Playwright 逐页渲染检查；`check-shell --serve-preview` 启动审核用本地服务并写审核清单 |
+| `tools/preview-lib.mjs` / `preview-server.mjs` | 人工审核用的 detached 静态预览服务、URL 打开与审核清单生成 |
 | `tools/generate-shell-art.mjs` / `check-shell-art.mjs` | 按课件生成风格相似但不同的角色插图；哈希/尺寸/透明背景/溯源门禁；`--reuse` 幂等复用，`--prompt-file` 提供本课提示词 |
 | `tools/image-alpha.mjs` | 生成图去白底、裁透明边距，按壳配置最近邻像素化，输出带 alpha 的像素角色 |
 | `tools/prepare-shell-site.mjs` | 选壳 + deck + 语音 + 插图 → 可运行站点，写 `build-manifest.json`；默认缺图即失败 |
@@ -138,7 +142,8 @@ node workflow/tools/check-source-fidelity.mjs \
 完整命令与 deck 字段见 [`shells/README.md`](../shells/README.md)。核心规则：
 
 - **入库可复制**：`extract-shell` 把参考 `index.html` / `styles.css` / `lesson.js` / 静态资产逐字节复制到 `shells/<id>/source/`，写 `SOURCE.json`；角色裁图放 `reference/` 仅供生图参考。
-- **预览 deck 覆盖全类型**：profile 的 `deck` 生成 `site/deck.js`，21 种原生 slide 类型（含 `numberLab` 的 kind、`code` 的 `flowType`、两/三张卡片）各至少出现一次；`check-shell` 直接检查壳包时缺一即失败，并实际点通主要交互。生产站点用 `--site` 时只要求本课声明的类型被渲染。
+- **预览 deck 覆盖全类型且必须是占位内容**：profile 的 `deck` 生成 `site/deck.js`，21 种原生 slide 类型（含 `numberLab` 的 kind、`code` 的 `flowType`、两/三张卡片）各至少出现一次；所有标题必须带“占位”，`meta.preview.dummy=true`。`check-shell` 直接检查壳包时缺一即失败，并实际点通主要交互。生产站点用 `--site` 时只要求本课声明的类型被渲染。
+- **占位语音 fixture**：`preview-narration.mjs` 定义 8 句占位旁白 × 4 个音色；`make-preview-voice.mjs` 生成 32 个 MP3 与 `manifest.json`（字节数、SHA-256、浏览器实测时长）。`shell-preview-lib.mjs` 在写入站点前逐项校验，`check-shell` 再解码全部音频并在真实壳里播放默认与第三个音色。占位语音只用于检查播放/切换，不是本课旁白；`prepare-shell-site` 装配生产站点时会删除 `preview-audio/` 与 `preview-data.json`，没有本课旁白时写空清单。
 - **运行时数据驱动**：`site/lesson.js` 不再内嵌任何一节课的 slides，只读 `window.COURSEWARE_SHELL_DATA = { meta, slides }`；插图读 `window.COURSEWARE_SHELL_ART`；调试钩子 `COURSEWARE_DEBUG`。
 - **生成时换图**：`generate-shell-art.mjs --prompt-file specs/<lesson>/art-prompts.json` 以参考角色为风格输入、以本课提示词要求不同角色，自动选择 token 可用的图像模型（qwen-image-2.0 / gpt-image-2），去白底并裁透明边距。`--reuse` 在提示词、参考图、输出文件与溯源都没变时跳过 API 调用；`--force` 强制重生成。
 - **插画 provenance 闸门**：`check-shell-art --require-all` 要求每个槽位都有生成图，哈希 ≠ 参考图、PNG 含透明像素、尺寸 ≥ 256 且像素化尺寸可整除，提示词/种子/模型齐全；`--site` 还校验 `build-manifest.json` 与 `shell-art-data.js`。
@@ -148,7 +153,13 @@ node workflow/tools/check-source-fidelity.mjs \
 
 ```bash
 node workflow/tools/list-shells.mjs --check
-node workflow/tools/check-shell.mjs --shell shells/branch-choice --shots /tmp/shell-preview
+node workflow/tools/check-shell.mjs --shell shells/branch-choice \
+  --shots review/shell-shots --review-out review/shell-preview.md \
+  --serve-preview --open-preview
+
+# 只刷新占位预览数据（不重新抽壳）：deck / narration / preview-audio
+node workflow/tools/extract-shell.mjs --preview-only \
+  --out shells/branch-choice --id branch-choice --profile branch-v1
 
 # 1. 本课提示词（每个插图槽一个；由 speckit 的 shell-art-brief 步骤写出）
 cat specs/001-2d-arrays/art-prompts.json
@@ -250,6 +261,8 @@ node workflow/tools/check-review-sections.mjs specs/lesson-01/review-sections.ym
 ## 逐小节渲染审核（rolling render review）
 
 ```text
+壳包 → validate-shell（30 页占位内容 deck + 4 音色占位语音 + 截图 + 本地预览 URL）
+        ↓  老师 review-shell：approve（壳没批准，不进入内容生产）
 整份 courseware.md + review-sections.yml
         ↓  老师 review-script：approve
 approve-script（DRAFT → APPROVED，记录脚本哈希）
@@ -419,10 +432,11 @@ prompt self-review → check-self-review → human gate
 
 - `specify preset add` / `workflow add` 在 Claude Code 与 Codex 两个 integration 实测安装成功。
 - 一键安装 `node workflow/install.mjs --project … --integration …` 实测 exit 0。
-- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、小节清单、截图列表、`next-section`、`approve-script`、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），以及 harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration；本仓库 71/71 通过）。
+- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、小节清单、截图列表、`next-section`、`approve-script`、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），以及 harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration）、占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 75/75 通过，只含 workflow 的模板仓库 71/71、1 项 shell 检查跳过）。
 - `check-source-fidelity --source-only` 与完整 DOM 模式已对 `style-pack/source` + `prototype/site` 实测通过（含 26 个组件选择器与 3 个自定义组件）；壳路径的 source 闸门对 `shells/branch-choice/SOURCE.json` 实测通过（15 个源文件哈希一致）。
 - 壳路径已在 001 Section A 实测：`build-shell-site`（插画 provenance → fail-closed 站点 → bundle/宿主 → 壳/插画站点闸门）、`check-deck-data --shell`、`check-shell --site prototype/shell-site --require-art`、`check-shell-art --site --require-all`、`check-overflow --debug-go`、`check-rendered-section` 与 68 项运行时检查全部通过；7 屏 × 4 声线 = 28 个非空 MP3，站点 `missingArt: []`。
-- 0.8.1 workflow YAML 经 `specify workflow info` 解析成功：89 个顶层步骤、含小节循环嵌套，无重复 ID；`integration` 输入默认 `auto`，21 个 AI 步骤统一引用。
+- 0.10.0 workflow YAML 经 `specify workflow info` 解析成功：90 个顶层步骤、含小节循环嵌套，无重复 ID；`review-shell` 门禁能读取 `validate-shell` 的 JSON 输出（`previewUrl` / `reviewFile` / `slideCount` / `typeCount` / `narration.voiceCount` / `narration.pageCount`）。
+- `check-shell --shots review/shell-shots --review-out review/shell-preview.md --serve-preview` 实测：30 页占位内容、30 张截图、21 种原生类型、29 项互动自检通过；所有标题含“占位”，4 个音色共 32 个占位 MP3 全部解码成功，并在真实壳里播放了 `xiaolai` 与 `xiaozhi`；自动播放会在互动页停住并提示“下一页”，点“下一页”后才继续；detached 预览服务可复用（第二次运行 `previewReused: true`）。
 - 双 harness 已实测：Claude Code 与 Codex 并装后 `.claude/skills` 与 `.agents/skills` 并存；workflow 的 `prompt` 与 `command` 步骤都能经 `codex exec` 调度（command 步骤发送 `$speckit-<name>`）；Codex 在非 git 目录报 `Not inside a trusted directory`，`git init` 后通过；非交互运行需 `</dev/null`。
 - `generate-shell-art --reuse` 已在 001 实测：prompt / 参考图哈希 / 输出哈希 / provenance 全部匹配时复用 cover、end，不读 API key；`check-shell-art --require-all` 仍通过。
 - `check-deck-data` 与 `sync-deck-components` 在 001 壳路径实跑通过；`build-audio-adapter` 仅旧 deck 使用，壳路径由 `prepare-shell-site` 取代。

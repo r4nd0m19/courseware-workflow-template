@@ -4,9 +4,9 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`0.8.1`（89 个顶层步骤）
+- 工作流版本：`0.10.0`（90 个顶层步骤）
 - preset：`courseware` `0.3.2`
-- 模板版本：`0.1.1`（2026-10-20）
+- 模板版本：`0.1.3`（2026-10-20）
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
 ## 在 Codex 图形界面里使用
@@ -25,7 +25,7 @@
 
 4. 如果 Codex 询问是否信任该目录或是否允许执行命令，选择允许。脚本会先 `git init`，因为 Codex 需要可信任的 git 目录。
 5. 安装完成后，在 Codex 中重新打开项目，或执行 **Force Reload Skills**。确认技能列表里有 `speckit-script` 等技能；Codex 里用 `$speckit-*` 调用，Claude Code 里用 `/speckit-*`。
-6. 本模板不带壳；把本项目的 `shells/<shell>/`（风格包 manifest/full/freeze/source）放好后，再按 `AGENTS.md` 里的命令跑完整流程。
+6. 本模板不带壳；把本项目的 `shells/<shell>/`（风格包 manifest/full/freeze/source）放好后，再按 `AGENTS.md` 里的命令跑完整流程。壳入库后，工作流会先用 30 页**占位内容** + 4 音色**占位语音**做壳预览并人工审核（`review-shell`），通过后才进入内容生产。
 
 ### Codex 图形界面的限制
 
@@ -76,7 +76,7 @@ bash bootstrap-codex-courseware.sh --force
 ## 安装后验证
 
 ```bash
-specify workflow info courseware-production   # 应显示 0.8.1、89 steps
+specify workflow info courseware-production   # 应显示 0.10.0、90 steps
 specify integration status                    # 应包含 codex
 node workflow/tools/smoke-test.mjs            # 应全部 PASS
 ls .agents/skills                             # 应包含 speckit-script 等

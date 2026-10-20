@@ -71,12 +71,29 @@ if (fs.existsSync(outDir)) {
   if (force) fs.rmSync(outDir, { recursive: true, force: true })
 }
 
-// 1. Copy the shell site. reference/ and any narration clips are not part of
-//    the shell package and therefore cannot leak into the output.
+// 1. Copy the shell site. reference/ is never part of site/, so it cannot
+//    leak. Preview-only fixtures live in site/ for shell review, but they are
+//    not production content: drop them before a lesson is assembled.
 fs.mkdirSync(outDir, { recursive: true })
 for (const file of walk(check.siteDir)) {
   const rel = path.relative(check.siteDir, file)
   copyFile(file, path.join(outDir, rel))
+}
+for (const rel of ['preview-audio', 'preview-data.json']) {
+  fs.rmSync(path.join(outDir, rel), { recursive: true, force: true })
+}
+// Without lesson narration the shell would otherwise keep the dummy preview
+// plan and voice manifest, and a production page could play placeholder voice.
+// Write empty (not dummy) manifests so index.html's script tags still resolve.
+if (!narrationPath && !narrationPlanPath && !voiceManifestPath) {
+  fs.writeFileSync(
+    path.join(outDir, 'narration-plan.js'),
+    'window.COURSEWARE_NARRATION_PLAN = { version: 1, dummy: false, voices: [], pages: [] };\n',
+  )
+  fs.writeFileSync(
+    path.join(outDir, 'voice-manifest.js'),
+    'window.COURSEWARE_VOICE_MANIFEST = { version: 1, dummy: false, voices: [], pages: [] };\n',
+  )
 }
 
 // 2. Deck data.
@@ -263,4 +280,4 @@ console.log(`   slides: ${deckSlides.length} (${[...new Set(deckSlides.map((s) =
 console.log(`   generated art: ${Object.keys(generatedArt).join(', ') || 'none'}`)
 if (missingArt.length) console.log(`   WARN missing art (allowed by --allow-missing-art): ${missingArt.join(', ')}`)
 else if (!artPath) console.log('   art: none')
-console.log(`   narration: ${narrationFiles.join(', ') || 'none (shell stubs)'}`)
+console.log(`   narration: ${narrationFiles.join(', ') || 'none (empty manifests)'}`)

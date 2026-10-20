@@ -4,7 +4,7 @@ import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(toolsDir, '..')
@@ -457,6 +457,34 @@ try {
       ['--shell', 'branch-choice', '--deck', smokeDeck, '--art', smokeArt, '--out', path.join(tmpRoot, 'shell-site-no-art-build')],
       1,
     )
+    const previewFreeSite = path.join(tmpRoot, 'shell-site-preview-free')
+    run(
+      'prepare shell site strips preview-only fixtures',
+      'prepare-shell-site.mjs',
+      ['--shell', 'branch-choice', '--deck', smokeDeck, '--out', previewFreeSite, '--allow-missing-art'],
+      0,
+    )
+    total += 1
+    let previewStripPass = false
+    let previewStripDetail = ''
+    try {
+      const leaked = ['preview-audio', 'preview-data.json'].filter((rel) => fs.existsSync(path.join(previewFreeSite, rel)))
+      const narrationSources = ['narration-plan.js', 'voice-manifest.js']
+        .map((rel) => fs.readFileSync(path.join(previewFreeSite, rel), 'utf8'))
+        .join('\n')
+      previewStripPass =
+        leaked.length === 0 &&
+        /dummy:\s*false/.test(narrationSources) &&
+        !/preview-audio|占位语音/.test(narrationSources)
+      previewStripDetail = leaked.length ? `leaked: ${leaked.join(', ')}` : 'no dummy preview files or narration'
+    } catch (error) {
+      previewStripDetail = error.message
+    }
+    console.log(`${previewStripPass ? 'PASS' : 'FAIL'} production site excludes dummy preview fixtures (${previewStripDetail})`)
+    if (!previewStripPass) {
+      failed += 1
+      console.error('prepare-shell-site must not copy preview-audio/preview-data.json, and must not leave dummy narration in a site assembled without narration')
+    }
   } else {
     skip('shell art fail-closed', 'no shells/branch-choice in this project')
   }
@@ -503,6 +531,73 @@ try {
     failed += 1
     console.error(
       'workflow must declare an integration input defaulting to auto and use it for every command/prompt step',
+    )
+  }
+
+  // ---- shell review gate ----
+  total += 1
+  const hasShellPreviewStep =
+    /- id: validate-shell\n    type: shell\n    run: "node workflow\/tools\/check-shell\.mjs[^"\n]*--serve-preview[^"\n]*--json"\n    output_format: json/.test(workflowYaml)
+  const hasShellReviewGate =
+    /- id: review-shell\n    type: gate\n/.test(workflowYaml) &&
+    /message: "[^"\n]*steps\.validate_shell\.output\.data\.previewUrl/.test(workflowYaml) &&
+    /message: "[^"\n]*narration\.voiceCount/.test(workflowYaml) &&
+    /message: "[^"\n]*narration\.pageCount/.test(workflowYaml) &&
+    /show_file: "\{\{ steps\.validate_shell\.output\.data\.reviewFile \}\}"/.test(workflowYaml)
+  const shellReviewPass = hasShellPreviewStep && hasShellReviewGate
+  console.log(`${shellReviewPass ? 'PASS' : 'FAIL'} workflow shell review gate`)
+  if (!shellReviewPass) {
+    failed += 1
+    console.error(
+      'workflow must render a shell preview, expose its URL/review file/dummy narration counts as JSON, and gate on it',
+    )
+  }
+
+  // ---- shell preview dummy fixture ----
+  total += 1
+  let previewFixturePass = false
+  let previewFixtureDetail = ''
+  try {
+    const previewDeckFile = path.join(root, 'tools/shell-profiles/branch-v1/preview-deck.mjs')
+    const previewAudioDir = path.join(root, 'tools/shell-profiles/branch-v1/preview-audio')
+    const { default: deck } = await import(`${pathToFileURL(previewDeckFile).href}?v=${Date.now()}`)
+    const manifest = JSON.parse(fs.readFileSync(path.join(previewAudioDir, 'manifest.json'), 'utf8'))
+    const unmarked = deck.slides.filter((slide) => !String(slide.title || '').includes('占位'))
+    const voiceIds = (manifest.voices || []).map((voice) => voice.id)
+    const clips = (manifest.phrases || []).flatMap((phrase) =>
+      Object.entries(phrase.files || {}).map(([voiceId, file]) => ({ ...file, voiceId })),
+    )
+    const missingFiles = new Set(
+      clips.filter((clip) => !fs.existsSync(path.join(previewAudioDir, clip.file))).map((clip) => clip.file),
+    )
+    const badHashes = clips.filter(
+      (clip) => !missingFiles.has(clip.file) && sha256File(path.join(previewAudioDir, clip.file)) !== clip.sha256,
+    )
+    const badDurations = clips.filter((clip) => !(clip.duration > 0))
+    const voicesCovered = voiceIds.every((voiceId) => clips.some((clip) => clip.voiceId === voiceId))
+    previewFixturePass =
+      deck.meta?.preview?.dummy === true &&
+      deck.slides.length >= 20 &&
+      unmarked.length === 0 &&
+      voiceIds.length >= 2 &&
+      voicesCovered &&
+      clips.length >= voiceIds.length * 4 &&
+      missingFiles.size === 0 &&
+      badHashes.length === 0 &&
+      badDurations.length === 0
+    previewFixtureDetail = `${deck.slides.length} dummy slide(s), ${voiceIds.length} voice(s), ${clips.length} audio file(s)`
+    if (unmarked.length) previewFixtureDetail += `; ${unmarked.length} slide(s) missing 占位`
+    if (missingFiles.size) previewFixtureDetail += `; ${missingFiles.size} missing audio file(s)`
+    if (badHashes.length) previewFixtureDetail += `; ${badHashes.length} hash mismatch(es)`
+    if (badDurations.length) previewFixtureDetail += `; ${badDurations.length} bad duration(s)`
+  } catch (error) {
+    previewFixtureDetail = error.message
+  }
+  console.log(`${previewFixturePass ? 'PASS' : 'FAIL'} shell preview dummy fixture (${previewFixtureDetail})`)
+  if (!previewFixturePass) {
+    failed += 1
+    console.error(
+      'preview deck must be marked dummy, every slide title must contain 占位, and every voice must have hashed, non-empty audio fixtures',
     )
   }
 } finally {
