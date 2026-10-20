@@ -1,0 +1,6 @@
+node_modules/
+workflow/tools/node_modules/
+workflow/tools/chrome-path.txt
+workflow/tools/.cache/
+.DS_Store
+Thumbs.db

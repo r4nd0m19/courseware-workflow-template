@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "1.0",
+  "lesson": "demo-lesson-01",
+  "auditVersion": "1.0",
+  "mode": "self-study",
+  "script": {
+    "path": "workflow/examples/courseware.example.md",
+    "sha256": "f6181eca73dfcf6d1e711dd79818cc87b778af994093f6e72b7a5aae601909ed",
+    "slides": 2
+  },
+  "contentPack": {
+    "path": "workflow/examples/content-pack.example.json",
+    "requiredItems": 2,
+    "referencedItems": 2,
+    "unreferenced": []
+  },
+  "rubric": [
+    {
+      "id": "objectives",
+      "name": "目标链路",
+      "verdict": "pass",
+      "evidence": "S01 讲解、S02 练习，目标 O1 覆盖。"
+    },
+    {
+      "id": "prerequisites",
+      "name": "先修唤醒",
+      "verdict": "pass",
+      "evidence": "S01 从零开始，无需先修。"
+    },
+    {
+      "id": "explanation",
+      "name": "讲解完整性",
+      "verdict": "pass",
+      "evidence": "S01 给出程序定义与指令顺序。"
+    },
+    {
+      "id": "worked-examples",
+      "name": "完整例题",
+      "verdict": "gap",
+      "evidence": "S02 只有代码，没有逐步解释为什么输出 Hello World。"
+    },
+    {
+      "id": "practice",
+      "name": "独立练习",
+      "verdict": "pass",
+      "evidence": "S02 有输出练习。"
+    },
+    {
+      "id": "feedback",
+      "name": "反馈",
+      "verdict": "pass",
+      "evidence": "S02 测验有逐项反馈。"
+    },
+    {
+      "id": "misconceptions",
+      "name": "误区处理",
+      "verdict": "pass",
+      "evidence": "S02 辨析题处理 cin 误区。"
+    },
+    {
+      "id": "navigation",
+      "name": "转场",
+      "verdict": "pass",
+      "evidence": "S01 结尾转到 S02。"
+    },
+    {
+      "id": "accessibility",
+      "name": "无障碍",
+      "verdict": "n/a",
+      "evidence": "无动画，全部为静态文本。"
+    },
+    {
+      "id": "self-regulation",
+      "name": "自学支持",
+      "verdict": "gap",
+      "evidence": "S02 做错后没有提示如何重试。"
+    }
+  ],
+  "objectives": [
+    {
+      "id": "O1",
+      "text": "能解释程序是什么并写出输出 Hello World 的程序",
+      "explanation": true,
+      "workedExample": false,
+      "practice": true,
+      "feedback": true,
+      "slides": [
+        "S01",
+        "S02"
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "S01",
+      "role": "explain",
+      "objectiveIds": [
+        "O1"
+      ],
+      "status": "sufficient",
+      "gapIds": []
+    },
+    {
+      "id": "S02",
+      "role": "practice",
+      "objectiveIds": [
+        "O1"
+      ],
+      "status": "gap",
+      "gapIds": [
+        "G01",
+        "G02"
+      ],
+      "notes": "缺完整例题与重试提示"
+    }
+  ],
+  "gaps": [
+    {
+      "id": "G01",
+      "severity": "blocking",
+      "dimension": "worked-examples",
+      "slideIds": [
+        "S02"
+      ],
+      "objectiveIds": [
+        "O1"
+      ],
+      "summary": "S02 缺少逐步执行的完整例题",
+      "evidence": "屏幕只给出最终代码和输出，没有解释每一行做什么，学生无法迁移。",
+      "proposal": "在 S02 代码后补一段逐行解释，并给出一次输出推演。",
+      "basis": "content pack K02；worked-example effect（Sweller）",
+      "pageImpact": 0
+    },
+    {
+      "id": "G02",
+      "severity": "recommended",
+      "dimension": "self-regulation",
+      "slideIds": [
+        "S02"
+      ],
+      "objectiveIds": [
+        "O1"
+      ],
+      "summary": "错误后缺少重试提示",
+      "evidence": "测验错误反馈只写“再想想”。",
+      "proposal": "补一句可操作提示：先检查分号，再检查引号。",
+      "basis": "content pack 反馈字段；formative feedback",
+      "pageImpact": 0
+    }
+  ],
+  "pageBudget": {
+    "declared": 2,
+    "current": 2,
+    "proposed": 2,
+    "exceedsDeclaredBudget": false,
+    "decision": "within-budget"
+  },
+  "supplements": [
+    {
+      "id": "G01-a",
+      "gapId": "G01",
+      "type": "worked-example",
+      "targetSlides": [
+        "S02"
+      ],
+      "label": "自学补充",
+      "basis": "content pack K02；worked-example effect（Sweller）",
+      "summary": "在 S02 补逐行解释与输出推演"
+    },
+    {
+      "id": "G02-a",
+      "gapId": "G02",
+      "type": "feedback",
+      "targetSlides": [
+        "S02"
+      ],
+      "label": "自学补充",
+      "basis": "content pack 反馈字段；formative feedback",
+      "summary": "在 S02 补可操作的重试提示"
+    }
+  ],
+  "verdict": "insufficient",
+  "reviewedAt": "2026-10-19T12:00:00.000Z"
+}

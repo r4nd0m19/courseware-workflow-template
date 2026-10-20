@@ -1,0 +1,20 @@
+lesson: demo-lesson-01
+contentPack: content-pack.example.json
+stylePack: style-pack.example.json
+slides:
+  - id: S01
+    title: 程序是一组指令
+    objectiveId: O1
+    objective: O1 能用自己的话解释程序是什么
+    contentRefs: [K01]
+    components: [eyebrow-heading, rich-text]
+    layout: content-slide
+    status: APPROVED
+  - id: S02
+    title: 第一个程序
+    objectiveId: O1
+    objective: O1 能写出 Hello World
+    contentRefs: [E01]
+    components: [eyebrow-heading, code-block]
+    layout: content-slide
+    status: APPROVED

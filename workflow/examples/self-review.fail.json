@@ -1,0 +1,19 @@
+{
+  "stage": "brief",
+  "artifactPaths": ["spec.md"],
+  "reviewedArtifacts": [
+    {
+      "path": "examples/courseware.example.md",
+      "sha256": "3e85e24b421d5a3d6a0a4acd6156e6b5810eeaf76af47b88a3a196d5cbbf82ae"
+    }
+  ],
+  "automatedChecks": [{ "name": "content coverage", "status": "fail" }],
+  "checklist": [
+    { "item": "content coverage map includes all required items", "status": "fail" }
+  ],
+  "issues": [
+    { "description": "required item Q01 is missing", "severity": "blocking", "fixed": false }
+  ],
+  "verdict": "fail",
+  "reviewedAt": "2026-10-19T00:00:00Z"
+}

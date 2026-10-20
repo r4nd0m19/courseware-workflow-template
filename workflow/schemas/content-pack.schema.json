@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/content-pack.schema.json",
+  "title": "Courseware content pack",
+  "type": "object",
+  "required": ["version", "lesson", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "source": { "type": "string" },
+    "lesson": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "audience": { "type": "string" }
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/item" }
+    }
+  },
+  "definitions": {
+    "item": {
+      "type": "object",
+      "required": ["id", "kind", "title", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z]+[0-9]+$" },
+        "kind": {
+          "type": "string",
+          "enum": ["knowledge", "example", "quiz", "step", "narration", "structure"]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "code": { "type": "string" },
+        "output": { "type": "string" },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["text", "correct"],
+            "additionalProperties": false,
+            "properties": {
+              "text": { "type": "string", "minLength": 1 },
+              "correct": { "type": "boolean" },
+              "feedback": { "type": "string" }
+            }
+          }
+        },
+        "feedback": { "type": "string" },
+        "quizType": { "type": "string", "enum": ["single", "multi", "code"] },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "narration": { "type": "string" },
+        "image": { "type": "string" },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["src", "alt"],
+            "additionalProperties": false,
+            "properties": {
+              "src": { "type": "string" },
+              "alt": { "type": "string" }
+            }
+          }
+        },
+        "required": { "type": "boolean" },
+        "sensitivity": { "type": "string", "enum": ["public", "internal", "personal"] },
+        "sourcePage": { "type": "integer", "minimum": 1 },
+        "sourceUrl": { "type": "string" },
+        "notes": { "type": "string" },
+        "reviewStatus": { "type": "string", "enum": ["draft", "reviewed"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "quiz" } } },
+          "then": { "required": ["options"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "example" } } },
+          "then": { "required": ["code"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "step" } } },
+          "then": { "required": ["steps"] }
+        }
+      ]
+    }
+  }
+}

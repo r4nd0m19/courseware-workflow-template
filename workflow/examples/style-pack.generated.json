@@ -1,0 +1,10 @@
+{
+  "id": "demo-style",
+  "version": "0.1.0",
+  "components": [
+    { "id": "eyebrow-heading", "status": "core" },
+    { "id": "rich-text", "status": "core" },
+    { "id": "matrix-lab", "status": "core", "kind": "generated" }
+  ],
+  "layouts": ["content-slide", "cover-hero", "cover-chapter", "cover-end"]
+}

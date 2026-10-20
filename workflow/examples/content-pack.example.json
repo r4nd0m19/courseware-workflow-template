@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "source": "example reference courseware",
+  "lesson": {
+    "id": "demo-lesson-01",
+    "title": "演示课：程序与输出",
+    "audience": "C++ 初学者"
+  },
+  "items": [
+    {
+      "id": "K01",
+      "kind": "knowledge",
+      "title": "程序是一组指令",
+      "text": "程序是一组指挥计算机做事的指令代码，计算机会按顺序执行。",
+      "required": true,
+      "reviewStatus": "reviewed",
+      "sourcePage": 3
+    },
+    {
+      "id": "E01",
+      "kind": "example",
+      "title": "Hello World 示例",
+      "code": "#include <iostream>\nint main() {\n    std::cout << \"Hello World!\";\n    return 0;\n}",
+      "output": "Hello World!",
+      "required": true,
+      "reviewStatus": "reviewed",
+      "sourcePage": 28
+    },
+    {
+      "id": "Q01",
+      "kind": "quiz",
+      "title": "输出语句辨析",
+      "text": "下面哪一行会向屏幕输出 Hello？",
+      "quizType": "single",
+      "options": [
+        { "text": "std::cout << \"Hello\";", "correct": true, "feedback": "正确：cout 用于输出。" },
+        { "text": "std::cin >> \"Hello\";", "correct": false, "feedback": "cin 是输入，不是输出。" }
+      ],
+      "required": true,
+      "reviewStatus": "reviewed",
+      "sourcePage": 35
+    }
+  ]
+}

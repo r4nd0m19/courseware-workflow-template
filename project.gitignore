@@ -1,0 +1,28 @@
+# 依赖与构建产物
+node_modules/
+workflow/tools/node_modules/
+workflow/tools/chrome-path.txt
+prototype/shell-site/
+prototype/dist/
+prototype/site/audio/
+generated/
+.specify/workflows/runs/
+.specify/integrations/.cache/
+.codex/
+
+# 研究资料与第三方内容（不要提交）
+research/raw/
+research/r0/mirror/
+research/r0/analysis/
+research/r0/screenshots/
+reference-crawl/
+archive/
+style-pack/source/
+
+# 本地凭据
+tools/r0/credentials.local.json
+tools/r0/*.local.json
+
+# 系统文件
+.DS_Store
+Thumbs.db

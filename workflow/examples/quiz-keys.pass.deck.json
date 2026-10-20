@@ -1,0 +1,53 @@
+{
+  "slides": [
+    {
+      "id": "S01",
+      "component": "quiz-bank",
+      "props": {
+        "questions": [
+          {
+            "id": "Q1",
+            "options": [
+              { "id": "A", "text": "beta", "correct": false },
+              { "id": "B", "text": "gamma", "correct": false },
+              { "id": "C", "text": "alpha", "correct": true }
+            ]
+          },
+          {
+            "id": "Q2",
+            "options": [
+              { "id": "A", "text": "epsilon", "correct": false },
+              { "id": "B", "text": "delta", "correct": true },
+              { "id": "C", "text": "zeta", "correct": false }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "S02",
+      "component": "quiz-bank",
+      "props": {
+        "questions": [
+          {
+            "id": "Q3",
+            "options": [
+              { "id": "A", "text": "theta", "correct": false },
+              { "id": "B", "text": "iota", "correct": false },
+              { "id": "C", "text": "kappa", "correct": false },
+              { "id": "D", "text": "eta", "correct": true }
+            ]
+          },
+          {
+            "id": "Q4",
+            "options": [
+              { "id": "A", "text": "lambda", "correct": true },
+              { "id": "B", "text": "mu", "correct": false },
+              { "id": "C", "text": "nu", "correct": false }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

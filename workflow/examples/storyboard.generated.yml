@@ -1,0 +1,13 @@
+lesson: demo-lesson-01
+contentPack: content-pack.example.json
+stylePack: style-pack.generated.json
+slides:
+  - id: S01
+    title: 生成组件的实现必须在注册表
+    objectiveId: O1
+    objective: O1 演示生成组件门禁
+    contentRefs: [K01]
+    components: [eyebrow-heading, matrix-lab]
+    layout: content-slide
+    status: APPROVED
+    reviewer: demo

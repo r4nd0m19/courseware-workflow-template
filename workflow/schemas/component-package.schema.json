@@ -1,0 +1,357 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/component-package.schema.json",
+  "title": "Courseware component package manifest",
+  "description": "A component library item. Approved items live in the registry and are status=core.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "status",
+    "category",
+    "description",
+    "tags",
+    "interactionLevels",
+    "whenToUse",
+    "whenNotToUse",
+    "learningFunction",
+    "propsSchema",
+    "states",
+    "interactionModel",
+    "accessibility",
+    "fallback",
+    "implementation",
+    "stories",
+    "tests",
+    "baselines",
+    "provenance",
+    "usedBy",
+    "runtime",
+    "sourceFidelity"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "core",
+        "deprecated"
+      ]
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "shell",
+        "cover",
+        "content",
+        "assessment",
+        "interactive",
+        "summary",
+        "variant"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "interactionLevels": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "watch",
+          "answer",
+          "modify",
+          "construct",
+          "explain"
+        ]
+      }
+    },
+    "whenToUse": {
+      "type": "string",
+      "minLength": 1
+    },
+    "whenNotToUse": {
+      "type": "string",
+      "minLength": 1
+    },
+    "learningFunction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "propsSchema": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "JSON Schema for component props. Must set additionalProperties=false."
+    },
+    "states": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "interactionModel": {
+      "type": "object",
+      "required": [
+        "states",
+        "transitions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "event",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1
+              },
+              "event": {
+                "type": "string",
+                "minLength": 1
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1
+              },
+              "condition": {
+                "type": "string"
+              },
+              "feedback": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "accessibility": {
+      "type": "object",
+      "required": [
+        "keyboard",
+        "aria",
+        "focus",
+        "contrast",
+        "reducedMotion"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "keyboard": {
+          "type": "string",
+          "minLength": 1
+        },
+        "aria": {
+          "type": "string",
+          "minLength": 1
+        },
+        "focus": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contrast": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reducedMotion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "screenReaderText": {
+          "type": "string"
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "required": [
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component": {
+          "type": "string"
+        },
+        "props": {
+          "type": "object"
+        }
+      }
+    },
+    "implementation": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\.js$"
+    },
+    "stories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "baselines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "type",
+        "brief",
+        "approvedBy",
+        "approvedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "existing",
+            "generated",
+            "reference-verbatim"
+          ]
+        },
+        "brief": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceLesson": {
+          "type": "string"
+        },
+        "reuseSearch": {
+          "type": "string"
+        },
+        "approvedBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approvedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "usedBy": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "runtime": {
+      "type": "string",
+      "enum": [
+        "vanilla-browser"
+      ]
+    },
+    "styles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "sourceFidelity": {
+      "type": "object",
+      "required": [
+        "kind",
+        "selectors",
+        "sourceRefs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "reference-verbatim",
+            "generated"
+          ]
+        },
+        "sourceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "selectors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "animation": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

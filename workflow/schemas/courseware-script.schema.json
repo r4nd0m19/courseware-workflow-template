@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/courseware-script.schema.json",
+  "title": "Human-readable courseware script (parsed)",
+  "description": "Parsed form of courseware.md. The Markdown file is the human source; storyboard.yml is generated from it.",
+  "type": "object",
+  "required": [
+    "lesson",
+    "title",
+    "contentPack",
+    "stylePack",
+    "audience",
+    "duration",
+    "status",
+    "slides"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "lesson": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "contentPack": { "type": "string", "minLength": 1 },
+    "stylePack": { "type": "string", "minLength": 1 },
+    "componentRegistry": { "type": "string" },
+    "audience": { "type": "string", "minLength": 1 },
+    "duration": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["DRAFT", "APPROVED"] },
+    "scriptVersion": { "type": "string" },
+    "notes": { "type": "string" },
+    "slides": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/slide" }
+    }
+  },
+  "definitions": {
+    "slide": {
+      "type": "object",
+      "required": [
+        "id",
+        "headingTitle",
+        "screenContent",
+        "interactionDesign",
+        "narration",
+        "machine"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+        "headingTitle": { "type": "string", "minLength": 1 },
+        "objectiveLine": { "type": "string" },
+        "contentLine": { "type": "string" },
+        "purposeLine": { "type": "string" },
+        "screenContent": { "type": "string", "minLength": 1 },
+        "interactionDesign": { "type": "string", "minLength": 1 },
+        "narration": { "type": "string", "minLength": 1 },
+        "transition": { "type": "string" },
+        "machine": { "$ref": "#/definitions/machine" }
+      }
+    },
+    "machine": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "objectiveId",
+        "objective",
+        "contentRefs",
+        "components",
+        "layout",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+        "title": { "type": "string", "minLength": 1 },
+        "objectiveId": { "type": "string", "pattern": "^O[0-9]+$" },
+        "objective": { "type": "string", "minLength": 1 },
+        "contentRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[A-Z]+[0-9]+$" }
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "layout": { "type": "string", "minLength": 1 },
+        "interaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "level", "contentDemand", "learningAction", "evidence", "learningFunction", "staticAlternative"],
+          "properties": {
+            "type": { "type": "string", "minLength": 1 },
+            "level": {
+              "type": "string",
+              "enum": ["watch", "answer", "modify", "construct", "explain"]
+            },
+            "contentDemand": { "type": "string", "minLength": 1 },
+            "learningAction": {
+              "type": "string",
+              "enum": ["observe", "locate", "label", "predict", "trace", "convert", "classify", "construct", "modify", "explain"]
+            },
+            "evidence": { "type": "string", "minLength": 1 },
+            "learningFunction": { "type": "string", "minLength": 1 },
+            "staticAlternative": { "type": "string", "minLength": 1 },
+            "whyStatic": { "type": "string", "minLength": 1 },
+            "misconception": { "type": "string" },
+            "component": { "type": "string" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "level": { "const": "watch" } } },
+              "then": {
+                "required": ["whyStatic"],
+                "properties": { "learningAction": { "const": "observe" } }
+              },
+              "else": {
+                "not": { "required": ["whyStatic"] }
+              }
+            }
+          ]
+        },
+        "componentPlan": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+              "status": { "type": "string", "enum": ["reference-verbatim", "existing", "extend", "new"] },
+              "brief": { "type": "string" },
+              "registry": { "type": "string" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "continuedFrom": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+        "continued": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["DRAFT", "APPROVED", "SKIP"] },
+        "reviewer": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

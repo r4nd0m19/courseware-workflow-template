@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>edge-sum-lab story</title>
+  </head>
+  <body>
+    <div id="story"></div>
+    <script src="../runtime.js"></script>
+    <script>
+      document.getElementById('story').innerHTML = window.CoursewareComponents
+        .get('edge-sum-lab')
+        .render({ values: [[1, 2], [3, 4]] })
+    </script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "registryId": "demo-style",
+  "version": "0.1.0",
+  "stylePack": {
+    "id": "demo-style",
+    "version": "0.1.0"
+  },
+  "components": [
+    {
+      "id": "matrix-lab",
+      "version": "1.0.0",
+      "status": "core",
+      "package": "components/matrix-lab"
+    }
+  ]
+}

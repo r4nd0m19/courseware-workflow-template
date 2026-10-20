@@ -1,0 +1,8 @@
+schemaVersion: "1.0"
+sections:
+  - id: A
+    title: 导入
+    slides: [S01, S02]
+  - id: B
+    title: 重复且漏屏
+    slides: [S02]
