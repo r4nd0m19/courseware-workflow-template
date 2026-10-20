@@ -8,9 +8,17 @@ description: 先检索组件库，再决定复用/扩展/新建；为每个缺�
 $ARGUMENTS
 ```
 
+## 审批闸门（必须最先运行）
+
+```bash
+node workflow/tools/check-script-approval.mjs courseware.md
+```
+
+必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
+
 ## Outline
 
-1. 前置条件：`courseware.md` 已获人工 `approve`（所有屏 `status: APPROVED`）。
+1. 前置条件：`courseware.md` 已获人工 `approve`（`check-script-approval` 通过；所有非 SKIP 屏 `status: APPROVED`）。
 2. 读取脚本中每屏的 `interaction` / `componentPlan`，列出所有交互需求（学习动作 + 互动层级）。
 3. **复用优先，且参考源码优先**：
    - 先查风格包中的参考组件（`style-pack/source/fidelity.json` 的 `components`）：若参考课件已有同类交互，直接列为 `reference-verbatim`，实现阶段逐字节复制其 CSS/DOM/JS，**不得重画**。
@@ -38,7 +46,8 @@ $ARGUMENTS
 7. 运行闸门：
    ```bash
    node workflow/tools/check-component-plan.mjs courseware.md <style-pack-manifest.json> \
-     [registry/index.json] --plan component-plan.md --briefs component-briefs
+     [registry/index.json] --plan component-plan.md --briefs component-briefs \
+     --approval review/script-approval.json
    ```
 8. 输出：`component-plan.md`、简报清单、复用/新建统计、检查结果。
 

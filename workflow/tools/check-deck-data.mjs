@@ -7,6 +7,7 @@ import path from 'node:path'
 import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
 import { readData } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import { readSectionManifest, sectionById, validateSectionManifest } from './section-lib.mjs'
 import { resolveShellDir } from './shell-lib.mjs'
 
@@ -24,6 +25,8 @@ const fidelityPath = opt('--fidelity', 'style-pack/source/fidelity.json')
 const registryPath = opt('--registry', 'registry/index.json')
 const stagingArg = opt('--staging')
 const shellArg = opt('--shell')
+const scriptPath = opt('--script')
+const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const jsonOut = flag('--json')
 const errors = []
 const warnings = []
@@ -32,8 +35,18 @@ const notes = []
 if (!url || !storyboardPath) {
   console.error(`usage: node check-deck-data.mjs --url <deck-url> --storyboard <storyboard.yml>
   [--sections <review-sections.yml> --section <id>] [--fidelity style-pack/source/fidelity.json]
-  [--registry registry/index.json] [--staging registry/staging] [--shell <shell-id-or-dir>] [--json]`)
+  [--registry registry/index.json] [--staging registry/staging] [--shell <shell-id-or-dir>] [--json]
+  [--script <courseware.md> --approval review/script-approval.json]`)
   process.exit(2)
+}
+
+if (scriptPath) {
+  try {
+    assertScriptApproved(scriptPath, { approvalPath })
+  } catch (error) {
+    console.error(`FAIL deck data — ${error.message}`)
+    process.exit(1)
+  }
 }
 
 let shell = null

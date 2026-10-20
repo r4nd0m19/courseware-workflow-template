@@ -1,30 +1,23 @@
-# 小节渲染审核分组
+# 逐页渲染审核清单
 #
-# 一整份 courseware.md 只做一次脚本审核；生成课件时，按下面的小节逐节实现、
-# 逐节渲染、逐节人工审核。上一节 approve 后才继续下一节。
+# 一整份 courseware.md 只做一次脚本审核；生成课件时按页实现、按页渲染、
+# 按页发起人工审核。上一页 approve 后才继续下一页（工作流 `review-page` gate）。
 #
 # 规则：
-# - 每个 section 必须按 storyboard 顺序连续覆盖全部非 SKIP 屏，且恰好一次
-# - slides 使用脚本里的屏 ID（S01…）
-# - 审核通过后，该节脚本内容会被哈希冻结；后续小节改动不得影响已批准小节
-# - 需要返工已批准小节时，运行：
+# - 每个 section 恰好一屏：slides 只能有一个元素，多屏合并会被 check-review-sections 拒绝
+# - 全部非 SKIP 屏按 storyboard 顺序各出现一次；section 连续、无重叠
+# - id 直接取该屏 ID（S01…），title 与 courseware.md 中该屏标题一致
+# - 审核通过后，该页脚本内容会被哈希冻结；一页 reject 只返工该页
+# - 需要返工已批准页时，运行：
 #     node workflow/tools/reopen-section.mjs --sections review-sections.yml \
-#       --id B --reason "原因"
-#   会同时重开 B 及其后所有小节（后续页可能依赖 B）
+#       --id S02 --reason "原因"
+#   会同时重开该页及其后所有页（后续页可能依赖它）
 schemaVersion: "1.0"
 sections:
-  - id: A
-    title: 导入与复习
-    slides: [S01, S02, S03, S04]
-  - id: B
-    title: 定义与初始化
-    slides: [S05, S06, S07, S08, S09, S10]
-  - id: C
-    title: 输入输出与小练
-    slides: [S11, S12, S13, S14, S15]
-  - id: D
-    title: 四个矩阵应用
-    slides: [S16, S17, S18, S19, S20]
-  - id: E
-    title: 小结
-    slides: [S21, S22]
+  - id: S01
+    title: 第 1 屏标题
+    slides: [S01]
+  - id: S02
+    title: 第 2 屏标题
+    slides: [S02]
+  # …每个非 SKIP 屏一段，按顺序重复到最后一屏（例如 S03、S04……）

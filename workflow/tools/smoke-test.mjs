@@ -5,6 +5,7 @@ import os from 'node:os'
 import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { readData } from './lib.mjs'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(toolsDir, '..')
@@ -22,7 +23,13 @@ function run(name, script, args, expected, expectedText) {
     encoding: 'utf8',
   })
   const output = `${res.stdout || ''}\n${res.stderr || ''}`
-  const pass = res.status === expected && (!expectedText || output.includes(expectedText))
+  const expectedTexts = Array.isArray(expectedText)
+    ? expectedText
+    : expectedText
+      ? [expectedText]
+      : []
+  const pass =
+    res.status === expected && expectedTexts.every((text) => output.includes(text))
   console.log(
     `${pass ? 'PASS' : 'FAIL'} ${name} (exit ${res.status}, expected ${expected})`,
   )
@@ -30,8 +37,8 @@ function run(name, script, args, expected, expectedText) {
     failed += 1
     if (res.stdout) console.log(res.stdout.trimEnd())
     if (res.stderr) console.error(res.stderr.trimEnd())
-    if (expectedText && !output.includes(expectedText)) {
-      console.error(`expected output to contain: ${expectedText}`)
+    for (const text of expectedTexts) {
+      if (!output.includes(text)) console.error(`expected output to contain: ${text}`)
     }
   }
 }
@@ -80,6 +87,7 @@ const storyboardGenerated = path.join(examples, 'storyboard.generated.yml')
 const storyboardRegistry = path.join(examples, 'storyboard.registry.yml')
 const reviewSections = path.join(examples, 'review-sections.example.yml')
 const reviewSectionsBad = path.join(examples, 'review-sections.bad.yml')
+const reviewSectionsGrouped = path.join(examples, 'review-sections.grouped.yml')
 const style = path.join(examples, 'style-pack.example.json')
 const styleGenerated = path.join(examples, 'style-pack.generated.json')
 const selfPass = path.join(examples, 'self-review.pass.json')
@@ -117,6 +125,30 @@ const componentPkg = path.join(examples, 'registry/components/matrix-lab')
 const badComponentPkg = path.join(examples, 'bad-component')
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'courseware-registry-smoke-'))
+const tmpRunsDir = path.join(tmpRoot, '.specify/workflows/runs')
+process.env.COURSEWARE_WORKFLOW_RUNS_DIR = tmpRunsDir
+
+function writeGateRun(runId, { runStatus = 'completed', stepStatus = 'completed', choice = 'approve' } = {}) {
+  const dir = path.join(tmpRunsDir, runId)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(
+    path.join(dir, 'state.json'),
+    JSON.stringify({
+      run_id: runId,
+      workflow_id: 'courseware-production',
+      status: runStatus,
+      step_results: {
+        'review-script': {
+          type: 'gate',
+          status: stepStatus,
+          output: { choice, options: ['approve', 'reject'] },
+        },
+      },
+    }),
+  )
+}
+writeGateRun('smoke')
+writeGateRun('smoke-paused', { runStatus: 'paused', stepStatus: 'paused', choice: null })
 const tmpRegistryDir = path.join(tmpRoot, 'registry')
 fs.cpSync(path.join(examples, 'registry'), tmpRegistryDir, { recursive: true })
 const tmpRegistry = path.join(tmpRegistryDir, 'index.json')
@@ -295,6 +327,13 @@ try {
     0,
   )
   run(
+    'review sections fail (grouped slides bypass per-page review)',
+    'check-review-sections.mjs',
+    [reviewSectionsGrouped, storyboard],
+    1,
+    'exactly one slide per section is required',
+  )
+  run(
     'review sections fail (overlap/missing)',
     'check-review-sections.mjs',
     [reviewSectionsBad, storyboard],
@@ -385,48 +424,146 @@ try {
   )
 
   // ---- component plan ----
+  const tmpComponentScript = path.join(tmpRoot, 'courseware.component.md')
+  fs.copyFileSync(scriptComponent, tmpComponentScript)
+  const componentApproval = path.join(tmpRoot, 'review/component-script-approval.json')
+  run(
+    'approve component plan script',
+    'approve-script.mjs',
+    [tmpComponentScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', componentApproval],
+    0,
+  )
   run(
     'component plan pass',
     'check-component-plan.mjs',
-    [scriptComponent, style, registry, '--plan', componentPlan, '--briefs', componentBriefs],
+    [tmpComponentScript, style, registry, '--plan', componentPlan, '--briefs', componentBriefs, '--approval', componentApproval],
     0,
   )
   run(
     'component plan fail (missing gap/brief)',
     'check-component-plan.mjs',
-    [scriptComponent, style, registry, '--plan', componentPlanMissing, '--briefs', componentBriefs],
+    [tmpComponentScript, style, registry, '--plan', componentPlanMissing, '--briefs', componentBriefs, '--approval', componentApproval],
     1,
+  )
+  run(
+    'component plan fail without script approval',
+    'check-component-plan.mjs',
+    [scriptComponent, style, registry, '--plan', componentPlan, '--briefs', componentBriefs, '--approval', path.join(tmpRoot, 'review/missing-approval.json')],
+    1,
+    'approval ledger not found',
   )
 
   // ---- script approval + rendered-section freeze ----
   const tmpScript = path.join(tmpRoot, 'courseware.md')
   fs.copyFileSync(script, tmpScript)
   const tmpApprovals = path.join(tmpRoot, 'review/page-approvals.json')
+  const scriptApproval = path.join(tmpRoot, 'review/script-approval.json')
   const tmpShots = path.join(tmpRoot, 'screenshots')
   fs.mkdirSync(tmpShots, { recursive: true })
   fs.writeFileSync(path.join(tmpShots, 'S01.png'), 'smoke-png-S01')
   run(
     'approve script',
     'approve-script.mjs',
-    [tmpScript, '--approved-by', 'smoke', '--out', path.join(tmpRoot, 'review/script-approval.json')],
+    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', scriptApproval],
     0,
   )
   run(
+    'check script approval',
+    'check-script-approval.mjs',
+    [tmpScript, '--approval', scriptApproval],
+    0,
+  )
+  run(
+    'approve script rejects a non-approve gate',
+    'approve-script.mjs',
+    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'revise', '--run-id', 'smoke', '--out', path.join(tmpRoot, 'review/never-written.json')],
+    1,
+    'not "approve"',
+  )
+  run(
+    'approve script rejects a paused workflow gate',
+    'approve-script.mjs',
+    [tmpScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke-paused', '--out', path.join(tmpRoot, 'review/never-written-paused.json')],
+    1,
+    'expected "completed"',
+  )
+
+  const editedScript = path.join(tmpRoot, 'courseware-edited.md')
+  fs.copyFileSync(tmpScript, editedScript)
+  fs.appendFileSync(editedScript, '\n<!-- edited after approval -->\n')
+  const editedLedger = path.join(tmpRoot, 'review/script-approval-edited.json')
+  const editedLedgerData = JSON.parse(fs.readFileSync(scriptApproval, 'utf8'))
+  editedLedgerData.script = path.relative(process.cwd(), editedScript)
+  fs.writeFileSync(editedLedger, JSON.stringify(editedLedgerData, null, 2))
+  run(
+    'check script approval rejects an edit after approval',
+    'check-script-approval.mjs',
+    [editedScript, '--approval', editedLedger],
+    1,
+    'changed after approval',
+  )
+
+  const rejectLedger = path.join(tmpRoot, 'review/script-approval-reject.json')
+  const rejectLedgerData = JSON.parse(fs.readFileSync(scriptApproval, 'utf8'))
+  rejectLedgerData.gate.choice = 'reject'
+  fs.writeFileSync(rejectLedger, JSON.stringify(rejectLedgerData, null, 2))
+  run(
+    'check script approval rejects a non-approve gate ledger',
+    'check-script-approval.mjs',
+    [tmpScript, '--approval', rejectLedger],
+    1,
+    'expected "approve"',
+  )
+
+  const pausedLedger = path.join(tmpRoot, 'review/script-approval-paused-run.json')
+  const pausedLedgerData = JSON.parse(fs.readFileSync(scriptApproval, 'utf8'))
+  pausedLedgerData.gate.runId = 'smoke-paused'
+  fs.writeFileSync(pausedLedger, JSON.stringify(pausedLedgerData, null, 2))
+  run(
+    'check script approval rejects a paused gate run',
+    'check-script-approval.mjs',
+    [tmpScript, '--approval', pausedLedger],
+    1,
+    'expected "completed"',
+  )
+
+  const draftScript = path.join(tmpRoot, 'courseware-draft.md')
+  fs.copyFileSync(tmpScript, draftScript)
+  const draftApproval = path.join(tmpRoot, 'review/script-approval-draft.json')
+  run(
+    'approve draft copy before reverting it',
+    'approve-script.mjs',
+    [draftScript, '--approved-by', 'smoke', '--gate-choice', 'approve', '--run-id', 'smoke', '--out', draftApproval],
+    0,
+  )
+  fs.writeFileSync(
+    draftScript,
+    fs.readFileSync(draftScript, 'utf8').replaceAll('status: APPROVED', 'status: DRAFT'),
+  )
+  run(
+    'check script approval rejects DRAFT status',
+    'check-script-approval.mjs',
+    [draftScript, '--approval', draftApproval],
+    1,
+    'expected APPROVED',
+  )
+
+  run(
     'check section freeze (empty)',
     'check-section-freeze.mjs',
-    ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--approvals', tmpApprovals],
+    ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--approval', scriptApproval, '--approvals', tmpApprovals],
     0,
   )
   run(
     'freeze rendered section',
     'freeze-section.mjs',
-    ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--id', 'A', '--approved-by', 'smoke', '--screenshots', tmpShots, '--approvals', tmpApprovals],
+    ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--approval', scriptApproval, '--id', 'A', '--approved-by', 'smoke', '--screenshots', tmpShots, '--approvals', tmpApprovals],
     0,
   )
   run(
     'check section freeze (partial fails require-all)',
     'check-section-freeze.mjs',
-    ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--approvals', tmpApprovals, '--require-all'],
+    ['--sections', reviewSections, '--storyboard', storyboard, '--script', tmpScript, '--approval', scriptApproval, '--approvals', tmpApprovals, '--require-all'],
     1,
   )
   run(
@@ -454,7 +591,7 @@ try {
     run(
       'build shell site fail-closed on missing art',
       'build-shell-site.mjs',
-      ['--shell', 'branch-choice', '--deck', smokeDeck, '--art', smokeArt, '--out', path.join(tmpRoot, 'shell-site-no-art-build')],
+      ['--script', tmpScript, '--approval', scriptApproval, '--shell', 'branch-choice', '--deck', smokeDeck, '--art', smokeArt, '--out', path.join(tmpRoot, 'shell-site-no-art-build')],
       1,
     )
     const previewFreeSite = path.join(tmpRoot, 'shell-site-preview-free')
@@ -494,7 +631,7 @@ try {
   run(
     'register staged components',
     'register-staged-components.mjs',
-    ['--registry', tmpRegistry, '--lesson', 'smoke-lesson', '--approved-by', 'smoke', '--project-root', examples],
+    ['--registry', tmpRegistry, '--lesson', 'smoke-lesson', '--approved-by', 'smoke', '--project-root', examples, '--script', tmpScript, '--approval', scriptApproval],
     0,
   )
   run(
@@ -506,7 +643,7 @@ try {
   run(
     'record component usage',
     'record-component-usage.mjs',
-    ['--registry', tmpRegistry, '--storyboard', storyboardRegistry, '--lesson', 'smoke-lesson'],
+    ['--registry', tmpRegistry, '--storyboard', storyboardRegistry, '--lesson', 'smoke-lesson', '--script', tmpScript, '--approval', scriptApproval],
     0,
   )
 
@@ -534,16 +671,60 @@ try {
     )
   }
 
+  // ---- per-page human review gate ----
+  total += 1
+  const workflowData = readData(path.join(root, 'workflows/courseware-production.yml'))
+  function findStep(steps, id) {
+    for (const step of steps || []) {
+      if (step && step.id === id) return step
+      const found = findStep(
+        [...(step.steps || []), ...(step.then || []), ...(step.else || [])],
+        id,
+      )
+      if (found) return found
+    }
+    return null
+  }
+  const loop = findStep(workflowData.steps, 'section_review_loop')
+  const pageSteps = (findStep(loop && loop.steps, 'section_body') || {}).then || []
+  const pageIds = pageSteps.map((step) => step.id)
+  const pageGate = pageSteps.find((step) => step.id === 'review-page')
+  const gateMessage = (pageGate && pageGate.message) || ''
+  const gatePosition = pageIds.indexOf('review-page')
+  const pageGatePass =
+    Boolean(loop) &&
+    Boolean(pageGate) &&
+    pageGate.type === 'gate' &&
+    gateMessage.includes('steps.advance_section.output.data.section.id') &&
+    gateMessage.includes('inputs.deck_url') &&
+    pageGate.show_file ===
+      'review/self-review-page-{{ steps.advance_section.output.data.section.id }}.md' &&
+    Array.isArray(pageGate.options) &&
+    pageGate.options.includes('approve') &&
+    pageGate.options.includes('reject') &&
+    pageGate.on_reject === 'abort' &&
+    pageIds.indexOf('implement-section') >= 0 &&
+    pageIds.indexOf('implement-section') < gatePosition &&
+    pageIds.indexOf('check-self-review-page') >= 0 &&
+    pageIds.indexOf('check-self-review-page') < gatePosition
+  console.log(`${pageGatePass ? 'PASS' : 'FAIL'} workflow per-page human review gate`)
+  if (!pageGatePass) {
+    failed += 1
+    console.error(
+      'workflow must gate every page inside section_review_loop with the deck URL + page self-review, after implementation and self-review pass',
+    )
+  }
+
   // ---- shell review gate ----
   total += 1
   const hasShellPreviewStep =
     /- id: validate-shell\n    type: shell\n    run: "node workflow\/tools\/check-shell\.mjs[^"\n]*--serve-preview[^"\n]*--json"\n    output_format: json/.test(workflowYaml)
   const hasShellReviewGate =
     /- id: review-shell\n    type: gate\n/.test(workflowYaml) &&
-    /message: "[^"\n]*steps\.validate_shell\.output\.data\.previewUrl/.test(workflowYaml) &&
+    /message: "[^"\n]*steps\.validate-shell\.output\.data\.previewUrl/.test(workflowYaml) &&
     /message: "[^"\n]*narration\.voiceCount/.test(workflowYaml) &&
     /message: "[^"\n]*narration\.pageCount/.test(workflowYaml) &&
-    /show_file: "\{\{ steps\.validate_shell\.output\.data\.reviewFile \}\}"/.test(workflowYaml)
+    /show_file: "\{\{ steps\.validate-shell\.output\.data\.reviewFile \}\}"/.test(workflowYaml)
   const shellReviewPass = hasShellPreviewStep && hasShellReviewGate
   console.log(`${shellReviewPass ? 'PASS' : 'FAIL'} workflow shell review gate`)
   if (!shellReviewPass) {
@@ -551,6 +732,75 @@ try {
     console.error(
       'workflow must render a shell preview, expose its URL/review file/dummy narration counts as JSON, and gate on it',
     )
+  }
+
+  // ---- fail-closed workflow runner ----
+  const specifyProbe = spawnSync('specify', ['--version'], { encoding: 'utf8' })
+  if (specifyProbe.status === 0) {
+    const reviewNote = path.join(tmpRoot, 'smoke-review.md')
+    fs.writeFileSync(reviewNote, '# Smoke review\n\nReview this page at http://127.0.0.1:9/review\n')
+    const toyGate = path.join(tmpRoot, 'toy-gate.yml')
+    fs.writeFileSync(
+      toyGate,
+      [
+        'schema_version: "1.0"',
+        'workflow:',
+        '  id: smoke-gate',
+        '  name: Smoke Gate',
+        '  version: "0.0.1"',
+        '  author: smoke',
+        '  description: smoke paused outcome',
+        'inputs: {}',
+        'steps:',
+        '  - id: g',
+        '    type: gate',
+        '    message: "smoke gate review: http://127.0.0.1:9/review"',
+        `    show_file: "${reviewNote}"`,
+        '    options: [approve, reject]',
+        '    on_reject: abort',
+        '',
+      ].join('\n'),
+    )
+    run(
+      'workflow wrapper fails closed on paused gate',
+      'run-workflow.mjs',
+      [toyGate],
+      3,
+      [
+        'PAUSED workflow smoke-gate',
+        'Review request:',
+        'http://127.0.0.1:9/review',
+        `Review file: ${reviewNote}`,
+      ],
+    )
+    const toyOk = path.join(tmpRoot, 'toy-ok.yml')
+    fs.writeFileSync(
+      toyOk,
+      [
+        'schema_version: "1.0"',
+        'workflow:',
+        '  id: smoke-ok',
+        '  name: Smoke OK',
+        '  version: "0.0.1"',
+        '  author: smoke',
+        '  description: smoke completed outcome',
+        'inputs: {}',
+        'steps:',
+        '  - id: s',
+        '    type: shell',
+        '    run: "true"',
+        '',
+      ].join('\n'),
+    )
+    run(
+      'workflow wrapper passes a completed run',
+      'run-workflow.mjs',
+      [toyOk],
+      0,
+      'OK workflow smoke-ok completed',
+    )
+  } else {
+    skip('workflow wrapper fail-closed', 'specify CLI not on PATH')
   }
 
   // ---- shell preview dummy fixture ----

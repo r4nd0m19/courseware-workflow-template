@@ -8,11 +8,19 @@ description: 按 APPROVED 分镜生成制作任务，含组件集成任务、Dep
 $ARGUMENTS
 ```
 
+## 审批闸门（必须最先运行）
+
+```bash
+node workflow/tools/check-script-approval.mjs courseware.md
+```
+
+必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
+
 ## Outline
 
 1. 读取 `plan.md`、`storyboard.yml`、`courseware.md`、`review-sections.yml`、`component-plan.md` 和 `.specify/templates/tasks-template.md`。
 2. 只为 `status: APPROVED` 的屏生成任务；`DRAFT`/`SKIP` 跳过。
-3. 按 `review-sections.yml` 的页分组页面任务；每一页末尾生成一个逐页审核任务：
+3. 按 `review-sections.yml` 的逐页清单生成页面任务（每个 section 恰好一屏）；每一页末尾生成一个逐页审核任务：
    - 只实现/渲染本页；上一页 `approve` 后才进入下一页
    - 老师打开课件、用目录跳到本页，逐项看屏幕与交互证据并给出 `approve / reject`
    - `reject` 时只返工本页，已批准页由脚本哈希冻结
@@ -33,7 +41,7 @@ $ARGUMENTS
    - `build-narration.mjs` → `build-audio-adapter.mjs`；参考 `lesson-audio.js` 与外壳目录不动
    - 四种声线（小智/小创老师/小未/小来老师）均可选、可播放、可暂停/拖动
 8. 生成一个全局闸门任务（全部页批准后），运行：
-   - `node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --require-all`
+   - `node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --approval review/script-approval.json --require-all`
    - `node workflow/tools/check-script.mjs courseware.md <content-pack> <style-pack-manifest> registry/index.json`
    - `node workflow/tools/script-to-storyboard.mjs courseware.md --check storyboard.yml`
    - `node workflow/tools/validate-json.mjs workflow/schemas/storyboard.schema.json <storyboard>`
@@ -41,8 +49,8 @@ $ARGUMENTS
    - `node workflow/tools/check-vocabulary.mjs <storyboard> <style-pack-manifest> registry/index.json`
    - `node workflow/tools/check-teaching.mjs <storyboard> <content-pack>`
    - `node workflow/tools/check-registry.mjs registry/index.json --style-pack <style-pack-manifest>`
-   - `node workflow/tools/check-overflow.mjs <deck-url> --pages <N>`
-   - `node workflow/tools/check-deck-data.mjs --url <deck-url> --storyboard storyboard.yml`
+   - `node workflow/tools/check-overflow.mjs <deck-url> --script courseware.md --pages <N>`
+   - `node workflow/tools/check-deck-data.mjs --script courseware.md --url <deck-url> --storyboard storyboard.yml`
    - `node workflow/tools/check-source-fidelity.mjs --url <deck-url>`
 9. 需要新组件/版面时：确认 component-plan 与简报已获人工批准；在首次使用它的页面的任务里写明“该页构建组件（`speckit.component-build`）→ 随页审核 → 页面通过后注册”。不得在实现阶段自行发明组件，也不得在 deck.json 里写页面特判。
 10. 输出 tasks 路径、任务数、页数、阻断项。

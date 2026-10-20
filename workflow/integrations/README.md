@@ -52,21 +52,19 @@ Codex 需要可信目录：`codex exec` 在非 git 目录会直接报
 `SPECKIT_INTEGRATION_CODEX_EXECUTABLE` 指向一个注入
 `--skip-git-repo-check` 的包装脚本，但这是额外适配层，不作为默认路径。
 
-运行完整 workflow 时显式选择 Codex（`integration` 输入默认 `auto` 会跟随项目默认）：
+运行完整 workflow 时显式选择 Codex（`integration` 输入默认 `auto` 会跟随项目默认）。非交互运行必须经 `run-workflow.mjs`：
 
 ```bash
-specify workflow run courseware-production \
+node workflow/tools/run-workflow.mjs courseware-production \
   -i integration=codex \
   -i lesson=... -i content_pack=... -i courseware_script=... \
   -i concepts=... -i review_sections=... -i storyboard=... \
   -i style_pack=... -i style_pack_full=... -i lesson_slug=... \
   -i art_prompts=... -i art_dir=... -i deck_data=... \
-  -i deck_url=http://127.0.0.1:8082/ -i page_count=... \
-  </dev/null
+  -i deck_url=http://127.0.0.1:8082/ -i page_count=...
 ```
 
-`</dev/null` 不是可选项：stdin 不是 TTY 时 Codex 会等待额外输入，省略后
-`specify workflow run` 看起来会卡住。
+包装器已忽略 stdin，不需要再写 `</dev/null`。它在 gate 处返回 **exit 3**（Spec Kit 原生返回 `paused` + exit 0），并打印 `specify workflow resume <run_id>`。agent 看到 exit 3 必须停止；老师在自己的终端用 `node workflow/tools/run-workflow.mjs resume <run_id>` 交互式回答 gate。
 
 ## 新项目：Codex GUI 一键安装（模板仓库）
 
@@ -98,10 +96,10 @@ Codex 图形界面里新建项目后，不需要手工跑一串命令：把模�
 ## 已验证
 
 - `node workflow/install.mjs --project ... --integration claude` 与 `--integration codex` 均 exit 0（复制 workflow、Spec Kit init、preset/workflow 安装、npm ci、Chromium 检测、smoke tests）。
-- `specify init --integration codex` + `preset add --dev` + `workflow add --dev`：成功；`.agents/skills/speckit-coverage/SKILL.md` 等 courseware 技能存在；当前 0.10.0 的 90 步 workflow 可安装。
+- `specify init --integration codex` + `preset add --dev` + `workflow add --dev`：成功；`.agents/skills/speckit-coverage/SKILL.md` 等 courseware 技能存在；当前 0.13.0 的 90 步 workflow 可安装。
 - Claude + Codex 双集成：`integration install codex`、`use codex`、`use claude` 后，`.agents/skills` 与 `.claude/skills` 并存；默认集成可恢复为 claude。
 - `prompt` 与 `command` 两种 workflow 步骤都能通过 `codex exec` 调度；command 步骤会发送 `$speckit-<name>`，由 Codex 从 `.agents/skills` 加载。
-- 在非 git 目录运行 Codex 会失败；`git init` 后可正常执行。非交互 workflow 运行需关闭 stdin。
+- 在非 git 目录运行 Codex 会失败；`git init` 后可正常执行。非交互 workflow 运行经 `run-workflow.mjs`，gate 的 `paused` 映射为 exit 3；直接 `specify workflow run` 仍是 exit 0。
 - 门禁脚本与 harness 无关，测试结果一致。
 - 截图基线（pixelmatch）与 build-screen 也属于 harness 无关层；同一组截图在两个 integration 下结果一致。
 - 模板仓库 bootstrap 在全新空目录（`/tmp/codex-courseware-test`）实测：克隆模板、`git init`、`specify init --integration codex`、preset/workflow 安装、`npm ci`、Chromium 检测、smoke 69/69（1 项 shell 检查因项目无壳而跳过）全部通过；`codex exec` 读取 `AGENTS.md` 后返回 `0.8.1，89 步`。

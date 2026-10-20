@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.10.0"
+  version: "0.13.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -162,8 +162,8 @@ steps:
   # before teaching content is authored on top of it.
   - id: review-shell
     type: gate
-    message: "先看壳预览：{{ steps.validate_shell.output.data.previewUrl }} 。这是 {{ steps.validate_shell.output.data.slideCount }} 页占位 deck，所有文字均为占位内容，覆盖 {{ steps.validate_shell.output.data.typeCount }} 种原生类型；带 {{ steps.validate_shell.output.data.narration.voiceCount }} 个占位音色、{{ steps.validate_shell.output.data.narration.pageCount }} 页占位语音。请打开链接逐页翻、点主要互动、切换音色、试一次自动播放；审核清单和逐页截图见下方文件。这里审的是壳，不是本课内容。"
-    show_file: "{{ steps.validate_shell.output.data.reviewFile }}"
+    message: "先看壳预览：{{ steps.validate-shell.output.data.previewUrl }} 。这是 {{ steps.validate-shell.output.data.slideCount }} 页占位 deck，所有文字均为占位内容，覆盖 {{ steps.validate-shell.output.data.typeCount }} 种原生类型；带 {{ steps.validate-shell.output.data.narration.voiceCount }} 个占位音色、{{ steps.validate-shell.output.data.narration.pageCount }} 页占位语音。请打开链接逐页翻、点主要互动、切换音色、试一次自动播放；审核清单和逐页截图见下方文件。这里审的是壳，不是本课内容。"
+    show_file: "{{ steps.validate-shell.output.data.reviewFile }}"
     options: [approve, reject]
     on_reject: abort
 
@@ -385,7 +385,15 @@ steps:
   # stages may implement the script. It never decides the verdict itself.
   - id: approve-script
     type: shell
-    run: "node workflow/tools/approve-script.mjs {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --out review/script-approval.json"
+    run: "node workflow/tools/approve-script.mjs {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --gate-choice \"{{ steps.review-script.output.choice }}\" --gate-step review-script --run-id \"{{ context.run_id }}\" --out review/script-approval.json"
+
+  # The ledger written above is the only proof downstream tools accept. This
+  # step re-reads it and fails the run immediately if the gate choice, the
+  # whole-file hash or any slide hash is wrong, instead of discovering it
+  # several stages later.
+  - id: verify-script-approval
+    type: shell
+    run: "node workflow/tools/check-script-approval.mjs {{ inputs.courseware_script }} --expect-run \"{{ context.run_id }}\""
 
   # ---------- per-lesson shell illustrations ----------
   # The shell ships reference mascots only as generation references. A lesson
@@ -566,11 +574,11 @@ steps:
 
   - id: check-review-sections
     type: shell
-    run: "node workflow/tools/check-review-sections.mjs {{ inputs.review_sections }} {{ inputs.storyboard }} --require-approved"
+    run: "node workflow/tools/check-review-sections.mjs {{ inputs.review_sections }} {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --require-approved"
 
   - id: record-component-usage
     type: shell
-    run: "node workflow/tools/record-component-usage.mjs --registry {{ inputs.component_registry }} --storyboard {{ inputs.storyboard }} --lesson {{ inputs.lesson }}"
+    run: "node workflow/tools/record-component-usage.mjs --registry {{ inputs.component_registry }} --storyboard {{ inputs.storyboard }} --lesson {{ inputs.lesson }} --script {{ inputs.courseware_script }}"
 
   # ---------- tasks ----------
   - id: tasks
@@ -652,7 +660,7 @@ steps:
             then:
               - id: validate-staged-page-components
                 type: shell
-                run: "node workflow/tools/check-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --project-root ."
+                run: "node workflow/tools/check-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --project-root . --script {{ inputs.courseware_script }}"
 
               - id: self-review-page-components
                 type: prompt
@@ -697,7 +705,7 @@ steps:
 
           - id: section-shell-build
             type: shell
-            run: "node workflow/tools/build-shell-site.mjs --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --out {{ inputs.site_dir }} --force"
+            run: "node workflow/tools/build-shell-site.mjs --script {{ inputs.courseware_script }} --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --out {{ inputs.site_dir }} --force"
 
           - id: section-narration-gate
             type: shell
@@ -715,11 +723,11 @@ steps:
             step:
               id: build-one-section-screen
               type: shell
-              run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --out screenshots"
+              run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots"
 
           - id: section-deck-data-gate
             type: shell
-            run: "node workflow/tools/check-deck-data.mjs --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }}"
+            run: "node workflow/tools/check-deck-data.mjs --script {{ inputs.courseware_script }} --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }}"
 
           - id: section-shell-gate
             type: shell
@@ -764,7 +772,7 @@ steps:
 
           - id: section-overflow-gate
             type: shell
-            run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --start {{ steps.advance_section.output.data.section.start }} --pages {{ steps.advance_section.output.data.section.count }}"
+            run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --script {{ inputs.courseware_script }} --start {{ steps.advance_section.output.data.section.start }} --pages {{ steps.advance_section.output.data.section.count }}"
 
           - id: self-review-page
             type: prompt
@@ -857,7 +865,7 @@ steps:
             then:
               - id: register-staged-page-components
                 type: shell
-                run: "node workflow/tools/register-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --only {{ steps.load-page-components.output.data.unregistered | join(',') }} --lesson {{ inputs.lesson }} --approved-by \"{{ inputs.approver }}\" --project-root . --clean"
+                run: "node workflow/tools/register-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --only {{ steps.load-page-components.output.data.unregistered | join(',') }} --lesson {{ inputs.lesson }} --approved-by \"{{ inputs.approver }}\" --project-root . --script {{ inputs.courseware_script }} --clean"
 
               - id: check-registry-after-page
                 type: shell
@@ -865,11 +873,11 @@ steps:
 
               - id: section-shell-build-from-registry
                 type: shell
-                run: "node workflow/tools/build-shell-site.mjs --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --out {{ inputs.site_dir }} --force"
+                run: "node workflow/tools/build-shell-site.mjs --script {{ inputs.courseware_script }} --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --out {{ inputs.site_dir }} --force"
 
               - id: section-deck-data-gate-after-register
                 type: shell
-                run: "node workflow/tools/check-deck-data.mjs --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }}"
+                run: "node workflow/tools/check-deck-data.mjs --script {{ inputs.courseware_script }} --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }}"
 
           - id: freeze-section
             type: shell
@@ -884,7 +892,7 @@ steps:
   # generated art and registry bundle, before the Alpha screenshots.
   - id: alpha-shell-build
     type: shell
-    run: "node workflow/tools/build-shell-site.mjs --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --out {{ inputs.site_dir }} --force"
+    run: "node workflow/tools/build-shell-site.mjs --script {{ inputs.courseware_script }} --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --out {{ inputs.site_dir }} --force"
 
   - id: load_approved_screens
     type: shell
@@ -898,7 +906,7 @@ steps:
     step:
       id: build-one-screen
       type: shell
-      run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --out screenshots"
+      run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots"
 
   - id: baseline-gate
     type: shell
@@ -906,7 +914,7 @@ steps:
 
   - id: alpha-deck-data-gate
     type: shell
-    run: "node workflow/tools/check-deck-data.mjs --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }}"
+    run: "node workflow/tools/check-deck-data.mjs --script {{ inputs.courseware_script }} --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }}"
 
   - id: alpha-source-fidelity-gate
     type: shell
@@ -949,7 +957,7 @@ steps:
 
   - id: alpha-gates
     type: shell
-    run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --pages {{ inputs.page_count }}"
+    run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --script {{ inputs.courseware_script }} --pages {{ inputs.page_count }}"
 
   - id: self-review-alpha
     type: prompt
@@ -1044,7 +1052,7 @@ steps:
 
   - id: final-gates
     type: shell
-    run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --pages {{ inputs.page_count }}"
+    run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --script {{ inputs.courseware_script }} --pages {{ inputs.page_count }}"
 
   - id: gold-shell-gate
     type: shell

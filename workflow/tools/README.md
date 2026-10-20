@@ -8,7 +8,26 @@
 node workflow/tools/smoke-test.mjs
 ```
 
-覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、script/component-plan/registry、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
+覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
+
+## 0A. 脚本批准与 fail-closed 运行
+
+```bash
+# 下游工作前必须通过；失败即停止
+node workflow/tools/check-script-approval.mjs specs/<lesson>/courseware.md \
+  --approval review/script-approval.json
+
+# 非交互运行工作流（不要直接 specify workflow run）
+node workflow/tools/run-workflow.mjs courseware-production -i lesson=... ...
+
+# 人工恢复停在 gate 的运行（交互式）
+node workflow/tools/run-workflow.mjs resume <run-id>
+```
+
+- `review/script-approval.json` 由工作流的 `review-script` gate + `approve-script` 步骤生成，绑定整份 `courseware.md` 的 SHA-256、每屏哈希和 gate run id。`approve-script` 会核对 `.specify/workflows/runs/<run-id>/state.json`：`review-script` 必须已完成且 choice 为 `approve`，`paused` 的 gate 不能铸造批准；`verify-script-approval` 再用 `--expect-run` 要求账本来自当前 run。批准后编辑脚本会让它失效；不要手改，也不要手动运行 `approve-script.mjs`。
+- 本地账本只能证明“某次 run 的 gate 记录为 approve”，不能证明按键的一定是真人；老师必须在自己的终端回答 gate，agent 不得代答。
+- `run-workflow.mjs` 在非交互运行中把 Spec Kit 的 `paused` 映射为 **exit 3**，并打印恢复命令、gate 的完整审核请求（含课件 URL）和 `show_file` 路径。看到 exit 3 就停止；老师在自己的终端交互式恢复。
+- 所有下游工具（`check-component-plan`、`build-narration`、`check-narration`、`check-section-freeze`、`freeze-section`、`build-shell-site`、`build-screen`、`check-deck-data`、`check-overflow`、`check-staged-components`、`register-staged-components`、`record-component-usage`）在收到 `--script`（或默认账本）时会重新校验批准；失败不会产生下游产物。
 
 ## 1. Schema 校验
 
@@ -70,7 +89,7 @@ node workflow/tools/check-vocabulary.mjs \
 ## 4. 无滚动条闸门
 
 ```bash
-node workflow/tools/check-overflow.mjs http://127.0.0.1:5173 --pages 2
+node workflow/tools/check-overflow.mjs http://127.0.0.1:5173 --script courseware.md --pages 2
 ```
 
 - 检查页面、`.stage` 和所有受限容器的 `scrollHeight/scrollWidth`。
@@ -91,7 +110,7 @@ node workflow/tools/build-screen.mjs S01 \
 # 按 storyboard 中非 SKIP 屏的顺序翻页，截图 <out>/S01.png + S01.json
 ```
 
-`build-screen` 依赖 Playwright Chromium；没有 `--url` 时退回 stub 模式。`--index` 可显式指定 deck 中的序号（deck 只包含部分小节时使用）；截图基线对比见 §7。
+`build-screen` 依赖 Playwright Chromium；没有 `--url` 时退回 stub 模式。`--index` 可显式指定 deck 中的序号（deck 只包含部分页时使用）；截图基线对比见 §7。
 
 ## 6. R0-C 内容包抽取
 
@@ -172,16 +191,17 @@ node workflow/tools/check-source-fidelity.mjs   --url http://127.0.0.1:8080/   -
 - `index.html` 的 inline base CSS 必须等于 `00-base.css`。
 - `fidelity.json` 记录舞台几何、外壳选择器、必填 CSS marker、动画（含 APNG 帧数）和每个组件的 DOM 选择器。
 - 标 `kind: generated` 的条目只登记设计语汇与选择器，不能当作可复制实现；其 renderer 必须来自注册表 core。
-- `--source-only` 用于 M0/脚本阶段；完整模式用于逐小节和 Alpha。
+- `--source-only` 用于 M0/脚本阶段；完整模式用于逐页和 Alpha。
 - 参考图片/音频只在本机使用，不进入可分享包。
 
 ## 10B. Deck 数据门禁
 
 ```bash
-node workflow/tools/check-deck-data.mjs   --url 'http://127.0.0.1:8080/?lesson=lesson-01'   --storyboard specs/lesson-01/storyboard.yml   [--sections specs/lesson-01/review-sections.yml --section A]   --fidelity style-pack/source/fidelity.json   --registry registry/index.json
+node workflow/tools/check-deck-data.mjs   --script courseware.md   --url 'http://127.0.0.1:8080/?lesson=lesson-01'   --storyboard specs/lesson-01/storyboard.yml   [--sections specs/lesson-01/review-sections.yml --section A]   --fidelity style-pack/source/fidelity.json   --registry registry/index.json
 ```
 
-- 读取浏览器里的 `COURSEWARE_SLIDES`，对照 storyboard 的 id/title/顺序；小节模式只检查本节。
+- 读取浏览器里的 `COURSEWARE_SLIDES`，对照 storyboard 的 id/title/顺序；逐页模式只检查本页。
+- `--script`（可选）会在启动浏览器前重新校验脚本批准账本；批准失效时直接拒绝。
 - `type` 必须是 fidelity 的参考 renderer 类型或已注册 core 组件 id；`kind: generated` 条目的类型只在其注册表实现为 core 后才允许，并会在浏览器里核对 `CoursewareComponents.has(type)`，防止 bundle 未同步。
 - 禁止 `html`/`innerHTML`/`style`/`on*` 等页面级实现字段。
 - 每屏旁白必须能从 `LESSON_NARRATION` 解析，并且 `LESSON_VOICE_MANIFEST.clips` 含全部声线。
@@ -209,6 +229,7 @@ node workflow/tools/build-audio-adapter.mjs prototype/site/narration.json   --ou
 ```
 
 - 语音引擎是逐字节复制的参考 `lesson-audio.js`；`audio.js` 只提供 `LESSON_AUTOPLAY_CONFIG` / `LESSON_NARRATION` / `LESSON_VOICE_MANIFEST` / `LESSON_VOICE_DURATIONS`。
+- `build-narration` 与 `check-narration` 在写/校验音频前会断言脚本批准账本（默认 `review/script-approval.json`，可用 `--approval` 覆盖）；批准失效时不会生成音频。
 - 目录与播放器来自参考外壳，不另写一套。
 - 时长按 48kbps MP3 估算（进度/时钟用），播放仍以实际 audio 元素为准。
 

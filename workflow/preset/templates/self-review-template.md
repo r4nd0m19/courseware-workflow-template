@@ -35,7 +35,7 @@
 | overflow |  |  |  |
 | baseline |  |  |  |
 
-## 3. 逐屏内容密度（脚本 / 分镜 / 小节 / Alpha 必填）
+## 3. 逐屏内容密度（脚本 / 分镜 / 逐页 / Alpha 必填）
 
 先运行信号报告，再补语义单元：
 
@@ -61,7 +61,7 @@ node workflow/tools/density-report.mjs <courseware.md> <storyboard.yml> \
 |---|---|---|---|---|
 |  |  |  | pass/exception/fail |  |
 
-## 4. 逐屏互动尝试（脚本 / 分镜 / 小节 / Alpha 必填）
+## 4. 逐屏互动尝试（脚本 / 分镜 / 逐页 / Alpha 必填）
 
 每一页都必须先尝试互动；`watch` 是例外，不是默认。逐屏填：
 

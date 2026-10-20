@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { loadRegistry, registerPackage } from './registry-lib.mjs'
 import { fail, ok } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 
 const args = process.argv.slice(2)
 function option(name, fallback = '') {
@@ -16,13 +17,23 @@ const projectRoot = option('--project-root')
 const stagingArg = option('--staging')
 const onlyArg = option('--only')
 const only = new Set(onlyArg.split(',').map((s) => s.trim()).filter(Boolean))
+const scriptPath = option('--script')
+const approvalPath = option('--approval', DEFAULT_SCRIPT_APPROVAL)
 const clean = args.includes('--clean')
 const dryRun = args.includes('--dry-run')
 if (!registryPath) {
   console.error(
-    'usage: node register-staged-components.mjs --registry <registry.json> [--staging <dir>] [--only <id,id>] [--lesson <id>] [--approved-by <name>] [--project-root <dir>] [--clean] [--dry-run]',
+    'usage: node register-staged-components.mjs --registry <registry.json> [--staging <dir>] [--only <id,id>] [--lesson <id>] [--approved-by <name>] [--project-root <dir>] [--script <courseware.md>] [--approval review/script-approval.json] [--clean] [--dry-run]',
   )
   process.exit(2)
+}
+if (scriptPath) {
+  try {
+    assertScriptApproved(scriptPath, { approvalPath })
+  } catch (error) {
+    fail('component registration', [error.message])
+    process.exit(1)
+  }
 }
 
 let loaded

@@ -20,9 +20,9 @@ if (!sectionsPath || !sectionId || !reason) {
 Options:
   --approvals <path>   approval ledger (default: review/page-approvals.json)
 
-Reopens the named section and every later section, because later pages may depend on it.
-Earlier approved sections stay frozen. Rerun the section review loop; it resumes at the
-first reopened section.
+Reopens the named page and every later page, because later pages may depend on it.
+Earlier approved pages stay frozen. Rerun the page review loop; it resumes at the
+first reopened page.
 `)
   process.exit(2)
 }
@@ -39,7 +39,7 @@ const reopened = manifest.sections.slice(index).filter((s) => approvals.sections
 for (const section of reopened) delete approvals.sections[section.id]
 writeApprovals(approvalsPath, approvals)
 
-const logPath = path.join(path.dirname(approvalsPath), 'section-reopens.json')
+const logPath = path.join(path.dirname(approvalsPath), 'page-reopens.json')
 let log = { schemaVersion: '1.0', reopens: [] }
 if (fs.existsSync(logPath)) {
   try {
@@ -60,6 +60,6 @@ fs.writeFileSync(logPath, JSON.stringify(log, null, 2) + '\n')
 
 console.log(
   reopened.length
-    ? `OK reopened ${reopened.map((s) => s.id).join(', ')} — earlier approved sections remain frozen`
-    : `OK section ${sectionId} was not approved; nothing to reopen`,
+    ? `OK reopened ${reopened.map((s) => s.id).join(', ')} — earlier approved pages remain frozen`
+    : `OK page ${sectionId} was not approved; nothing to reopen`,
 )

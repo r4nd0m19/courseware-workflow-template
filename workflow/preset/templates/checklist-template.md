@@ -12,7 +12,7 @@
 - [ ] 无 TODO/TBD/待定/占位文本；例题、代码与输出、测验题干/选项逐字出现
 - [ ] 脚本 `status: APPROVED`，且与 `storyboard.yml` 投影一致
 - [ ] `review-sections.yml` 连续、无重叠覆盖全部非 SKIP 屏
-- [ ] 每一节都有老师逐屏渲染审核记录（`section-approvals.md`），且已批准小节未被改动
+- [ ] 每一页都有老师的渲染审核记录（`page-approvals.md`），且已批准页未被改动
 
 ## B. 组件复用与生成
 
@@ -53,8 +53,8 @@
 ## F. 技术硬门禁
 
 - [ ] `check-script`：脚本 schema/覆盖/内容存在性
-- [ ] `check-review-sections`：小节分组完整且屏均 APPROVED
-- [ ] `check-section-freeze --require-all`：全部小节已渲染审核并冻结
+- [ ] `check-review-sections`：逐页清单完整（每节恰好一屏）且屏均 APPROVED
+- [ ] `check-section-freeze --require-all`：全部页面已渲染审核并冻结
 - [ ] `script-to-storyboard --check`：脚本与分镜一致
 - [ ] `validate-json`：storyboard/content pack schema
 - [ ] `check-coverage`：required 项全部覆盖

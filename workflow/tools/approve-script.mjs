@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseScript } from './script-lib.mjs'
 import { slideScriptHash } from './section-lib.mjs'
+import { reviewRunProblems, sha256Text } from './approval-lib.mjs'
 
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
@@ -10,20 +11,53 @@ function opt(name, fallback = '') {
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback
 }
 const scriptPath = args.find((a) => !a.startsWith('--'))
-const approvedBy = opt('--approved-by')
+const approvedBy = opt('--approved-by').trim()
+const gateChoice = opt('--gate-choice').trim()
+const gateStep = opt('--gate-step', 'review-script')
+const runId = opt('--run-id').trim()
+const runStatePath = opt('--run-state')
 const out = opt('--out', 'review/script-approval.json')
 
-if (!scriptPath || !approvedBy) {
-  console.error(`usage: node approve-script.mjs <courseware.md> --approved-by <name> [options]
+if (!scriptPath || !approvedBy || !runId) {
+  console.error(`usage: node approve-script.mjs <courseware.md> --approved-by <name> --gate-choice approve --run-id <workflow-run-id> [options]
 
 Options:
-  --out <path>   approval ledger (default: review/script-approval.json)
+  --gate-choice <value>  the review-script gate's choice (must be "approve")
+  --gate-step <id>       gate step id (default: review-script)
+  --run-id <id>          workflow run that contains the completed review-script gate
+  --run-state <path>     run state.json (default: .specify/workflows/runs/<id>/state.json)
+  --out <path>           approval ledger (default: review/script-approval.json)
 
-Run only after the human review-script gate returned approve. This flips the
-frontmatter and every non-SKIP slide's machine status from DRAFT to APPROVED,
-then records the approved slide hashes.
+Run only from the workflow step immediately after the human review-script
+gate. This verifies the run state proves that gate completed with "approve",
+flips the frontmatter and every non-SKIP slide's machine status from DRAFT to
+APPROVED, then records the whole-file hash, each slide hash and the gate run.
 `)
   process.exit(2)
+}
+if (gateStep !== 'review-script') {
+  console.error(`FAIL script approval — gate step must be "review-script", got ${JSON.stringify(gateStep)}`)
+  process.exit(1)
+}
+if (gateChoice.toLowerCase() !== 'approve') {
+  console.error(
+    `FAIL script approval — the review-script gate choice is ${JSON.stringify(gateChoice)}, not "approve". ` +
+      'Do not run approve-script manually; resume the workflow and let the teacher decide the gate.',
+  )
+  process.exit(1)
+}
+
+const runProblems = reviewRunProblems(runId, {
+  ...(runStatePath ? { runStatePath } : {}),
+})
+if (runProblems.length) {
+  console.error(
+    `FAIL script approval — the workflow run cannot prove an approving review-script gate:\n${runProblems
+      .map((problem) => `  ${problem}`)
+      .join('\n')}\n` +
+      'Do not run approve-script manually; resume the workflow and let the teacher decide the gate.',
+  )
+  process.exit(1)
 }
 
 const absolute = path.resolve(scriptPath)
@@ -134,11 +168,18 @@ if (problems.length) {
 
 const approvedAt = new Date().toISOString()
 const ledger = {
-  schemaVersion: '1.0',
+  schemaVersion: '1.2',
   script: path.relative(process.cwd(), absolute),
+  scriptSha256: sha256Text(nextText),
   approvedBy,
   approvedAt,
-  note: 'Whole-script human approval. Each rendered section is frozen separately after its own review gate.',
+  gate: {
+    stepId: 'review-script',
+    choice: 'approve',
+    runId,
+    approvedAt,
+  },
+  note: 'Whole-script human approval, hash-bound to the exact courseware.md text. Each rendered section is frozen separately after its own review gate.',
   slideCount: parsed.slides.filter((s) => s.machine && s.machine.status !== 'SKIP').length,
   slideHashes: Object.fromEntries(
     parsed.slides
@@ -153,11 +194,11 @@ fs.writeFileSync(
   [
     '# Script approval',
     '',
-    '| Script | Approved by | Approved at | Slides |',
-    '|---|---|---|---|',
-    `| ${ledger.script} | ${approvedBy} | ${approvedAt} | ${ledger.slideCount} |`,
+    '| Script | Approved by | Approved at | Gate run | Slides |',
+    '|---|---|---|---|---|',
+    `| ${ledger.script} | ${approvedBy} | ${approvedAt} | ${runId} | ${ledger.slideCount} |`,
     '',
-    'Each rendered section is reviewed and frozen separately; see `section-approvals.md`.',
+    'Each rendered page is reviewed and frozen separately; see `page-approvals.md`.',
     '',
   ].join('\n'),
 )

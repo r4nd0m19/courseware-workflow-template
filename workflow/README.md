@@ -2,14 +2,16 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.10.0 / 90 步（含小节循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
+当前版本：**workflow 0.13.0 / 90 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
+
+- **人工闸门 fail-closed**：非交互运行必须通过 `tools/run-workflow.mjs`；Spec Kit 的 `paused` 被映射为退出码 3，agent 不能再把“停在 gate”当成成功。脚本批准与 `courseware.md` 的整份 SHA-256、每屏哈希绑定（`review/script-approval.json`），编辑脚本即失效；所有下游工具和 `verify-script-approval` 步骤都会重新校验。
 
 - **先审壳，再审内容**：`validate-shell` 渲染 30 页**占位内容**预览 deck、4 音色**占位语音**、逐页截图和审核清单，并启动 detached 本地预览服务；`review-shell` 门禁直接把真实壳 URL 交给老师。壳没批准，不进入内容生产。
 - **风格包 = 参考课件源码逐字节直拷**，不是“看截图重画”。CSS/JS 哈希、舞台几何、DOM 选择器、动画（含 APNG 帧数）都由门禁锚定。
 - **课件 = 壳包 + 声明式 deck**：生产路径写 `specs/<lesson>/deck.json`（`COURSEWARE_SHELL_DATA`），由 `build-shell-site.mjs` 一条命令完成插画 provenance、站点装配、组件 bundle/宿主注入与壳/插画站点闸门。旧 `prototype/site`（`slides.js`）只作历史路径保留。
 - **每课插画必须重新生成**：壳内的参考角色只作生图参考；`generate-shell-art.mjs --prompt-file` 按本课提示词生成不同角色，`check-shell-art --require-all` 校验哈希、透明像素、尺寸与提示词/种子/模型溯源。构建默认 fail-closed，缺图即失败。
 - **内容定制组件仍在库里**：参考已有的交互标为 `reference-verbatim` 直接复制；参考没有的走 component-brief → build → review → core，再由 `build-shell-site` 注入 bundle。
-- **三次人工审核**：壳先审一次（真实预览 URL + 30 页占位内容 deck + 4 音色占位语音）；整份 `courseware.md` 审一次；之后每小节渲染完再逐节审，上一节未批准不得进入下一节。插画单独有一次生成后审核。
+- **三类人工审核**：壳先审一次（真实预览 URL + 30 页占位内容 deck + 4 音色占位语音）；整份 `courseware.md` 审一次；之后每渲染完一页就发起一次页审核，上一页未批准不得进入下一页。插画单独有一次生成后审核。
 
 ## 文件地图
 
@@ -17,7 +19,7 @@
 |---|---|
 | `install.mjs` | 一键安装：复制 workflow、初始化 Spec Kit、装 preset/workflow/依赖、检测 Chromium、smoke tests |
 | `preset/` | courseware preset：模板 + 命令（`speckit.script`、`component-plan`、`component-build`、`implement` 等） |
-| `workflows/courseware-production.yml` | 90 步生产 workflow（shell / gate / command / fan-out / do-while + if；含小节循环嵌套） |
+| `workflows/courseware-production.yml` | 90 步生产 workflow（shell / gate / command / fan-out / do-while + if；含逐页循环嵌套） |
 | `schemas/` | content-pack、courseware-script、storyboard、style-pack、component-package/registry、narration、self-review 等 schema |
 | `tools/build-style-pack-source.mjs` | 从参考课件目录逐字节复制 CSS/JS，写 `SOURCE.json` |
 | `tools/check-source-fidelity.mjs` | 源码哈希 + site 副本 + inline base CSS + DOM 几何/选择器 + 动画/APNG 门禁 |
@@ -40,9 +42,11 @@
 | `tools/registry-lib.mjs` / `check-registry.mjs` / `register-staged-components.mjs` | 注册表读写、组件包校验、审核后注册、usedBy |
 | `tools/check-overflow.mjs` | 无滚动条硬门禁 |
 | `tools/build-screen.mjs` / `check-baseline.mjs` | 逐屏截图与基线对比 |
-| `tools/list-approved-screens.mjs` | fan-out 的已批准屏列表（可按小节过滤） |
-| `tools/section-lib.mjs` / `check-review-sections.mjs` / `next-section.mjs` / `freeze-section.mjs` / `check-section-freeze.mjs` | 小节分组、批准账本、哈希冻结、重开 |
-| `tools/approve-script.mjs` | 脚本人工批准后记录哈希并置为 APPROVED |
+| `tools/list-approved-screens.mjs` | fan-out 的已批准屏列表（可按页过滤） |
+| `tools/section-lib.mjs` / `check-review-sections.mjs` / `next-section.mjs` / `freeze-section.mjs` / `check-section-freeze.mjs` | 逐页清单（强制每节恰好一屏）、批准账本、哈希冻结、重开 |
+| `tools/approve-script.mjs` | 只接受 `review-script` gate 的 `approve` 结果，并核对 run state 中该 gate 已完成；记录整份脚本哈希、每屏哈希与 gate run id 并置为 APPROVED |
+| `tools/check-script-approval.mjs` / `approval-lib.mjs` | 校验批准账本：schema、人工批准人、gate 结果与 run 状态、整份/每屏哈希、APPROVED 状态 |
+| `tools/run-workflow.mjs` | fail-closed 运行 `specify workflow run/resume`；`paused` → 退出码 3，打印人工恢复命令、gate 审核请求（含课件 URL）与审核文件 |
 | `tools/build-narration.mjs` / `check-narration.mjs` | Edge TTS 语音生成与校验 |
 | `tools/smoke-test.mjs` | 全量工具回归 |
 | `examples/` | 脚本/组件计划/注册表/组件包/故事板的通过/失败 fixture |
@@ -67,7 +71,7 @@ specify integration use codex     # 把 preset 技能渲染到 .agents/skills
 specify integration use claude    # 恢复默认；Codex 技能保留
 ```
 
-之后运行 workflow 时传 `-i integration=codex`（输入默认 `auto` 跟随项目默认）。Codex 需要项目是 git 仓库；非交互运行加 `</dev/null`。详见 [integrations/README.md](integrations/README.md)。
+之后运行 workflow 时传 `-i integration=codex`（输入默认 `auto` 跟随项目默认）。Codex 需要项目是 git 仓库。非交互运行必须用 `node workflow/tools/run-workflow.mjs ...`，不要直接 `specify workflow run`：Spec Kit 在 gate 处会以 exit 0 返回 `paused`，包装器则返回 exit 3，打印 run id、恢复命令、gate 审核请求（含课件 URL）与审核文件。详见 [integrations/README.md](integrations/README.md)。
 
 ## 核心架构（先读这一节）
 
@@ -258,7 +262,7 @@ node workflow/tools/check-review-sections.mjs specs/lesson-01/review-sections.ym
 - `extend` 必须升版本并保持向后兼容。
 - 参考组件不复制进 registry；它们属于风格包。
 
-## 逐小节渲染审核（rolling render review）
+## 逐页渲染审核（rolling render review）
 
 ```text
 壳包 → validate-shell（30 页占位内容 deck + 4 音色占位语音 + 截图 + 本地预览 URL）
@@ -281,8 +285,10 @@ approve-script（DRAFT → APPROVED，记录脚本哈希）
   node workflow/tools/reopen-section.mjs --sections review-sections.yml \
     --id B --reason "S12 的反馈太难，需要重做"
   ```
-- 批准账本：`review/script-approval.json`、`review/page-approvals.json`、`review/page-approvals.md`、`review/section-reopens.json`。不要手改。
-- `specify workflow resume <run-id>` 可从当前页恢复。
+- 批准账本：`review/script-approval.json`、`review/page-approvals.json`、`review/page-approvals.md`、`review/page-reopens.json`。不要手改。`script-approval.json` 与整份 `courseware.md` 文本绑定：任何编辑（包括旁白、制作字段或 frontmatter）都会让批准失效，必须重新走 `review-script` 人工 gate。账本同时记录 gate run id；`approve-script` 会拒绝 `paused` 或没有完成 `review-script` 的 run，`verify-script-approval` 用 `--expect-run` 要求账本来自当前 run。
+- 本地文件无法证明按键的是真人；检查保证“暂停的 gate 不会被当成批准、批准后改稿会失效”。真正的信任边界是老师在自己的终端回答 gate，agent 不代答或手动铸造账本。
+- `node workflow/tools/check-script-approval.mjs <courseware.md>` 必须通过；失败时下游工具（component-plan、narration、storyboard、组件、deck、截图、冻结）都会拒绝继续。
+- 非交互运行停在 gate 时，包装器返回 exit 3，并打印 gate 的审核请求（逐页 gate 会带课件 URL）与 `show_file` 审核文件路径；老师在自己的终端运行 `node workflow/tools/run-workflow.mjs resume <run-id>` 交互式回答 gate。不要由 agent 代答。
 
 ## Deck 数据与语音
 
@@ -323,7 +329,7 @@ approve-script（DRAFT → APPROVED，记录脚本哈希）
 | `style_pack_source` | 直拷源码清单（001：`shells/branch-choice/SOURCE.json`；旧路径为 `style-pack/source/SOURCE.json`） |
 | `source_fidelity` | 保真合约（001：`shells/branch-choice/fidelity.json`） |
 | `shell` | 壳包 id 或目录；默认 `shells/branch-choice` |
-| `shell_source` | 壳源码清单（`shells/<id>/SOURCE.json`），小节 source-fidelity 闸门用 |
+| `shell_source` | 壳源码清单（`shells/<id>/SOURCE.json`），逐页 source-fidelity 闸门用 |
 | `lesson_slug` | 本课 slug，写进插画 provenance（如 `001-2d-arrays`） |
 | `art_prompts` | 本课插画提示词文件（`specs/<lesson>/art-prompts.json`，槽位 → 提示词） |
 | `art_dir` | 生成插画与 `art-manifest.json` 的目录（如 `generated/001-2d-arrays`） |
@@ -336,7 +342,7 @@ approve-script（DRAFT → APPROVED，记录脚本哈希）
 
 ```bash
 SPECIFY_INIT_DIR=/path/to/courseware \
-specify workflow run courseware-production \
+node workflow/tools/run-workflow.mjs courseware-production \
   -i lesson="二维数组：给数据排好座位" \
   -i approver="张老师" \
   -i content_pack="research/r0/content-ref/二维数组1.content.json" \
@@ -365,7 +371,7 @@ specify workflow run courseware-production \
 
 1. `validate-content` / `validate-style-pack-full`（含冻结哈希）/ `validate-source-fidelity --source-only`；`validate-shell`（壳包契约）；`ensure-registry` / `validate-registry`。
 2. `speckit.specify` → 教学简报；`review-brief` 人审。
-3. `speckit.script` → `courseware.md` + `review-sections.yml`；`validate-script-draft` → `self-study-audit` → `validate-script`；`review-script` 人审（整份一次）；`approve-script`。
+3. `speckit.script` → `courseware.md` + `review-sections.yml`；`validate-script-draft` → `self-study-audit` → `validate-script`；`review-script` 人审（整份一次）；`approve-script`（只接受 gate 的 `approve`，并核对 run state）→ `verify-script-approval`（重新校验整份/每屏哈希与当前 run）。
 4. **本课插画**：`shell-art-brief`（逐槽提示词）→ `build-shell-art`（`generate-shell-art --prompt-file … --reuse`，未变化不重生成、不需要 key）→ `check-shell-art --require-all`（provenance）→ `review-shell-art` 人审。
 5. `build-narration` → `check-narration`（四声线 manifest；壳路径不再有 `build-audio-adapter`）。
 6. `speckit.component-plan` → 复用/缺口/简报（全局纸面设计）；`review-component-plan` 人审。**不在这里预建组件**；实现由页面循环在首次需要它的页面完成。
@@ -378,20 +384,21 @@ specify workflow run courseware-production \
 ## 直接跑闸门（不经过 workflow）
 
 ```bash
+node workflow/tools/check-script-approval.mjs specs/001-2d-arrays/courseware.md --approval review/script-approval.json
 node workflow/tools/check-script.mjs specs/001-2d-arrays/courseware.md research/r0/content-ref/二维数组1.content.json shells/branch-choice/style-pack.manifest.json registry/index.json
 node workflow/tools/script-to-storyboard.mjs specs/001-2d-arrays/courseware.md --check specs/001-2d-arrays/storyboard.yml
 node workflow/tools/validate-style-pack.mjs shells/branch-choice/style-pack.full.json --check-baselines --freeze shells/branch-choice/style-pack.freeze.json
 node workflow/tools/check-shell.mjs --shell shells/branch-choice
-node workflow/tools/build-shell-site.mjs --shell shells/branch-choice --deck specs/001-2d-arrays/deck.json \
+node workflow/tools/build-shell-site.mjs --script specs/001-2d-arrays/courseware.md --shell shells/branch-choice --deck specs/001-2d-arrays/deck.json \
   --art generated/001-2d-arrays/art-manifest.json --narration prototype/site/narration.json \
   --audio-dir prototype/site/audio --registry registry/index.json --out prototype/shell-site --force
 node workflow/tools/check-shell.mjs --shell shells/branch-choice --site prototype/shell-site --require-art
 node workflow/tools/check-shell-art.mjs --shell shells/branch-choice --art generated/001-2d-arrays/art-manifest.json \
   --site prototype/shell-site --require-all
 node workflow/tools/check-source-fidelity.mjs --source shells/branch-choice/SOURCE.json --source-only
-node workflow/tools/check-deck-data.mjs --url http://127.0.0.1:8082/ --storyboard specs/001-2d-arrays/storyboard.yml \
+node workflow/tools/check-deck-data.mjs --script specs/001-2d-arrays/courseware.md --url http://127.0.0.1:8082/ --storyboard specs/001-2d-arrays/storyboard.yml \
   --registry registry/index.json --shell shells/branch-choice
-node workflow/tools/check-overflow.mjs http://127.0.0.1:8082/ --pages 16
+node workflow/tools/check-overflow.mjs http://127.0.0.1:8082/ --script specs/001-2d-arrays/courseware.md --pages 16
 ```
 
 `check-shell.mjs --shell …`（不给 `--site`）只校验壳包的预览；生产站点用 `--site prototype/shell-site --require-art`，且插画闸门是必需项。旧 `prototype/site` 的命令不再适用于壳站点。
@@ -405,7 +412,7 @@ prompt self-review → check-self-review → human gate
 - self-review 写 `review/self-review-<stage>.json/.md`（schema：`workflow/schemas/self-review.schema.json`；模板：`preset/templates/self-review-template.md`）。
 - `check-self-review` 要求：`verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。
 - **自审绑定确切字节**：每份自审的 `reviewedArtifacts` 记录被审文件的 SHA-256；`check-self-review` 重算并比对，文件一变即 `stale review` 失败。改稿后必须重新自审，不能只改哈希。
-- **逐屏密度闸门**：脚本 / 分镜 / 小节 / Alpha 自审必须带 `density`。先跑 `density-report.mjs` 得到客观信号（contentRefs、表格行列、代码行、要点数、旁白句数等），再为每屏写 `semanticUnits`（label + evidence）。默认一屏一个语义边界；超过 1 个单元必须拆页，或标 `exception` 并写明理由（仅限并列对比、同一规则多例、复习整合）。信号与当前脚本/分镜不一致也会失败。
+- **逐屏密度闸门**：脚本 / 分镜 / 逐页 / Alpha 自审必须带 `density`。先跑 `density-report.mjs` 得到客观信号（contentRefs、表格行列、代码行、要点数、旁白句数等），再为每屏写 `semanticUnits`（label + evidence）。默认一屏一个语义边界；超过 1 个单元必须拆页，或标 `exception` 并写明理由（仅限并列对比、同一规则多例、复习整合）。信号与当前脚本/分镜不一致也会失败。
 - human gate 用 `show_file` 展示自审报告，并主动请求 `approve / reject`；未批准不得继续。
 - 阶段：`inputs`、`brief`、`script`、`component-plan`、`components`、`storyboard`、`tasks`、`section-<id>`、`alpha`、`beta`、`gold`。`density` 在 `script`、`storyboard`、`section-<id>`、`alpha` 强制；其余阶段只强制 `reviewedArtifacts`。
 - 插画另有 `review-shell-art` 人工审核（`show_file` 展示 `art-manifest.json`），不经过 `self-review`。
@@ -420,7 +427,7 @@ prompt self-review → check-self-review → human gate
 ## 当前未完成 / stub
 
 - **真实内容参考课件**：仅接入了 lesson-01 的本地镜像与内容参考；新的参考课件需要重新跑 R0-C 与 `build-style-pack-source`。
-- **壳路径已是 0.7.1 起的默认生产路径**：YAML 输入含 `shell` / `shell_source` / `lesson_slug` / `art_prompts` / `art_dir` / `site_dir` / `deck_data`；小节与 Alpha 都用 `build-shell-site` 装配站点，旁白由 `prepare-shell-site` 转换，不再使用 `build-audio-adapter`。001 pilot 之前的旧 `prototype/site` + `COURSEWARE_SLIDES` 仅作历史路径保留。
+- **壳路径已是 0.7.1 起的默认生产路径**：YAML 输入含 `shell` / `shell_source` / `lesson_slug` / `art_prompts` / `art_dir` / `site_dir` / `deck_data`；逐页与 Alpha 都用 `build-shell-site` 装配站点，旁白由 `prepare-shell-site` 转换，不再使用 `build-audio-adapter`。001 pilot 之前的旧 `prototype/site` + `COURSEWARE_SLIDES` 仅作历史路径保留。
 - **旧 deck 的 `speckit.implement` / schema 默认值仍在**：`deck_url` / `deck_data` 的示例值已改壳路径，但 0.5.x 的工具与文档若被复用，需要显式带 `--shell`，否则会按旧站点检查。
 - **生图 API 已实跑**：`generate-shell-art.mjs` 使用本机 `~/.config/courseware/aliyun-image.key`（600 权限，不提交）；当前 token 只暴露 `gpt-image-2`，qwen 模型走同一接口但需 token 所属分组有渠道。`--prompt-file` 按槽位写本课提示词；`--reuse` 在提示词、参考图哈希、输出文件哈希与 provenance 均未变时直接复用，不调用 API、也不需要 key；`--force` 强制重生成。角色经去白底、裁边、像素化后由人工看样。
 - **参考资产授权**：图片/音频/字体等未确认可再分发；当前只在本机使用。
@@ -432,11 +439,11 @@ prompt self-review → check-self-review → human gate
 
 - `specify preset add` / `workflow add` 在 Claude Code 与 Codex 两个 integration 实测安装成功。
 - 一键安装 `node workflow/install.mjs --project … --integration …` 实测 exit 0。
-- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、小节清单、截图列表、`next-section`、`approve-script`、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），以及 harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration）、占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 75/75 通过，只含 workflow 的模板仓库 71/71、1 项 shell 检查跳过）。
+- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、逐页清单（含“多屏合并成一个 section”被拒绝，防止绕过逐页人工审核）、截图列表、`next-section`、`approve-script`、`check-script-approval`（批准通过、缺账本、批准后编辑、伪造 `reject` gate、DRAFT 状态、paused run 均拒绝）、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration），workflow 逐页人工审核 gate 静态检查（`review-page` 位于每页实现与自审之后，消息带课件 URL、附本页自审文件），占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 89/89 通过，只含 workflow 的模板仓库跳过 shell 检查后同样通过）。
 - `check-source-fidelity --source-only` 与完整 DOM 模式已对 `style-pack/source` + `prototype/site` 实测通过（含 26 个组件选择器与 3 个自定义组件）；壳路径的 source 闸门对 `shells/branch-choice/SOURCE.json` 实测通过（15 个源文件哈希一致）。
 - 壳路径已在 001 Section A 实测：`build-shell-site`（插画 provenance → fail-closed 站点 → bundle/宿主 → 壳/插画站点闸门）、`check-deck-data --shell`、`check-shell --site prototype/shell-site --require-art`、`check-shell-art --site --require-all`、`check-overflow --debug-go`、`check-rendered-section` 与 68 项运行时检查全部通过；7 屏 × 4 声线 = 28 个非空 MP3，站点 `missingArt: []`。
-- 0.10.0 workflow YAML 经 `specify workflow info` 解析成功：90 个顶层步骤、含小节循环嵌套，无重复 ID；`review-shell` 门禁能读取 `validate-shell` 的 JSON 输出（`previewUrl` / `reviewFile` / `slideCount` / `typeCount` / `narration.voiceCount` / `narration.pageCount`）。
+- 0.13.0 workflow YAML 经 `specify workflow info` 解析成功：90 个顶层步骤、含逐页循环嵌套，无重复 ID；`review-shell` 门禁能读取 `validate-shell` 的 JSON 输出（`previewUrl` / `reviewFile` / `slideCount` / `typeCount` / `narration.voiceCount` / `narration.pageCount`）；`approve-script` 读取 `steps.review-script.output.choice` 与 `context.run_id` 并核对 run state，`verify-script-approval` 紧随其后且要求当前 run。
 - `check-shell --shots review/shell-shots --review-out review/shell-preview.md --serve-preview` 实测：30 页占位内容、30 张截图、21 种原生类型、29 项互动自检通过；所有标题含“占位”，4 个音色共 32 个占位 MP3 全部解码成功，并在真实壳里播放了 `xiaolai` 与 `xiaozhi`；自动播放会在互动页停住并提示“下一页”，点“下一页”后才继续；detached 预览服务可复用（第二次运行 `previewReused: true`）。
-- 双 harness 已实测：Claude Code 与 Codex 并装后 `.claude/skills` 与 `.agents/skills` 并存；workflow 的 `prompt` 与 `command` 步骤都能经 `codex exec` 调度（command 步骤发送 `$speckit-<name>`）；Codex 在非 git 目录报 `Not inside a trusted directory`，`git init` 后通过；非交互运行需 `</dev/null`。
+- 双 harness 已实测：Claude Code 与 Codex 并装后 `.claude/skills` 与 `.agents/skills` 并存；workflow 的 `prompt` 与 `command` 步骤都能经 `codex exec` 调度（command 步骤发送 `$speckit-<name>`）；Codex 在非 git 目录报 `Not inside a trusted directory`，`git init` 后通过；非交互运行必须经 `run-workflow.mjs`，`paused` 返回 exit 3 而不是 0。
 - `generate-shell-art --reuse` 已在 001 实测：prompt / 参考图哈希 / 输出哈希 / provenance 全部匹配时复用 cover、end，不读 API key；`check-shell-art --require-all` 仍通过。
 - `check-deck-data` 与 `sync-deck-components` 在 001 壳路径实跑通过；`build-audio-adapter` 仅旧 deck 使用，壳路径由 `prepare-shell-site` 取代。

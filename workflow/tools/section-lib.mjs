@@ -47,6 +47,14 @@ export function validateSectionManifest(manifest, slides, options = {}) {
       errors.push(`${where}: slides must be a non-empty array`)
       return
     }
+    // Human review happens after each rendered page, so every section is exactly
+    // one page. Grouping several slides into one section would silently skip the
+    // per-page review-page gate and freeze them under a single approval.
+    if (section.slides.length !== 1) {
+      errors.push(
+        `${where}: human review is per page; exactly one slide per section is required (got ${section.slides.length}: ${section.slides.join(', ')})`,
+      )
+    }
     const positions = []
     for (const id of section.slides) {
       if (typeof id !== 'string' || !id.trim()) {

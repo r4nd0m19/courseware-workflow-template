@@ -3,8 +3,8 @@ schema_version: "1.0"
 preset:
   id: "courseware"
   name: "Courseware Workflow"
-  version: "0.3.2"
-  description: "信奥互动课件工作流：UbD 教学简报（含核心概念台账）、人类可读课件脚本（整份一次审）、概念覆盖阻断闸门、逐小节渲染审核、组件复用与按需生成、分镜投影、内容覆盖闸门、无滚动条硬门禁"
+  version: "0.3.5"
+  description: "信奥互动课件工作流：UbD 教学简报（含核心概念台账）、人类可读课件脚本（整份一次审）、概念覆盖阻断闸门、逐页渲染审核、组件复用与按需生成、分镜投影、内容覆盖闸门、无滚动条硬门禁"
   author: "courseware"
   license: "private"
 
@@ -40,7 +40,7 @@ provides:
     - type: "template"
       name: "review-sections-template"
       file: "templates/review-sections-template.yml"
-      description: "小节渲染审核分组：整份脚本一次审，逐节实现/渲染/人工审"
+      description: "逐页渲染审核清单：整份脚本一次审，每节恰好一屏，逐页实现/渲染/人工审"
       strategy: "replace"
 
     - type: "template"
@@ -130,13 +130,13 @@ provides:
     - type: "command"
       name: "speckit.implement"
       file: "commands/speckit.implement.md"
-      description: "按小节把已批准脚本实现为数据驱动 deck，逐节渲染并等待人工审核"
+      description: "按页把已批准脚本实现为数据驱动 deck，逐页渲染并等待人工审核"
       replaces: "speckit.implement"
 
     - type: "command"
       name: "speckit.converge"
       file: "commands/speckit.converge.md"
-      description: "Beta 收敛：问题分级、重开小节、安全修复与收敛报告"
+      description: "Beta 收敛：问题分级、重开页、安全修复与收敛报告"
       # no replaces: this is a new command
 
     - type: "command"
