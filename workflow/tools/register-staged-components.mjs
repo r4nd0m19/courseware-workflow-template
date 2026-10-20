@@ -4,6 +4,7 @@ import path from 'node:path'
 import { loadRegistry, registerPackage } from './registry-lib.mjs'
 import { fail, ok } from './lib.mjs'
 import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
+import { pageGateApproval, requireProductionRun } from './review-guard.mjs'
 
 const args = process.argv.slice(2)
 function option(name, fallback = '') {
@@ -19,13 +20,25 @@ const onlyArg = option('--only')
 const only = new Set(onlyArg.split(',').map((s) => s.trim()).filter(Boolean))
 const scriptPath = option('--script')
 const approvalPath = option('--approval', DEFAULT_SCRIPT_APPROVAL)
+const sectionId = option('--section')
+const manual = args.includes('--manual')
 const clean = args.includes('--clean')
 const dryRun = args.includes('--dry-run')
 if (!registryPath) {
   console.error(
-    'usage: node register-staged-components.mjs --registry <registry.json> [--staging <dir>] [--only <id,id>] [--lesson <id>] [--approved-by <name>] [--project-root <dir>] [--script <courseware.md>] [--approval review/script-approval.json] [--clean] [--dry-run]',
+    'usage: node register-staged-components.mjs --registry <registry.json> [--staging <dir>] [--only <id,id>] [--lesson <id>] [--approved-by <name>] [--project-root <dir>] [--script <courseware.md>] [--approval review/script-approval.json] [--section <id>] [--clean] [--dry-run] [--manual]',
   )
   process.exit(2)
+}
+if (!manual) {
+  requireProductionRun({ tool: 'register-staged-components', manual })
+  const approval = pageGateApproval({ sectionId })
+  if (!approval.ok) {
+    fail('component registration', [
+      `${approval.reason}; register components only after the review-page gate approves that page`,
+    ])
+    process.exit(1)
+  }
 }
 if (scriptPath) {
   try {
