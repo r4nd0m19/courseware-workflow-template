@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -56,7 +57,7 @@ try {
 }
 
 const { ok: valid, errors } = validateWithSchema(
-  new URL('../schemas/self-review.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/self-review.schema.json', import.meta.url)),
   data,
 )
 if (!valid) {

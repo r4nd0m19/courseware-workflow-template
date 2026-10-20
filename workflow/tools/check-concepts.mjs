@@ -13,6 +13,7 @@
 //
 // The ledger is intentionally human-readable. The definition is for the
 // teacher and the self-review; mustAppear is the mechanical contract.
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
@@ -83,7 +84,7 @@ try {
 
 const errors = []
 const schemaCheck = validateWithSchema(
-  new URL('../schemas/concepts.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/concepts.schema.json', import.meta.url)),
   ledger,
 )
 for (const e of schemaCheck.errors) errors.push(`ledger ${e}`)

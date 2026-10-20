@@ -96,7 +96,8 @@ Codex 图形界面里新建项目后，不需要手工跑一串命令：把模�
 ## 已验证
 
 - `node workflow/install.mjs --project ... --integration claude` 与 `--integration codex` 均 exit 0（复制 workflow、Spec Kit init、preset/workflow 安装、npm ci、Chromium 检测、smoke tests）。
-- `specify init --integration codex` + `preset add --dev` + `workflow add --dev`：成功；`.agents/skills/speckit-coverage/SKILL.md` 等 courseware 技能存在；当前 0.13.0 的 90 步 workflow 可安装。
+- `specify init --integration codex` + `preset add --dev` + `workflow add --dev`：成功；`.agents/skills/speckit-coverage/SKILL.md` 等 courseware 技能存在；当前 0.14.1 的 91 步 workflow 可安装，13 个 `gui-gate` 由 `.specify/workflows/steps/gui-gate/` 加载。
+- ZCode GUI 审核：`install.mjs --zcode` 把 `courseware-approval` 合并进 `.zcode/config.json` 的 `mcp.servers`（Windows 用 `node.exe` + 项目内 server 脚本；已有 server 保留）。重载 ZCode 后，agent 调用 `courseware_gate_open` 内联渲染面板，老师点击后 MCP 服务器自动 resume；真实 ZCode 探针已跑通，完整端到端见 `tools/test-gui-gate.mjs`。
 - Claude + Codex 双集成：`integration install codex`、`use codex`、`use claude` 后，`.agents/skills` 与 `.claude/skills` 并存；默认集成可恢复为 claude。
 - `prompt` 与 `command` 两种 workflow 步骤都能通过 `codex exec` 调度；command 步骤会发送 `$speckit-<name>`，由 Codex 从 `.agents/skills` 加载。
 - 在非 git 目录运行 Codex 会失败；`git init` 后可正常执行。非交互 workflow 运行经 `run-workflow.mjs`，gate 的 `paused` 映射为 exit 3；直接 `specify workflow run` 仍是 exit 0。

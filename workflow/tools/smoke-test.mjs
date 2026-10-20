@@ -686,15 +686,24 @@ try {
     return null
   }
   const loop = findStep(workflowData.steps, 'section_review_loop')
-  const pageSteps = (findStep(loop && loop.steps, 'section_body') || {}).then || []
+  function flattenSteps(steps) {
+    const flat = []
+    for (const step of steps || []) {
+      flat.push(step)
+      for (const key of ['steps', 'then', 'else']) flat.push(...flattenSteps(step[key]))
+    }
+    return flat
+  }
+  const pageSteps = flattenSteps((findStep(loop && loop.steps, 'section_body') || {}).then)
   const pageIds = pageSteps.map((step) => step.id)
   const pageGate = pageSteps.find((step) => step.id === 'review-page')
   const gateMessage = (pageGate && pageGate.message) || ''
   const gatePosition = pageIds.indexOf('review-page')
+  const guardPosition = pageIds.indexOf('page-review-resume-guard')
   const pageGatePass =
     Boolean(loop) &&
     Boolean(pageGate) &&
-    pageGate.type === 'gate' &&
+    pageGate.type === 'gui-gate' &&
     gateMessage.includes('steps.advance_section.output.data.section.id') &&
     gateMessage.includes('inputs.deck_url') &&
     pageGate.show_file ===
@@ -706,7 +715,11 @@ try {
     pageIds.indexOf('implement-section') >= 0 &&
     pageIds.indexOf('implement-section') < gatePosition &&
     pageIds.indexOf('check-self-review-page') >= 0 &&
-    pageIds.indexOf('check-self-review-page') < gatePosition
+    pageIds.indexOf('check-self-review-page') < gatePosition &&
+    // Spec Kit re-runs the enclosing body on resume; the guard must see the
+    // pending/decided gate before implement/self-review can rewrite evidence.
+    guardPosition >= 0 &&
+    guardPosition < pageIds.indexOf('implement-section')
   console.log(`${pageGatePass ? 'PASS' : 'FAIL'} workflow per-page human review gate`)
   if (!pageGatePass) {
     failed += 1
@@ -720,7 +733,7 @@ try {
   const hasShellPreviewStep =
     /- id: validate-shell\n    type: shell\n    run: "node workflow\/tools\/check-shell\.mjs[^"\n]*--serve-preview[^"\n]*--json"\n    output_format: json/.test(workflowYaml)
   const hasShellReviewGate =
-    /- id: review-shell\n    type: gate\n/.test(workflowYaml) &&
+    /- id: review-shell\n    type: gui-gate\n/.test(workflowYaml) &&
     /message: "[^"\n]*steps\.validate-shell\.output\.data\.previewUrl/.test(workflowYaml) &&
     /message: "[^"\n]*narration\.voiceCount/.test(workflowYaml) &&
     /message: "[^"\n]*narration\.pageCount/.test(workflowYaml) &&
@@ -734,8 +747,35 @@ try {
     )
   }
 
+  // ---- every human gate goes through the GUI panel ----
+  total += 1
+  const humanGates = []
+  function collectHumanGates(steps) {
+    for (const step of steps || []) {
+      if (!step || typeof step !== 'object') continue
+      if (step.type === 'gate' || step.type === 'gui-gate') humanGates.push(step)
+      collectHumanGates(step.steps)
+      collectHumanGates(step.then)
+      collectHumanGates(step.else)
+    }
+  }
+  collectHumanGates(workflowData.steps)
+  const guiOnlyPass =
+    humanGates.length === 13 &&
+    humanGates.every((gate) => gate.type === 'gui-gate' && !('verdict_input' in gate))
+  console.log(`${guiOnlyPass ? 'PASS' : 'FAIL'} workflow human gates use gui-gate without verdict_input`)
+  if (!guiOnlyPass) {
+    failed += 1
+    console.error(
+      `expected all 13 human gates to be gui-gate with no verdict_input, found: ` +
+        humanGates.map((gate) => `${gate.id}=${gate.type}${'verdict_input' in gate ? '+verdict_input' : ''}`).join(', '),
+    )
+  }
+
   // ---- fail-closed workflow runner ----
-  const specifyProbe = spawnSync('specify', ['--version'], { encoding: 'utf8' })
+  const specifyProbe = spawnSync(process.env.SPECIFY_BIN || 'specify', ['--version'], {
+    encoding: 'utf8',
+  })
   if (specifyProbe.status === 0) {
     const reviewNote = path.join(tmpRoot, 'smoke-review.md')
     fs.writeFileSync(reviewNote, '# Smoke review\n\nReview this page at http://127.0.0.1:9/review\n')
@@ -755,7 +795,9 @@ try {
         '  - id: g',
         '    type: gate',
         '    message: "smoke gate review: http://127.0.0.1:9/review"',
-        `    show_file: "${reviewNote}"`,
+        // JSON.stringify escapes Windows backslashes for YAML's double-quoted
+        // scalar; a raw C:\... path is not a valid YAML escape sequence.
+        `    show_file: ${JSON.stringify(reviewNote)}`,
         '    options: [approve, reject]',
         '    on_reject: abort',
         '',
@@ -788,7 +830,8 @@ try {
         'steps:',
         '  - id: s',
         '    type: shell',
-        '    run: "true"',
+        // `true` is a POSIX shell builtin; Windows cmd has no such command.
+        `    run: ${JSON.stringify(`${process.execPath} --version`)}`,
         '',
       ].join('\n'),
     )
@@ -798,6 +841,20 @@ try {
       [toyOk],
       0,
       'OK workflow smoke-ok completed',
+    )
+    run(
+      'gui-gate end-to-end with MCP approval server',
+      'test-gui-gate.mjs',
+      [],
+      0,
+      'OK gui-gate end-to-end',
+    )
+    run(
+      'gui-gate resume keeps the verdict when the pre-gate body would rewrite evidence',
+      'test-gui-gate-resume.mjs',
+      [],
+      0,
+      'OK gui-gate resume guard',
     )
   } else {
     skip('workflow wrapper fail-closed', 'specify CLI not on PATH')

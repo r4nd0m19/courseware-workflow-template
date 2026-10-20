@@ -4,9 +4,9 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`0.13.0`（90 个顶层步骤）
+- 工作流版本：`0.14.1`（91 个顶层步骤）
 - preset：`courseware` `0.3.5`
-- 模板版本：`0.1.6`（2026-10-20）
+- 模板版本：`0.1.9`（2026-10-20）
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
 ## 在 Codex 图形界面里使用
@@ -26,6 +26,7 @@
 4. 如果 Codex 询问是否信任该目录或是否允许执行命令，选择允许。脚本会先 `git init`，因为 Codex 需要可信任的 git 目录。
 5. 安装完成后，在 Codex 中重新打开项目，或执行 **Force Reload Skills**。确认技能列表里有 `speckit-script` 等技能；Codex 里用 `$speckit-*` 调用，Claude Code 里用 `/speckit-*`。
 6. 本模板不带壳；把本项目的 `shells/<shell>/`（风格包 manifest/full/freeze/source）放好后，再按 `AGENTS.md` 里的命令跑完整流程。壳入库后，工作流会先用 30 页**占位内容** + 4 音色**占位语音**做壳预览并人工审核（`review-shell`），通过后才进入内容生产。
+7. 用 ZCode 打开项目时，安装器会把 `courseware-approval` 写进 `.zcode/config.json` 并构建 `workflow/mcp/panel.html`。重载 ZCode 窗口后，13 个人工 gate 都以对话内联面板呈现；agent 调用 `courseware_gate_open`，老师点击选项后服务器自动恢复，不需要终端。配置细节见 `workflow/mcp/README.md`。
 
 ### Codex 图形界面的限制
 
@@ -55,8 +56,8 @@ bash bootstrap-codex-courseware.sh --force
 2. 缺少 `specify` 时，用 `uv tool install specify-cli` 或 `pipx install specify-cli` 安装 Spec Kit CLI；
 3. 克隆模板到临时目录；
 4. 在目标目录 `git init`，写入 `.gitignore` 和 `AGENTS.md`（已存在则保留）；
-5. 运行 `workflow/install.mjs --integration codex`，安装 preset 和工作流；
-6. `npm ci` 安装 `workflow/tools` 依赖；
+5. 运行 `workflow/install.mjs --integration codex`，安装 `gui-gate` step、preset 和工作流，并在 `.zcode/` 存在时合并 MCP server 配置；
+6. `npm ci` 安装 `workflow/tools` 依赖，然后运行 `workflow/mcp/build-panel.mjs` 生成审核面板；
 7. 检测 Chrome/Chromium；没有则用项目内的 `playwright-core` 下载 Chromium；
 8. 跑 `smoke-test.mjs` 和 `specify workflow info courseware-production` 做验证。
 
@@ -76,16 +77,18 @@ bash bootstrap-codex-courseware.sh --force
 ## 安装后验证
 
 ```bash
-specify workflow info courseware-production   # 应显示 0.13.0、90 steps
+specify workflow info courseware-production   # 应显示 0.14.1、91 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 应全部 PASS
+node workflow/tools/smoke-test.mjs            # 完整仓库 92/92；模板仓库安装后 88/88（1 项壳检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
+
+Windows 原生安装（不在 WSL 里）时，如果 `specify.exe` 不在 PATH，先设置 `SPECIFY_BIN` 再运行安装器和 smoke tests；安装器、包装器、MCP 自动恢复都识别该变量。本模板的 GUI 闸门端到端用例与全量 smoke 已在 Spec Kit 1.0.10（WSL）与 1.2.2（Windows）各验证一遍。
 
 Codex 里的完整流程命令见 `AGENTS.md`。注意：
 
 - 必须显式传 `-i integration=codex`；
-- 非交互运行必须用 `node workflow/tools/run-workflow.mjs courseware-production ...`，不要直接 `specify workflow run`；退出码 3 表示停在人工 gate，agent 必须停止，由老师在终端运行 `node workflow/tools/run-workflow.mjs resume <run-id>`；
+- 非交互运行必须用 `node workflow/tools/run-workflow.mjs courseware-production ...`，不要直接 `specify workflow run`；退出码 3 表示停在人工 gate。GUI gate 由 agent 调用 `courseware_gate_open` 打开面板，老师点击后自动恢复；agent 不得运行 `resume`、不得传 `-i`、不得调用 `courseware_gate_verdict`。逐页 `review-page` 位于嵌套循环内，Spec Kit 恢复时会重跑父 body，因此工作流用 `check-pending-gui-gate.mjs` + `SPECKIT_WORKFLOW_RUN_ID` 跳过 gate 前的重建/自审，确保老师刚点的 verdict 不会因 `reviewedAt` 改写而失效。内置 gate 的终端后备路径仍是 `node workflow/tools/run-workflow.mjs resume <run-id>`；
 - 工作流需要 `concepts=...`、`style_pack=...` 等输入；模板不提供具体课件数据。
 
 ## 更新模板
@@ -94,7 +97,8 @@ Codex 里的完整流程命令见 `AGENTS.md`。注意：
 
 ```bash
 rsync -a --delete \
-  --exclude node_modules --exclude .specify --exclude chrome-path.txt \
+  --exclude node_modules --exclude __pycache__ --exclude panel.html \
+  --exclude chrome-path.txt --exclude .cache \
   /path/to/courseware/workflow/ ~/code/courseware-workflow-template/workflow/
 cd ~/code/courseware-workflow-template
 git add -A

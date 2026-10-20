@@ -10,6 +10,13 @@
 //
 // This mirrors how CI runners treat a job that is waiting for approval: the
 // pipeline is not green until the protected environment actually authorizes it.
+//
+// `gui-gate` steps pause the same way, but their verdict comes from the ZCode
+// MCP App panel, not from a terminal. For those we print the MCP tool call the
+// agent must make and explicitly forbid `resume` / `-i`, because a single
+// approve passed there would persist in the run inputs and pre-answer later
+// gates (including every page in the review loop).
+import { randomBytes } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -44,11 +51,40 @@ if (command === 'resume' && args.length === 0) usage()
 const specifyArgs = ['workflow', command, ...args.filter((a) => a !== '--json'), '--json']
 const specifyBin = process.env.SPECIFY_BIN || 'specify'
 
+// Spec Kit exposes the run id to Python steps but not to shell-step
+// environments. The page loop's resume guard needs it to distinguish this
+// run's pending gate from a stale one. Generate it here and let Spec Kit use
+// it via SPECKIT_WORKFLOW_RUN_ID; on resume, take the explicit run-id
+// positional so a guard never sees a stale value inherited from the caller.
+function resumeRunId(values) {
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i]
+    if (value === '-i' || value === '--input') {
+      i += 1
+      continue
+    }
+    if (value.startsWith('-')) continue
+    return value
+  }
+  return ''
+}
+const effectiveRunId = command === 'resume'
+  ? resumeRunId(args)
+  : (process.env.SPECKIT_WORKFLOW_RUN_ID || randomBytes(4).toString('hex'))
+const childEnv = { ...process.env }
+if (effectiveRunId) childEnv.SPECKIT_WORKFLOW_RUN_ID = effectiveRunId
+else delete childEnv.SPECKIT_WORKFLOW_RUN_ID
+
 // Interactive runs must see the gate prompt on the terminal. The wrapper's
 // fail-closed guarantee is for non-interactive (agent/CI) runs, where Spec Kit
 // would otherwise return exit 0 with status "paused".
 if (process.stdin.isTTY && process.stdout.isTTY) {
-  const result = spawnSync(specifyBin, specifyArgs, { stdio: 'inherit' })
+  const result = spawnSync(specifyBin, specifyArgs, {
+    stdio: 'inherit',
+    // A parent process may have exported the non-interactive marker; an
+    // interactive run must clear it or the gate would skip its prompt.
+    env: { ...childEnv, COURSEWARE_GATE_NONINTERACTIVE: '' },
+  })
   if (result.error) {
     console.error(`FAIL cannot start ${specifyBin}: ${result.error.message}`)
     process.exit(1)
@@ -57,9 +93,16 @@ if (process.stdin.isTTY && process.stdout.isTTY) {
 }
 
 const result = spawnSync(specifyBin, specifyArgs, {
-  stdio: ['ignore', 'pipe', 'inherit'],
+  // A pipe (closed immediately via input) is not a TTY, on Windows too. An
+  // ignored stdin becomes NUL there, where Python's isatty() can still report
+  // True and a built-in gate would block on a prompt nobody can answer.
+  stdio: ['pipe', 'pipe', 'inherit'],
+  input: '',
   encoding: 'utf8',
   maxBuffer: 64 * 1024 * 1024,
+  // The wrapper knows this run is non-interactive; tell gui-gate explicitly
+  // instead of trusting isatty alone.
+  env: { ...childEnv, COURSEWARE_GATE_NONINTERACTIVE: '1' },
 })
 if (result.error) {
   console.error(`FAIL cannot start ${specifyBin}: ${result.error.message}`)
@@ -97,23 +140,69 @@ if (status === 'completed' || status === 'succeeded' || status === 'success') {
 }
 
 if (status === 'paused') {
-  const gateMessage =
-    outcome.gate && typeof outcome.gate.message === 'string' ? outcome.gate.message.trim() : ''
-  let showFile = ''
+  const safeRunId = path.basename(runId)
+  let state = null
   try {
-    const safeRunId = path.basename(runId)
-    const state = JSON.parse(
+    state = JSON.parse(
       fs.readFileSync(
         path.join(process.cwd(), '.specify/workflows/runs', safeRunId, 'state.json'),
         'utf8',
       ),
     )
-    const result = (state.step_results || {})[step]
-    const candidate = result && result.output && result.output.show_file
-    if (typeof candidate === 'string' && candidate.trim()) showFile = candidate.trim()
   } catch {
     // The review material is optional; a missing/inaccessible run state must
     // not hide the pause itself.
+  }
+
+  // A nested gate lives at a namespaced key (`parent:step:iteration`), so try
+  // the exact id first and fall back to a suffix match.
+  let guiGate = null
+  for (const [key, result] of Object.entries((state && state.step_results) || {})) {
+    const candidate = result && result.output && result.output.guiGate
+    if (!candidate || typeof candidate !== 'object') continue
+    if (candidate.runId && candidate.runId !== runId) continue
+    if (key === step || key.endsWith(`:${step}`)) {
+      guiGate = candidate
+      break
+    }
+    if (!guiGate) guiGate = candidate
+  }
+
+  if (guiGate) {
+    const message = typeof guiGate.message === 'string' ? guiGate.message.trim() : ''
+    const lines = [
+      `PAUSED workflow ${outcome.workflow_id || ''} at step ${step} (run ${runId})`,
+      'This is a GUI gate. A human must answer it in the ZCode approval panel; the agent must stop here.',
+      `Call the MCP tool courseware_gate_open with {"runId":"${runId}"} to show the panel.`,
+      'Do not run `specify workflow resume`, do not pass -i, and do not call courseware_gate_verdict.',
+      'When the human clicks a choice, the panel records the verdict and the MCP server resumes the run automatically.',
+      Array.isArray(guiGate.options) ? `Gate options: ${guiGate.options.join(' / ')}` : '',
+    ]
+    if (message) lines.push('', 'Review request:', message)
+    if (typeof guiGate.showFile === 'string' && guiGate.showFile) {
+      lines.push('', `Review file: ${guiGate.showFile}`)
+    }
+    if (Array.isArray(guiGate.files) && guiGate.files.length) {
+      lines.push('', 'Hash-bound evidence:')
+      for (const file of guiGate.files) {
+        if (!file || typeof file.path !== 'string') continue
+        const sha = typeof file.sha256 === 'string' ? ` sha256:${file.sha256.slice(0, 12)}…` : ''
+        lines.push(`  - ${file.role || 'file'}: ${file.path}${sha}`)
+      }
+    }
+    console.error(lines.filter((line) => line !== undefined).join('\n'))
+    process.exit(3)
+  }
+
+  const gateMessage =
+    outcome.gate && typeof outcome.gate.message === 'string' ? outcome.gate.message.trim() : ''
+  let showFile = ''
+  try {
+    const result = (state && state.step_results && state.step_results[step]) || null
+    const candidate = result && result.output && result.output.show_file
+    if (typeof candidate === 'string' && candidate.trim()) showFile = candidate.trim()
+  } catch {
+    // Keep the pause visible even if the state shape is unexpected.
   }
   const lines = [
     `PAUSED workflow ${outcome.workflow_id || ''} at step ${step} (run ${runId})`,

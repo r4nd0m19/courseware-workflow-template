@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
@@ -70,7 +71,7 @@ try {
 
 const style = readData(stylePath)
 const styleCheck = validateWithSchema(
-  new URL('../schemas/style-pack-manifest.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/style-pack-manifest.schema.json', import.meta.url)),
   style,
 )
 for (const e of styleCheck.errors) errors.push(`style pack ${e}`)
@@ -81,7 +82,7 @@ if (registryArg && registryArg.trim()) {
   if (fs.existsSync(p)) {
     registry = readData(p)
     const rc = validateWithSchema(
-      new URL('../schemas/component-registry.schema.json', import.meta.url).pathname,
+      fileURLToPath(new URL('../schemas/component-registry.schema.json', import.meta.url)),
       registry,
     )
     for (const e of rc.errors) errors.push(`component registry ${e}`)
