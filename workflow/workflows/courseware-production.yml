@@ -149,7 +149,7 @@ steps:
     run: "node workflow/tools/check-source-fidelity.mjs --source {{ inputs.style_pack_source }} --fidelity {{ inputs.source_fidelity }} --source-only"
 
   # The lesson deck is built on a shell package, not on reconstructed chrome.
-  # Validate the package and its blank preview before any content work starts.
+  # Validate the package and its full-type preview deck before any content work starts.
   - id: validate-shell
     type: shell
     run: "node workflow/tools/check-shell.mjs --shell {{ inputs.shell }}"
@@ -176,7 +176,7 @@ steps:
       - no personal data (sensitivity personal); no required items deleted
       - style pack components/layouts are unique and registered; no per-lesson style overrides
       - validate-style-pack-full passed: baselines exist and the freeze hash matches the full pack
-      - the shell package validates and its blank preview renders (validate-shell)
+      - the shell package validates, its preview deck covers every declared slide type, and the main interactions respond (validate-shell)
       Run/read the relevant gates. Write review/self-review-inputs.json per
       workflow/schemas/self-review.schema.json and review/self-review-inputs.md per
       workflow/preset/templates/self-review-template.md.
