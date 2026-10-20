@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import { parseScript } from './script-lib.mjs'
 import {
   approvalProblems,
@@ -25,6 +26,7 @@ const storyboardPath = opt('--storyboard')
 const scriptPath = opt('--script')
 const screenshots = opt('--screenshots', 'screenshots')
 const approvalsPath = opt('--approvals', 'review/page-approvals.json')
+const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const sectionId = opt('--id')
 const approvedBy = opt('--approved-by')
 
@@ -40,8 +42,16 @@ if (
 Options:
   --screenshots <dir>   rendered screenshots (default: screenshots)
   --approvals <path>    approval ledger (default: review/page-approvals.json)
+  --approval <path>     whole-script approval ledger (default: review/script-approval.json)
 `)
   process.exit(2)
+}
+
+try {
+  assertScriptApproved(scriptPath, { approvalPath })
+} catch (error) {
+  console.error(`FAIL script approval\n${(error.problems || [error.message]).map((p) => `  ${p}`).join('\n')}`)
+  process.exit(1)
 }
 
 const manifest = readSectionManifest(sectionsPath)

@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fail, ok } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import { inspectPackage } from './registry-lib.mjs'
 
 const args = process.argv.slice(2)
@@ -12,15 +13,25 @@ function option(name, fallback = '') {
 const registryPath = option('--registry')
 const projectRoot = option('--project-root') ? path.resolve(option('--project-root')) : ''
 const stagingOpt = option('--staging')
-const excluded = new Set([option('--registry'), option('--project-root'), stagingOpt].filter(Boolean))
+const scriptPath = option('--script')
+const approvalPath = option('--approval', DEFAULT_SCRIPT_APPROVAL)
+const excluded = new Set([option('--registry'), option('--project-root'), stagingOpt, scriptPath, option('--approval')].filter(Boolean))
 const stagingArg = stagingOpt || args.find((a) => !a.startsWith('--') && !excluded.has(a))
 let stagingDir = stagingArg ? path.resolve(stagingArg) : ''
 if (!stagingDir && registryPath) {
   stagingDir = path.join(path.dirname(path.resolve(registryPath)), 'staging')
 }
 if (!stagingDir) {
-  console.error('usage: node check-staged-components.mjs <staging-dir> | --registry <registry.json> [--staging <dir>] [--project-root <dir>]')
+  console.error('usage: node check-staged-components.mjs <staging-dir> | --registry <registry.json> [--staging <dir>] [--project-root <dir>] [--script <courseware.md>] [--approval review/script-approval.json]')
   process.exit(2)
+}
+if (scriptPath) {
+  try {
+    assertScriptApproved(scriptPath, { approvalPath })
+  } catch (error) {
+    fail('staged components', [error.message])
+    process.exit(1)
+  }
 }
 if (!fs.existsSync(stagingDir)) {
   ok('staged components', 'none (staging directory does not exist)')

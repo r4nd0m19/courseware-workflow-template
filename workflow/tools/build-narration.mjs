@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { EdgeTTS } from 'node-edge-tts'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import {
   audioFilePath,
   audioUrl,
@@ -14,7 +15,7 @@ import {
 function usage() {
   console.error(
     'usage: node build-narration.mjs <courseware.md> --voices <catalog.json> --out <narration.json> --audio-dir <dir> ' +
-      '[--url-prefix /audio] [--only S01,S02] [--force] [--dry-run] [--retries 2]',
+      '[--url-prefix /audio] [--only S01,S02] [--force] [--dry-run] [--retries 2] [--approval review/script-approval.json]',
   )
 }
 
@@ -31,7 +32,7 @@ for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i]
   if (arg.startsWith('--')) {
     if (
-      ['--voices', '--out', '--audio-dir', '--url-prefix', '--only', '--retries', '--delay-ms'].includes(
+      ['--voices', '--out', '--audio-dir', '--url-prefix', '--only', '--retries', '--delay-ms', '--approval'].includes(
         arg,
       )
     ) {
@@ -52,10 +53,18 @@ const force = flag('--force')
 const dryRun = flag('--dry-run')
 const retries = Number(option('--retries', '2'))
 const delayMs = Number(option('--delay-ms', '150'))
+const approvalPath = option('--approval', DEFAULT_SCRIPT_APPROVAL)
 
 if (!scriptPath || !voicesPath || !outPath || (!audioDir && !dryRun)) {
   usage()
   process.exit(2)
+}
+
+try {
+  assertScriptApproved(scriptPath, { approvalPath })
+} catch (error) {
+  console.error(`FAIL narration — ${error.message}`)
+  process.exit(1)
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))

@@ -8,6 +8,14 @@ description: 按已批准简报，只为当前页实现这一页需要的新组�
 $ARGUMENTS
 ```
 
+## 审批闸门（必须最先运行）
+
+```bash
+node workflow/tools/check-script-approval.mjs courseware.md
+```
+
+必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
+
 ## Outline
 
 1. 前置条件：`component-plan.md` 与相关简报已获人工 `approve`；`registry/index.json` 有效。解析参数：
@@ -34,7 +42,7 @@ $ARGUMENTS
    - 动画必须保留：`@keyframes`/transition/APNG 不得为了“简化”而删除；`prefers-reduced-motion` 只做可访问性降级。
 4. 运行：
    ```bash
-   node workflow/tools/check-staged-components.mjs --registry registry/index.json --staging <staging> --project-root .
+   node workflow/tools/check-staged-components.mjs --registry registry/index.json --staging <staging> --project-root . --script courseware.md
    node workflow/tools/check-component-package.mjs <staging>/<id>
    ```
    以及包内 tests、stories 构建、视觉基线检查；任何失败先修复。

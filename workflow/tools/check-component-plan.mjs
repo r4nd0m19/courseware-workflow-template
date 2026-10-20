@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import {
   parseScript,
   parseMarkdownSections,
@@ -12,7 +13,7 @@ import {
 } from './script-lib.mjs'
 
 const rawArgs = process.argv.slice(2)
-const options = { plan: '', briefs: '' }
+const options = { plan: '', briefs: '', approval: DEFAULT_SCRIPT_APPROVAL }
 const positionals = []
 for (let i = 0; i < rawArgs.length; i += 1) {
   const arg = rawArgs[i]
@@ -21,6 +22,9 @@ for (let i = 0; i < rawArgs.length; i += 1) {
     i += 1
   } else if (arg === '--briefs') {
     options.briefs = rawArgs[i + 1] || ''
+    i += 1
+  } else if (arg === '--approval') {
+    options.approval = rawArgs[i + 1] || ''
     i += 1
   } else if (arg.startsWith('--')) {
     console.error(`unknown option ${arg}`)
@@ -33,7 +37,7 @@ for (let i = 0; i < rawArgs.length; i += 1) {
 const [scriptPath, stylePath, registryArg] = positionals
 if (!scriptPath || !stylePath) {
   console.error(
-    'usage: node check-component-plan.mjs <courseware.md> <style-pack-manifest.json> [component-registry.json] [--plan component-plan.md] [--briefs component-briefs]',
+    'usage: node check-component-plan.mjs <courseware.md> <style-pack-manifest.json> [component-registry.json] [--plan component-plan.md] [--briefs component-briefs] [--approval review/script-approval.json]',
   )
   process.exit(2)
 }
@@ -54,6 +58,13 @@ try {
   parsed = parseScript(scriptPath)
 } catch (err) {
   console.error(`FAIL courseware script parse — ${err.message}`)
+  process.exit(1)
+}
+
+try {
+  assertScriptApproved(scriptPath, { approvalPath: options.approval })
+} catch (err) {
+  console.error(`FAIL component plan — ${err.message}`)
   process.exit(1)
 }
 

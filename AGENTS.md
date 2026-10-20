@@ -1,36 +1,45 @@
 # AGENTS.md
 
-本仓库使用 Spec Kit 工作流生产信奥互动课件。Codex 在本仓库工作时，先读本文件，再按任务读 `workflow/README.md`。
+本仓库是信奥互动课件的生产工作流（Spec Kit preset + workflow + Node 门禁）。Codex 在本仓库工作时，先读本文件，再按任务读 `工作流说明.md` 与 `workflow/README.md`。
 
 ## 运行模型
 
-- 工作流引擎是 Spec Kit，不绑定单一 harness。项目安装后，Codex 技能在 `.agents/skills`，Claude Code 技能在 `.claude/skills`。
-- Codex 调用命令用 `$speckit-*`；Claude Code 用 `/speckit-*`。不要手动编辑这两个目录里的 `SKILL.md`，它们由 `specify preset add` / `specify integration use` 生成。
-- 工作流的 `integration` 输入默认 `auto`（跟随 `.specify/integration.json` 的项目默认）。在 Codex 中运行完整流程时显式传 `-i integration=codex`，不要修改项目默认集成。
-- 非交互/脚本化运行 `specify workflow run` 时加 `</dev/null`。Codex 在 stdin 不是 TTY 时会等待额外输入，缺这个重定向会看起来像卡住。
-- 本模板只含工作流，不含具体课件的壳、注册表、研究资料和插画。跑完整流程前，把本项目的 shell/style pack 放到 `shells/`，把内容包放到 `research/` 或项目约定路径。
+- 工作流引擎是 Spec Kit，不绑定单一 harness。项目同时安装了 Claude Code（`.claude/skills`）与 Codex（`.agents/skills`）。
+- Claude Code 调用命令用 `/speckit-*`；Codex 用 `$speckit-*`。不要手动编辑这两个目录里的 `SKILL.md`，它们由 `specify preset add` / `specify integration use` 生成。
+- 工作流的 `integration` 输入默认 `auto`（跟随 `.specify/integration.json` 的项目默认）。在 Codex 中运行完整流程时显式传 `-i integration=codex`，不要修改默认集成。
+- 非交互/脚本化运行必须通过 `node workflow/tools/run-workflow.mjs`，不要直接调用 `specify workflow run`。包装器会忽略非 TTY stdin，把 Spec Kit 的 `paused` 变成退出码 3，并打印 gate 的审核请求（逐页 gate 含课件 URL）与审核文件路径；直接调用 `specify workflow run` 在 gate 处会以退出码 0 返回 `paused`，容易被误判为成功。
+- 看到退出码 3 表示工作流停在人工审核闸门：停止，把 run id 和 gate 内容交给老师；老师在自己的终端运行 `node workflow/tools/run-workflow.mjs resume <run_id>`（交互式回答 gate）。不要由 agent 代答，也不要绕过闸门继续下游步骤。
+- 非交互运行不需要额外加 `</dev/null`；包装器已把 stdin 置空。交互式恢复时保留 TTY，gate 才会显示选项。
 
 完整工作流示例（参数按当前 lesson 替换）：
 
 ```bash
-specify workflow run courseware-production \
+node workflow/tools/run-workflow.mjs courseware-production \
   -i integration=codex \
-  -i lesson=<lesson-slug> \
-  -i content_pack=<content-pack.json> \
-  -i courseware_script=specs/<lesson-slug>/courseware.md \
-  -i concepts=specs/<lesson-slug>/concepts.yml \
-  -i review_sections=specs/<lesson-slug>/review-sections.yml \
-  -i storyboard=specs/<lesson-slug>/storyboard.yml \
-  -i style_pack=shells/<shell>/style-pack.manifest.json \
-  -i style_pack_full=shells/<shell>/style-pack.full.json \
-  -i lesson_slug=<lesson-slug> \
-  -i art_prompts=specs/<lesson-slug>/art-prompts.json \
-  -i art_dir=generated/<lesson-slug> \
-  -i deck_data=specs/<lesson-slug>/deck.json \
+  -i lesson=001-2d-arrays \
+  -i content_pack=research/r0/content-ref/二维数组1.content.json \
+  -i courseware_script=specs/001-2d-arrays/courseware.md \
+  -i concepts=specs/001-2d-arrays/concepts.yml \
+  -i review_sections=specs/001-2d-arrays/review-sections.yml \
+  -i storyboard=specs/001-2d-arrays/storyboard.yml \
+  -i style_pack=shells/branch-choice/style-pack.manifest.json \
+  -i style_pack_full=shells/branch-choice/style-pack.full.json \
+  -i lesson_slug=001-2d-arrays \
+  -i art_prompts=specs/001-2d-arrays/art-prompts.json \
+  -i art_dir=generated/001-2d-arrays \
+  -i deck_data=specs/001-2d-arrays/deck.json \
   -i deck_url=http://127.0.0.1:8082/ \
-  -i page_count=<page-count> \
-  < /dev/null
+  -i page_count=16
 ```
+
+## 人工审核闸门与审批账本
+
+- 脚本批准只由工作流的 `review-script` 人工 gate  + 紧随其后的 `approve-script` 机械步骤产生。`approve-script` 必须收到 gate 的 `approve` 结果，并核对本次 run 在 `.specify/workflows/runs/<run-id>/state.json` 里的 `review-script` 步骤确已 `completed` 且 choice 为 `approve`（`paused` 的 gate 不能铸造批准）。账本记录整份 `courseware.md` 的 SHA-256、屏数、每屏哈希与 gate run id。不要手动运行 `approve-script.mjs`，不要手改该账本或 run 状态，也不要把脚本/截图标成人工 APPROVED。
+- 批准与**当时的文本**绑定。任何对 `courseware.md` 的编辑（包括只改旁白、制作字段或 frontmatter）都会使账本失效；必须重新走 `review-script` 人工 gate。
+- 所有下游工具（component-plan、narration、storyboard 修订、组件、deck、截图、冻结）都会重新校验账本及其 gate run 状态。`node workflow/tools/check-script-approval.mjs <courseware.md>` 失败就是阻断项；不要通过传别的账本、改判据或删除检查绕过。
+- 工作流在 `approve-script` 之后立刻运行 `verify-script-approval`，并用 `--expect-run` 要求账本来自当前 run；不匹配会让整次运行失败，而不是等到几阶段之后。
+- 本地文件无法证明“某个真人按了键”：能改文件的人也能改账本。上面的检查保证正常路径不会误放行、暂停的 gate 不能被当成批准；真正的信任边界是老师在自己的终端回答 gate，agent 不代答。
+
 
 ## 产物与事实源
 
@@ -49,6 +58,7 @@ specify workflow run courseware-production \
 
 ```bash
 node workflow/tools/check-script.mjs ...
+node workflow/tools/check-script-approval.mjs ...
 node workflow/tools/check-concepts.mjs ...
 node workflow/tools/check-narration.mjs ...
 node workflow/tools/check-deck-data.mjs ...
@@ -61,7 +71,6 @@ node workflow/tools/smoke-test.mjs
 - 自审（self-review）可以修安全的小问题，但不得把脚本/截图标成人工 APPROVED；人工审核点必须留给人。
 - 概念、内容覆盖、答案位置分布、无滚动条、组件注册、页面冻结都是阻断项。新增规则或特判前，先查业界做法并走决策咨询。
 - 修改组件后要重跑该组件的 core/interaction 测试、相关页面溢出检查，并刷新受影响的审核哈希。
-- 每个页面先尝试互动设计；只有没有互动设计能比静态页产生更好的学习证据时，才做静态页。一页一个语义边界，放不下就拆页或改交互。
 
 ## 安全与隐私
 
@@ -69,11 +78,11 @@ node workflow/tools/smoke-test.mjs
 - `research/raw/`、`research/r0/mirror/`、`research/r0/screenshots/` 含第三方内容、本机路径或个人信息；不要放进可分享产物。
 - 参考课件里的用户姓名、头像、平台信息不得进入风格包、截图或课件。
 - 生成的插画在授权问题解决前只在本地使用；不要发布到外部服务。
-- 不要主动 `git add` / `git commit` / `git push`，除非用户明确要求。提交时全局 gitleaks 钩子会扫描密钥、私网 IP、个人邮箱和本机路径；不要设置仓库级 `core.hooksPath` 覆盖全局钩子。
-- 如果要把本项目发布为可分享模板，先确认 `workflow/preset` 的许可、壳/参考素材授权和所有截图/研究资料已脱敏。
+- 项目已 `git init`，但默认不提交。不要主动 `git add` / `git commit` / `git push`，除非用户明确要求。提交时全局 gitleaks 钩子会扫描密钥、私网 IP、个人邮箱和本机路径；不要设置仓库级 `core.hooksPath` 覆盖全局钩子。
 
 ## 不要做的事
 
+- 不要把 `paused` 当成成功，不要手动运行 `approve-script.mjs`，不要让 agent 代替老师回答 gate。
 - 不要为了单页改壳渲染器、壳 CSS 或 `deck.json` 结构；退回组件阶段或页面设计阶段解决。
 - 不要手画参考组件；参考已有的交互按源码逐字节复制，参考没有的走 component-plan → brief → build → review → core。
 - 不要在页面里塞多个语义单元来“一次讲完”；一页一个语义边界，放不下就拆页或改交互。

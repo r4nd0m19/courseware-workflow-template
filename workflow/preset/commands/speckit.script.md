@@ -12,7 +12,7 @@ $ARGUMENTS
 
 1. 前置条件：`spec.md` 已获人工 `approve`；内容包、风格包 manifest 与 `.specify/memory/constitution.md` 可读。
 2. 使用 `.specify/templates/script-template.md` 写 `courseware.md`，它是生成课件前的**人类可读唯一内容源**，老师直接审阅/修改。
-3. 同时使用 `.specify/templates/review-sections-template.yml` 写 `review-sections.yml`：把全部非 SKIP 屏按教学小节分成连续、无重叠的组（约 3–6 屏一组）。生成课件时逐节实现、逐节渲染、逐节人工审核；整份脚本仍只审一次。
+3. 同时使用 `.specify/templates/review-sections-template.yml` 写 `review-sections.yml`：把全部非 SKIP 屏按顺序逐屏写成 section，**每个 section 恰好一屏**（`slides` 只有一个屏 ID，id/title 直接取该屏）。生成课件时逐页实现、逐页渲染、逐页人工审核；整份脚本仍只审一次。
 4. 每一屏必须包含：
    - **屏幕内容**：学生实际看到的文字、代码、表格、图示；逐字写，不混入旁白。
    - **交互设计**：先写「互动尝试」——从本页内容要求学生做的学习动作出发，说明最能产生学习证据的互动形式；再写学习动作、内容依据、证据、学生动作、互动层级、初始状态、成功反馈、错误反馈（绑定误区）、完成条件、重置、无障碍、静态替代。每一页都必须尝试互动；只有写清「静态理由」、证明没有互动比静态更能产生学习证据时，才允许 `watch`。`watch` 只能配 `observe`；写了点击/输入/单步/改写，就必须用对应的非 watch 层级。
@@ -38,8 +38,8 @@ $ARGUMENTS
    node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml
    node workflow/tools/check-source-fidelity.mjs --source-only
    ```
-   投影出的 `storyboard.yml` 只用于校验小节分组；正式分镜仍由 `speckit.plan` 在脚本批准后生成。失败项先修复；不得靠删除内容或降低 required 通过。
-9. 输出：`courseware.md`、`review-sections.yml` 路径、屏数、小节数、目标/误区覆盖摘要、检查结果。
+   投影出的 `storyboard.yml` 只用于校验逐页清单；正式分镜仍由 `speckit.plan` 在脚本批准后生成。失败项先修复；不得靠删除内容或降低 required 通过。
+9. 输出：`courseware.md`、`review-sections.yml` 路径、屏数、页数、目标/误区覆盖摘要、检查结果。
 
 ## Self-review（强制，人工审核前）
 
@@ -51,7 +51,7 @@ $ARGUMENTS
 ## Human Review（强制）
 
 - 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为 `courseware.md` + `review-sections.yml` + 自审结果。
-- 主动提出审核请求：逐屏屏幕内容、交互设计、旁白、误区反馈、拆页建议、小节分组、自动检查结果。
+- 主动提出审核请求：逐屏屏幕内容、交互设计、旁白、误区反馈、拆页建议、逐页清单、自动检查结果。
 - 明确询问：`Approve courseware script? (approve / reject / request changes)`。
-- 只有老师批准后，才把 frontmatter 与各屏 `status` 改为 `APPROVED`；未获 `approve` 不得进入 component-plan/plan/tasks/implement。
-- 脚本批准后，课件按 `review-sections.yml` 逐节实现、逐节渲染、逐节人工审核；某一节 reject 只返工该节（已批准小节由哈希冻结），不要重做整份课件。
+- 只有老师批准后，才进入下游阶段；批准状态只能由工作流的 `review-script` gate 记录，并由紧随其后的 `approve-script` 步骤把 frontmatter 与各屏 `status` 改为 `APPROVED`、写入 `review/script-approval.json`。你（AI）不得自行把状态改为 `APPROVED`，不得手动运行 `approve-script.mjs`；未获 `approve` 不得进入 component-plan/plan/tasks/implement。
+- 脚本批准后，课件按 `review-sections.yml` 逐页实现、逐页渲染、逐页人工审核；某一页 reject 只返工该页（已批准页由哈希冻结），不要重做整份课件。

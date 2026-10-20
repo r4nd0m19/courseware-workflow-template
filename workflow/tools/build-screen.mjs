@@ -4,6 +4,7 @@ import path from 'node:path'
 import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
 import { readData } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 
 const args = process.argv.slice(2)
 const slideId = args.find((a) => !a.startsWith('--'))
@@ -20,6 +21,8 @@ if (!slideId) {
 Options:
   --url <deck-url>        deck dev/preview URL (omit for stub mode)
   --storyboard <path>     storyboard.yml for slide order
+  --script <path>         courseware.md; when set, its approval ledger must match
+  --approval <path>       whole-script approval ledger (default: review/script-approval.json)
   --out <dir>             screenshot output (default: screenshots)
   --wait <ms>             wait after navigation (default: 500)
   --index <n>             zero-based index in the current deck (for section-filtered decks)
@@ -31,6 +34,8 @@ Options:
 
 const url = opt('--url', '')
 const storyboardPath = opt('--storyboard', '')
+const scriptPath = opt('--script', '')
+const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const outDir = path.resolve(opt('--out', 'screenshots'))
 const waitMs = Number(opt('--wait', '500'))
 const explicitIndex = opt('--index', '')
@@ -44,6 +49,14 @@ if (!url) {
 if (!storyboardPath) {
   console.error('--storyboard is required when --url is provided')
   process.exit(2)
+}
+if (scriptPath) {
+  try {
+    assertScriptApproved(scriptPath, { approvalPath })
+  } catch (error) {
+    console.error(`FAIL screen ${slideId} — ${error.message}`)
+    process.exit(1)
+  }
 }
 
 const storyboard = readData(storyboardPath)

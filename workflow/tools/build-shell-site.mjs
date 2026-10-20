@@ -8,6 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 
 const toolsDir = path.dirname(new URL(import.meta.url).pathname)
 const args = process.argv.slice(2)
@@ -19,8 +20,8 @@ function flag(name) { return args.includes(name) }
 
 function usage() {
   console.error(
-    'usage: node build-shell-site.mjs --shell shells/<id> --deck <deck.json> --art <art-manifest.json> --out <site-dir> ' +
-      '[--narration <narration.json>] [--audio-dir <dir>] [--registry <registry.json>] [--staging <staging-dir>] [--force]',
+    'usage: node build-shell-site.mjs --script <courseware.md> --shell shells/<id> --deck <deck.json> --art <art-manifest.json> --out <site-dir> ' +
+      '[--approval review/script-approval.json] [--narration <narration.json>] [--audio-dir <dir>] [--registry <registry.json>] [--staging <staging-dir>] [--force]',
   )
   process.exit(2)
 }
@@ -38,6 +39,8 @@ const shell = opt('--shell')
 const deck = opt('--deck')
 const art = opt('--art')
 const out = opt('--out')
+const script = opt('--script')
+const approval = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const narration = opt('--narration')
 const audioDir = opt('--audio-dir')
 const registry = opt('--registry')
@@ -45,6 +48,12 @@ const staging = opt('--staging')
 const force = flag('--force')
 
 if (!shell || !deck || !out) usage()
+if (!script) fail('--script is required: the lesson site may only be built from a hash-approved courseware.md')
+try {
+  assertScriptApproved(script, { approvalPath: approval })
+} catch (error) {
+  fail(`script approval: ${error.message}`)
+}
 if (!art) fail('--art is required: every lesson illustration slot must be generated for this lesson (run generate-shell-art.mjs)')
 if (!fs.existsSync(art)) fail(`art manifest not found: ${art}`)
 if (!fs.existsSync(deck)) fail(`deck not found: ${deck}`)

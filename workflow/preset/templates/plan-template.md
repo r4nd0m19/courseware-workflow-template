@@ -86,6 +86,6 @@ node workflow/tools/build-audio-adapter.mjs prototype/site/narration.json --out 
 | deck 数据 | 数据驱动 slide 数组 + 固定 renderer | 采用 | 内容与实现分离，组件可注册复用 |
 | 组件库 | 注册表 + staging → review → core | 采用 | 复用优先，变更可追溯 |
 | 语音 | Edge TTS + 预生成 MP3 + 数据驱动播放器 | 采用 | 本地可跑，播放器复用参考实现 |
-| 逐节渲染审核 | 人工 gate + 脚本哈希冻结 | 采用 | 早发现问题，避免整份返工 |
+| 逐页渲染审核 | 人工 gate + 脚本哈希冻结 | 采用 | 每页一次审核，早发现问题，避免整份返工 |
 
 - 若偏离上表范式：写明偏离项、影响范围、人工批准记录。

@@ -4,9 +4,9 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`0.10.0`（90 个顶层步骤）
-- preset：`courseware` `0.3.2`
-- 模板版本：`0.1.3`（2026-10-20）
+- 工作流版本：`0.13.0`（90 个顶层步骤）
+- preset：`courseware` `0.3.5`
+- 模板版本：`0.1.6`（2026-10-20）
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
 ## 在 Codex 图形界面里使用
@@ -76,7 +76,7 @@ bash bootstrap-codex-courseware.sh --force
 ## 安装后验证
 
 ```bash
-specify workflow info courseware-production   # 应显示 0.10.0、90 steps
+specify workflow info courseware-production   # 应显示 0.13.0、90 steps
 specify integration status                    # 应包含 codex
 node workflow/tools/smoke-test.mjs            # 应全部 PASS
 ls .agents/skills                             # 应包含 speckit-script 等
@@ -85,7 +85,7 @@ ls .agents/skills                             # 应包含 speckit-script 等
 Codex 里的完整流程命令见 `AGENTS.md`。注意：
 
 - 必须显式传 `-i integration=codex`；
-- 非交互运行要加 `</dev/null`；
+- 非交互运行必须用 `node workflow/tools/run-workflow.mjs courseware-production ...`，不要直接 `specify workflow run`；退出码 3 表示停在人工 gate，agent 必须停止，由老师在终端运行 `node workflow/tools/run-workflow.mjs resume <run-id>`；
 - 工作流需要 `concepts=...`、`style_pack=...` 等输入；模板不提供具体课件数据。
 
 ## 更新模板
@@ -94,7 +94,7 @@ Codex 里的完整流程命令见 `AGENTS.md`。注意：
 
 ```bash
 rsync -a --delete \
-  --exclude node_modules --exclude chrome-path.txt \
+  --exclude node_modules --exclude .specify --exclude chrome-path.txt \
   /path/to/courseware/workflow/ ~/code/courseware-workflow-template/workflow/
 cd ~/code/courseware-workflow-template
 git add -A

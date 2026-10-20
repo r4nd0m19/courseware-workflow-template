@@ -215,6 +215,6 @@ cat <<EOF
 下一步:
   1. 在 Codex 中重新打开该项目，或执行 Force Reload Skills，确认能看到 speckit-* 技能。
   2. 本模板只含工作流，不含具体课件的壳、注册表、研究资料和插画；把本项目的 shell/style pack 放到 shells/ 后再跑完整流程。
-  3. 完整流程示例见 AGENTS.md；Codex 中运行 specify workflow run 时加 -i integration=codex 和 </dev/null。
+  3. 完整流程示例见 AGENTS.md；Codex 中运行 workflow 时加 -i integration=codex，并使用 node workflow/tools/run-workflow.mjs（退出码 3 = 停在人工 gate，必须交给老师）。
   4. 更新工作流: bash bootstrap-codex-courseware.sh --force
 EOF

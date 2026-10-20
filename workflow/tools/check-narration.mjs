@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fail, ok, readData, validateWithSchema } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import {
   audioFilePath,
   normalizeNarration,
@@ -18,7 +19,7 @@ function option(name, fallback = '') {
 const positional = []
 for (let i = 0; i < argv.length; i += 1) {
   if (argv[i].startsWith('--')) {
-    if (['--audio-root', '--only'].includes(argv[i])) i += 1
+    if (['--audio-root', '--only', '--approval'].includes(argv[i])) i += 1
     continue
   }
   positional.push(argv[i])
@@ -26,12 +27,20 @@ for (let i = 0; i < argv.length; i += 1) {
 const [scriptPath, manifestPath] = positional
 const audioRoot = option('--audio-root')
 const only = parseOnly(option('--only'))
+const approvalPath = option('--approval', DEFAULT_SCRIPT_APPROVAL)
 
 if (!scriptPath || !manifestPath) {
   console.error(
-    'usage: node check-narration.mjs <courseware.md> <narration.json> [--audio-root <dir>] [--only S01,S02]',
+    'usage: node check-narration.mjs <courseware.md> <narration.json> [--audio-root <dir>] [--only S01,S02] [--approval review/script-approval.json]',
   )
   process.exit(2)
+}
+
+try {
+  assertScriptApproved(scriptPath, { approvalPath })
+} catch (error) {
+  console.error(`FAIL narration — ${error.message}`)
+  process.exit(1)
 }
 
 const errors = []

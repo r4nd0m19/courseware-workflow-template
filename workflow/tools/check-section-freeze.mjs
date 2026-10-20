@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readData, fail, ok } from './lib.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import { parseScript } from './script-lib.mjs'
 import {
   approvalProblems,
@@ -17,7 +18,8 @@ function opt(name, fallback = '') {
 const sectionsPath = opt('--sections')
 const storyboardPath = opt('--storyboard')
 const scriptPath = opt('--script')
-const approvalsPath = opt('--approvals', 'review/section-approvals.json')
+const approvalsPath = opt('--approvals', 'review/page-approvals.json')
+const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const screenshots = opt('--screenshots', '')
 const requireAll = args.includes('--require-all')
 
@@ -25,11 +27,19 @@ if (!sectionsPath || !storyboardPath || !scriptPath) {
   console.error(`usage: node check-section-freeze.mjs --sections <file> --storyboard <file> --script <courseware.md> [options]
 
 Options:
-  --approvals <path>   approval ledger (default: review/section-approvals.json)
+  --approvals <path>   approval ledger (default: review/page-approvals.json)
+  --approval <path>    whole-script approval ledger (default: review/script-approval.json)
   --screenshots <dir>  also require approved screenshots to exist
   --require-all        every section must have an approval
 `)
   process.exit(2)
+}
+
+try {
+  assertScriptApproved(scriptPath, { approvalPath })
+} catch (error) {
+  fail('script approval', error.problems || [error.message])
+  process.exit(1)
 }
 
 const manifest = readSectionManifest(sectionsPath)

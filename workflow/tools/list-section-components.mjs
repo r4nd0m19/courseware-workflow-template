@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseScript } from './script-lib.mjs'
+import { assertScriptApproved } from './approval-lib.mjs'
 import { readSectionManifest, sectionById } from './section-lib.mjs'
 import { readData } from './lib.mjs'
 
@@ -26,6 +27,13 @@ if (!scriptPath || !storyboardPath || !sectionsPath || !sectionId) {
       '--sections <review-sections.yml> --section <id> [--registry registry/index.json] [--staging <dir>] [--json]',
   )
   process.exit(2)
+}
+
+try {
+  assertScriptApproved(scriptPath)
+} catch (error) {
+  console.error(`FAIL section components — ${error.message}`)
+  process.exit(1)
 }
 
 const script = parseScript(scriptPath)

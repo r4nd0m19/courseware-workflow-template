@@ -8,11 +8,19 @@ description: 从已批准课件脚本投影分镜，生成 plan.md 与 storyboar
 $ARGUMENTS
 ```
 
+## 审批闸门（必须最先运行）
+
+```bash
+node workflow/tools/check-script-approval.mjs courseware.md
+```
+
+必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
+
 ## Outline
 
 1. 前置条件：
-   - `courseware.md` 已获人工 `approve`（frontmatter `status: APPROVED`）。
-   - `review-sections.yml` 存在，并覆盖全部非 SKIP 屏（连续、无重叠）。
+   - `courseware.md` 已获人工 `approve`（`check-script-approval` 通过，frontmatter `status: APPROVED`）。
+   - `review-sections.yml` 存在，覆盖全部非 SKIP 屏（连续、无重叠），且每节恰好一屏（人工审核按页）。
    - `component-plan.md` 与简报已获 `approve`；所有 `new`/`extend` 组件已注册进 core。
    - `registry/index.json` 通过 `check-registry`。
 2. 用 `.specify/templates/plan-template.md` 写技术计划 `plan.md`：覆盖矩阵、组件映射、**源码直拷与保真策略**、deck data 映射、页面预算、闸门与风险。**不要重写教学内容**。
@@ -39,7 +47,7 @@ $ARGUMENTS
 7. 运行闸门：
    ```bash
    node workflow/tools/validate-json.mjs workflow/schemas/storyboard.schema.json storyboard.yml
-   node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml --require-approved
+   node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml --script courseware.md --require-approved
    node workflow/tools/check-coverage.mjs <content-pack> storyboard.yml [waivers.json]
    node workflow/tools/check-vocabulary.mjs storyboard.yml <style-pack-manifest> registry/index.json
    node workflow/tools/check-teaching.mjs storyboard.yml <content-pack>

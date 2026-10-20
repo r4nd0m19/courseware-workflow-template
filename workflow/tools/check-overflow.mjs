@@ -1,5 +1,6 @@
 import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
+import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
@@ -7,19 +8,37 @@ function opt(name, fallback = '') {
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback
 }
 function flag(name) { return args.includes(name) }
-const url = args.find((a) => !a.startsWith('--') && !args[args.indexOf(a) - 1]?.startsWith('--'))
+const valueOptions = new Set(['--pages', '--start', '--width', '--height', '--script', '--approval'])
+let url = ''
+for (let i = 0; i < args.length; i += 1) {
+  if (args[i].startsWith('--')) {
+    if (valueOptions.has(args[i])) i += 1
+    continue
+  }
+  if (!url) url = args[i]
+}
 const pages = Number(opt('--pages', '1')) || 1
 const start = Number(opt('--start', '0')) || 0
 const width = Number(opt('--width', '1440'))
 const height = Number(opt('--height', '900'))
+const scriptPath = opt('--script')
+const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const debugGo = flag('--debug-go')
 if (!url) {
-  console.error('usage: node check-overflow.mjs <url> [--pages N] [--start N] [--width 1440] [--height 900] [--debug-go]')
+  console.error('usage: node check-overflow.mjs <url> [--pages N] [--start N] [--width 1440] [--height 900] [--debug-go] [--script <courseware.md>] [--approval review/script-approval.json]')
   process.exit(2)
 }
 if (start < 0) {
   console.error('FAIL --start must be a non-negative slide index')
   process.exit(2)
+}
+if (scriptPath) {
+  try {
+    assertScriptApproved(scriptPath, { approvalPath })
+  } catch (error) {
+    console.error(`FAIL overflow — ${error.message}`)
+    process.exit(1)
+  }
 }
 
 const executablePath = resolveChrome()

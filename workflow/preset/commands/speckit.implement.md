@@ -27,13 +27,21 @@ $ARGUMENTS
 - 旁白由 `build-narration.mjs` 生成 manifest 与 MP3；`build-shell-site.mjs` 按 slide id 注入 `narration-plan.js`，四声线由外壳顶栏选择。不得另写一套目录或播放器。
 - 页面不允许裸 HTML/CSS/JS、内联样式、页面级 CSS 覆盖、字号/间距魔法数；内容超页只改脚本并重新投影。
 
+## 审批闸门（必须最先运行）
+
+```bash
+node workflow/tools/check-script-approval.mjs courseware.md
+```
+
+必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
+
 ## Outline
 
 1. 读取 `tasks.md`、`courseware.md`、`review-sections.yml`、`storyboard.yml`、`component-plan.md`、`style-pack/source/SOURCE.json`、`style-pack/source/fidelity.json`、风格包 manifest、组件注册表和 `plan.md`；从参数解析 `--section`、`--sections`、`--storyboard`、`--deck-data`、`--staging`。
 2. 解析 `review-sections.yml`，确定本页与屏 ID；校验：
    ```bash
-   node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml --require-approved
-   node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --approvals review/page-approvals.json
+   node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml --script courseware.md --require-approved
+   node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --approval review/script-approval.json --approvals review/page-approvals.json
    ```
    第二条保证已批准页的脚本没有被改动。失败时停止，不要覆盖已批准内容。
 3. **只实现本页的 `APPROVED` 屏**；不要改其他页、`DRAFT`/`SKIP` 屏。
@@ -55,13 +63,13 @@ $ARGUMENTS
 6. `contentRefs` 中的 required 项必须在页面上真实可见/可操作；不得用装饰或旁白假装覆盖。
 7. 重建并运行技术闸门（本页）：
    ```bash
-   node workflow/tools/build-shell-site.mjs --shell <shell-dir> --deck <deck.json> \
+   node workflow/tools/build-shell-site.mjs --script courseware.md --shell <shell-dir> --deck <deck.json> \
      --art <art-dir>/art-manifest.json --narration <narration.json> --audio-dir <audio-dir> \
      --registry registry/index.json --staging registry/staging --out prototype/shell-site --force
-   node workflow/tools/check-deck-data.mjs --url "<deck-url>" --shell <shell-dir> --storyboard storyboard.yml \
+   node workflow/tools/check-deck-data.mjs --script courseware.md --url "<deck-url>" --shell <shell-dir> --storyboard storyboard.yml \
      --sections review-sections.yml --section <id> --fidelity style-pack/source/fidelity.json --registry registry/index.json --staging registry/staging
    node workflow/tools/check-rendered-section.mjs --sections review-sections.yml --storyboard storyboard.yml --section <id> --screenshots screenshots
-   node workflow/tools/check-overflow.mjs "<deck-url>" --start <section.start> --pages <section.count>
+   node workflow/tools/check-overflow.mjs "<deck-url>" --script courseware.md --start <section.start> --pages <section.count>
    node workflow/tools/check-baseline.mjs screenshots --baseline <baseline-dir> --include <id>
    node workflow/tools/check-narration.mjs courseware.md <narration.json> --audio-root <audio-dir> --only <id>
    node workflow/tools/check-script.mjs courseware.md <content-pack> <style-pack-manifest> registry/index.json
