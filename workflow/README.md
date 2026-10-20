@@ -138,6 +138,7 @@ node workflow/tools/check-source-fidelity.mjs \
 完整命令与 deck 字段见 [`shells/README.md`](../shells/README.md)。核心规则：
 
 - **入库可复制**：`extract-shell` 把参考 `index.html` / `styles.css` / `lesson.js` / 静态资产逐字节复制到 `shells/<id>/source/`，写 `SOURCE.json`；角色裁图放 `reference/` 仅供生图参考。
+- **预览 deck 覆盖全类型**：profile 的 `deck` 生成 `site/deck.js`，21 种原生 slide 类型（含 `numberLab` 的 kind、`code` 的 `flowType`、两/三张卡片）各至少出现一次；`check-shell` 直接检查壳包时缺一即失败，并实际点通主要交互。生产站点用 `--site` 时只要求本课声明的类型被渲染。
 - **运行时数据驱动**：`site/lesson.js` 不再内嵌任何一节课的 slides，只读 `window.COURSEWARE_SHELL_DATA = { meta, slides }`；插图读 `window.COURSEWARE_SHELL_ART`；调试钩子 `COURSEWARE_DEBUG`。
 - **生成时换图**：`generate-shell-art.mjs --prompt-file specs/<lesson>/art-prompts.json` 以参考角色为风格输入、以本课提示词要求不同角色，自动选择 token 可用的图像模型（qwen-image-2.0 / gpt-image-2），去白底并裁透明边距。`--reuse` 在提示词、参考图、输出文件与溯源都没变时跳过 API 调用；`--force` 强制重生成。
 - **插画 provenance 闸门**：`check-shell-art --require-all` 要求每个槽位都有生成图，哈希 ≠ 参考图、PNG 含透明像素、尺寸 ≥ 256 且像素化尺寸可整除，提示词/种子/模型齐全；`--site` 还校验 `build-manifest.json` 与 `shell-art-data.js`。
