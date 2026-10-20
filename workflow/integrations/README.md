@@ -68,6 +68,33 @@ specify workflow run courseware-production \
 `</dev/null` 不是可选项：stdin 不是 TTY 时 Codex 会等待额外输入，省略后
 `specify workflow run` 看起来会卡住。
 
+## 新项目：Codex GUI 一键安装（模板仓库）
+
+Codex 图形界面里新建项目后，不需要手工跑一串命令：把模板仓库里的
+`bootstrap-codex-courseware.sh` 放到项目根目录，让 Codex 执行即可。
+
+1. 在 Codex 图形界面新建/打开空项目目录（`Ctrl+O` / `⌘O`）。
+2. 复制 `bootstrap-codex-courseware.sh` 到项目根目录。
+3. 在 Codex 对话框输入：
+
+   ```text
+   请在当前项目根目录执行：
+   bash bootstrap-codex-courseware.sh
+   安装完成后运行 specify workflow info courseware-production，并把结果报告给我。
+   ```
+
+4. 允许 Codex 执行命令/信任目录。脚本会 `git init`（Codex 需要可信 git 目录），写入
+   `.gitignore` / `AGENTS.md`（已存在则保留），安装 Spec Kit、preset、workflow、Node
+   依赖和 Chromium，最后跑 smoke test 与 `specify workflow info`。
+5. 重启 Codex 或 **Force Reload Skills**，确认 `.agents/skills/speckit-script/SKILL.md`
+   可见；之后用 `$speckit-*` 调用。
+
+本机模板仓库：`~/code/courseware-workflow-template`（默认 `--repo`，可用
+`COURSEWARE_TEMPLATE_REPO` 或 `--repo <url>` 覆盖）。模板只含工作流，不含具体课件的
+壳、注册表、研究资料和插画；新项目要把自己的 `shells/<shell>/` 放好后再跑完整流程。
+模板当前是本地私有仓库，未推送到外部；发布前需确认 preset 许可、壳/参考素材授权和
+截图脱敏。
+
 ## 已验证
 
 - `node workflow/install.mjs --project ... --integration claude` 与 `--integration codex` 均 exit 0（复制 workflow、Spec Kit init、preset/workflow 安装、npm ci、Chromium 检测、smoke tests）。
@@ -77,6 +104,7 @@ specify workflow run courseware-production \
 - 在非 git 目录运行 Codex 会失败；`git init` 后可正常执行。非交互 workflow 运行需关闭 stdin。
 - 门禁脚本与 harness 无关，测试结果一致。
 - 截图基线（pixelmatch）与 build-screen 也属于 harness 无关层；同一组截图在两个 integration 下结果一致。
+- 模板仓库 bootstrap 在全新空目录（`/tmp/codex-courseware-test`）实测：克隆模板、`git init`、`specify init --integration codex`、preset/workflow 安装、`npm ci`、Chromium 检测、smoke 69/69（1 项 shell 检查因项目无壳而跳过）全部通过；`codex exec` 读取 `AGENTS.md` 后返回 `0.8.1，89 步`。
 
 ## 注意
 
