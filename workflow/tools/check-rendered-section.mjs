@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData } from './lib.mjs'
+import { requireProductionRun } from './review-guard.mjs'
 import {
   readSectionManifest,
   sectionById,
@@ -13,6 +14,9 @@ function opt(name, fallback = '') {
   const i = args.indexOf(name)
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback
 }
+function flag(name) {
+  return args.includes(name)
+}
 
 const sectionsPath = opt('--sections')
 const storyboardPath = opt('--storyboard')
@@ -21,10 +25,14 @@ const screenshots = opt('--screenshots', 'screenshots')
 
 if (!sectionsPath || !storyboardPath || !sectionId) {
   console.error(
-    'usage: node check-rendered-section.mjs --sections <file> --storyboard <file> --section <id> [--screenshots <dir>]',
+    'usage: node check-rendered-section.mjs --sections <file> --storyboard <file> --section <id> [--screenshots <dir>] [--manual|--alpha]',
   )
   process.exit(2)
 }
+requireProductionRun({
+  tool: `check-rendered-section ${sectionId}`,
+  manual: flag('--manual') || flag('--alpha'),
+})
 
 const manifest = readSectionManifest(sectionsPath)
 const storyboard = readData(storyboardPath)

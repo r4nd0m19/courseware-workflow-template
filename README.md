@@ -88,7 +88,8 @@ Windows 原生安装（不在 WSL 里）时，如果 `specify.exe` 不在 PATH�
 Codex 里的完整流程命令见 `AGENTS.md`。注意：
 
 - 必须显式传 `-i integration=codex`；
-- 非交互运行必须用 `node workflow/tools/run-workflow.mjs courseware-production ...`，不要直接 `specify workflow run`；退出码 3 表示停在人工 gate。agent 把审核文件/链接发给老师，用原生提问 UI 拿到明确的 approve/reject 后运行 `node workflow/tools/gate-review.mjs decide <run-id> --step <step> --choice <choice> --by teacher`，再用 `node workflow/tools/run-workflow.mjs resume <run-id>` 继续；不要在老师回答前调用 `decide`，不要传 `-i`。逐页 `review-page` 位于嵌套循环内，Spec Kit 恢复时会重跑父 body，因此工作流用 `check-pending-gui-gate.mjs` + `SPECKIT_WORKFLOW_RUN_ID` 跳过 gate 前的重建/自审，确保老师刚点的 verdict 不会因 `reviewedAt` 改写而失效。内置 gate 的终端后备路径仍是 `node workflow/tools/run-workflow.mjs resume <run-id>`；
+- 非交互运行必须用 `node workflow/tools/run-workflow.mjs courseware-production ...`，不要直接 `specify workflow run`；退出码 3 表示停在人工 gate。agent 把审核文件/链接发给老师，用原生提问 UI 拿到明确的 approve/reject 后运行 `node workflow/tools/gate-review.mjs decide <run-id> --step <step> --choice <choice> --by teacher`，再用 `node workflow/tools/run-workflow.mjs resume <run-id>` 继续；不要在老师回答前调用 `decide`，不要传 `-i`。
+- 页级工具 fail closed：`build-screen` / `check-rendered-section` / `freeze-section` 只在 `courseware-production` run 内运行；`freeze-section` 还要求同一 run 最近的 `review-page` gate 已 `approve` 且消息包含本页 section id。调试/测试必须显式加 `--manual`（`build-screen` 也可 `--alpha`），不能把批量渲染当成正常流程。逐页 `review-page` 位于嵌套循环内，Spec Kit 恢复时会重跑父 body，因此工作流用 `check-pending-gui-gate.mjs` + `SPECKIT_WORKFLOW_RUN_ID` 跳过 gate 前的重建/自审，确保老师刚点的 verdict 不会因 `reviewedAt` 改写而失效。内置 gate 的终端后备路径仍是 `node workflow/tools/run-workflow.mjs resume <run-id>`；
 - 工作流需要 `concepts=...`、`style_pack=...` 等输入；模板不提供具体课件数据。
 
 ## 更新模板

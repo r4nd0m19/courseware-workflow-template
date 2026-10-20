@@ -24,6 +24,7 @@
 - 安装 `workflow/install.mjs` 会把 step 包复制到 `.specify/workflows/steps/gui-gate/`。旧版本安装的 `courseware-approval` MCP server 条目会被移除；审核不再依赖 MCP 面板。
 - verdict 绑定 `runId` / `stepId` / `gateKey` / `digest` / `nonce`，一次性消费。`review/gui-gates/` 是运行时状态，不要提交。
 - agent 不得手写 `review/gui-gates/verdicts/*.json`、不得篡改 pending 记录、不得用 `-i` 预填 gate 答案。verdict 只能由 `gate-review.mjs decide` 在老师明确回答后记录。
+- 页级工具 fail closed：`build-screen` / `check-rendered-section` / `freeze-section` 只在 `SPECKIT_WORKFLOW_RUN_ID` 指向 `courseware-production` 的 run 内运行；`freeze-section` 还要求同一 run 里最近一个 `review-page` gate 已 `approve` 且消息包含本页 section id。手工调试/测试必须显式加 `--manual`（`build-screen` 也可 `--alpha`）；不要把 `--manual` 当成正常流程。
 
 完整工作流示例（参数按当前 lesson 替换）：
 
