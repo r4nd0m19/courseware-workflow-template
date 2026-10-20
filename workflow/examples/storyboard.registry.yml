@@ -1,0 +1,13 @@
+lesson: demo-lesson-01
+contentPack: content-pack.example.json
+stylePack: style-pack.example.json
+slides:
+  - id: S01
+    title: 程序是一组指令
+    objectiveId: O1
+    objective: O1 能用自己的话解释程序是什么
+    contentRefs: [K01]
+    components: [matrix-lab]
+    layout: content-slide
+    status: APPROVED
+    reviewer: demo

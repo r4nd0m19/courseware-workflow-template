@@ -1,0 +1,14 @@
+schemaVersion: "1.0"
+lesson: "demo-lesson-01"
+concepts:
+  - id: C01
+    term: "程序"
+    definition: "程序是一组指挥计算机按顺序执行的指令代码。"
+    introducedOn: S01
+    reinforcedOn: [S02]
+    assessedOn: [S02]
+    mustAppear:
+      - "按顺序执行"
+      - "指令代码"
+    evidence: "学生能用自己的话说出程序是“按顺序执行的指令代码”，并指出执行有先后。"
+    sourceRefs: [K01]

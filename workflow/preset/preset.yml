@@ -1,0 +1,164 @@
+schema_version: "1.0"
+
+preset:
+  id: "courseware"
+  name: "Courseware Workflow"
+  version: "0.3.2"
+  description: "信奥互动课件工作流：UbD 教学简报（含核心概念台账）、人类可读课件脚本（整份一次审）、概念覆盖阻断闸门、逐小节渲染审核、组件复用与按需生成、分镜投影、内容覆盖闸门、无滚动条硬门禁"
+  author: "courseware"
+  license: "private"
+
+requires:
+  speckit_version: ">=1.0.0"
+
+provides:
+  templates:
+    - type: "template"
+      name: "constitution-template"
+      file: "templates/constitution-template.md"
+      description: "课件宪法：教学原则、视觉系统、内容覆盖、门禁与豁免"
+      strategy: "replace"
+
+    - type: "template"
+      name: "spec-template"
+      file: "templates/spec-template.md"
+      description: "教学简报（UbD）：学习者、误区、目标、核心概念台账、评估证据、内容覆盖映射"
+      strategy: "replace"
+
+    - type: "template"
+      name: "script-template"
+      file: "templates/script-template.md"
+      description: "人类可读课件脚本：逐屏屏幕内容、交互设计、旁白、制作字段"
+      strategy: "replace"
+
+    - type: "template"
+      name: "self-study-audit-template"
+      file: "templates/self-study-audit-template.md"
+      description: "自学充分性审核报告：十维评分、缺口证据、补充提案与页数影响"
+      strategy: "replace"
+
+    - type: "template"
+      name: "review-sections-template"
+      file: "templates/review-sections-template.yml"
+      description: "小节渲染审核分组：整份脚本一次审，逐节实现/渲染/人工审"
+      strategy: "replace"
+
+    - type: "template"
+      name: "component-plan-template"
+      file: "templates/component-plan-template.md"
+      description: "组件计划：复用检索、缺口、新组件决定、复用映射"
+      strategy: "replace"
+
+    - type: "template"
+      name: "component-brief-template"
+      file: "templates/component-brief-template.md"
+      description: "组件简报：状态机、Props API、无障碍、静态降级、测试计划"
+      strategy: "replace"
+
+    - type: "template"
+      name: "component-manifest-template"
+      file: "templates/component-manifest-template.json"
+      description: "组件包清单：注册表条目、交互状态机、降级与来源"
+      strategy: "replace"
+
+    - type: "template"
+      name: "plan-template"
+      file: "templates/plan-template.md"
+      description: "技术计划：从已批准脚本投影分镜，含覆盖矩阵与组件映射"
+      strategy: "replace"
+
+    - type: "template"
+      name: "tasks-template"
+      file: "templates/tasks-template.md"
+      description: "制作任务：按已批准屏拆分，含组件任务、Deps/DoD 与闸门"
+      strategy: "replace"
+
+    - type: "template"
+      name: "checklist-template"
+      file: "templates/checklist-template.md"
+      description: "教学评审清单：脚本完整性 + 组件复用/生成 + §6 硬项 + 无滚动条"
+      strategy: "replace"
+
+    - type: "template"
+      name: "review-template"
+      file: "templates/review-template.md"
+      description: "每阶段审核请求：产物/摘要/自动检查/待判断项/approve-reject"
+      strategy: "replace"
+
+    - type: "command"
+      name: "speckit.specify"
+      file: "commands/speckit.specify.md"
+      description: "生成教学简报 spec.md 与核心概念台账 concepts.yml，并建立内容覆盖映射"
+      replaces: "speckit.specify"
+
+    - type: "command"
+      name: "speckit.script"
+      file: "commands/speckit.script.md"
+      description: "生成人类可读课件脚本 courseware.md（内容/交互/旁白）"
+      # no replaces: this is a new command
+
+    - type: "command"
+      name: "speckit.self-study-audit"
+      file: "commands/speckit.self-study-audit.md"
+      description: "审核脚本是否足够自学；报告缺口并提案「自学补充」，不自动改脚本/加页"
+      # no replaces: this is a new command
+
+    - type: "command"
+      name: "speckit.component-plan"
+      file: "commands/speckit.component-plan.md"
+      description: "检索组件库，决定复用/扩展/新建，编写组件简报"
+      # no replaces: this is a new command
+
+    - type: "command"
+      name: "speckit.component-build"
+      file: "commands/speckit.component-build.md"
+      description: "按简报实现组件，自动检查 + 人工审核后注册进 core"
+      # no replaces: this is a new command
+
+    - type: "command"
+      name: "speckit.plan"
+      file: "commands/speckit.plan.md"
+      description: "从已批准脚本投影分镜 plan.md + storyboard.yml"
+      replaces: "speckit.plan"
+
+    - type: "command"
+      name: "speckit.tasks"
+      file: "commands/speckit.tasks.md"
+      description: "按 APPROVED 屏生成制作任务"
+      replaces: "speckit.tasks"
+
+    - type: "command"
+      name: "speckit.implement"
+      file: "commands/speckit.implement.md"
+      description: "按小节把已批准脚本实现为数据驱动 deck，逐节渲染并等待人工审核"
+      replaces: "speckit.implement"
+
+    - type: "command"
+      name: "speckit.converge"
+      file: "commands/speckit.converge.md"
+      description: "Beta 收敛：问题分级、重开小节、安全修复与收敛报告"
+      # no replaces: this is a new command
+
+    - type: "command"
+      name: "speckit.checklist"
+      file: "commands/speckit.checklist.md"
+      description: "生成教学评审清单并跑硬门禁"
+      replaces: "speckit.checklist"
+
+    - type: "command"
+      name: "speckit.coverage"
+      file: "commands/speckit.coverage.md"
+      description: "运行内容覆盖闸门（content pack vs storyboard）"
+      # no replaces: this is a new command
+
+    - type: "command"
+      name: "speckit.extract-content"
+      file: "commands/speckit.extract-content.md"
+      description: "从参考课件 URL/HTML 抽取 content-pack 草稿"
+      # no replaces: this is a new command
+
+tags:
+  - "courseware"
+  - "education"
+  - "ubd"
+  - "content-coverage"

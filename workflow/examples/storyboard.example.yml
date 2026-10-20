@@ -1,0 +1,40 @@
+lesson: demo-lesson-01
+contentPack: content-pack.example.json
+stylePack: style-pack.example.json
+slides:
+  - id: S01
+    title: 程序是一组指令
+    objectiveId: O1
+    objective: O1 能用自己的话解释程序是什么
+    contentRefs: [K01]
+    components: [eyebrow-heading, rich-text]
+    layout: content-slide
+    interaction:
+      type: static-reading
+      level: watch
+      contentDemand: 建立“程序是按顺序执行的指令”这一第一印象
+      learningAction: observe
+      evidence: 能用“指令按顺序执行”复述程序的含义
+      learningFunction: 建立程序的第一印象
+      staticAlternative: 静态定义文字
+      whyStatic: 本页只做概念定向；执行顺序的操作证据在 S02 产生，重复互动不会增加证据
+    status: APPROVED
+    reviewer: demo
+  - id: S02
+    title: 第一个程序与输出
+    objectiveId: O1
+    objective: O1 能写出并运行 Hello World
+    contentRefs: [E01, Q01]
+    components: [eyebrow-heading, code-block, quiz-single]
+    layout: content-slide
+    interaction:
+      type: quiz-single
+      level: answer
+      contentDemand: 区分输出语句 cout 与输入语句 cin
+      learningAction: classify
+      evidence: 选出 cout 并说明 cin 是输入
+      learningFunction: 练习 cout 输出语句
+      staticAlternative: 静态对照代码与输出
+      misconception: 把 cin 当成输出
+    status: APPROVED
+    reviewer: demo

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "source": "workflow/examples/courseware.example.md",
+  "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "generatedAt": "2026-10-19T00:00:00.000Z",
+  "provider": "microsoft-edge-tts",
+  "generator": "node-edge-tts@1.2.11",
+  "defaults": {
+    "locale": "zh-CN",
+    "rate": "-5%",
+    "pitch": "+0Hz",
+    "outputFormat": "audio-24khz-48kbitrate-mono-mp3"
+  },
+  "defaultVoice": "xiaozhi",
+  "voices": [
+    { "id": "xiaozhi", "displayName": "小智", "providerVoice": "zh-CN-YunxiaNeural", "use": "学生角色与提问" },
+    { "id": "xiaochuang", "displayName": "小创老师", "providerVoice": "zh-CN-YunyangNeural", "use": "主要讲解" },
+    { "id": "xiaowei", "displayName": "小未", "providerVoice": "zh-CN-XiaoyiNeural", "use": "提示与过渡" },
+    { "id": "xiaolai", "displayName": "小来老师", "providerVoice": "zh-CN-XiaoxiaoNeural", "use": "总结与鼓励" }
+  ],
+  "clips": [
+    { "id": "S01", "voice": "xiaozhi", "url": "/audio/s01-xiaozhi.mp3", "bytes": 30000, "durationSeconds": 5 },
+    { "id": "S01", "voice": "xiaochuang", "url": "/audio/s01-xiaochuang.mp3", "bytes": 30000, "durationSeconds": 5 },
+    { "id": "S01", "voice": "xiaowei", "url": "/audio/s01-xiaowei.mp3", "bytes": 30000, "durationSeconds": 5 },
+    { "id": "S01", "voice": "xiaolai", "url": "/audio/s01-xiaolai.mp3", "bytes": 30000, "durationSeconds": 5 }
+  ],
+  "slides": [
+    {
+      "id": "S01",
+      "title": "认识二维数组",
+      "rawText": "小创老师：今天我们来看二维数组。[暂停]",
+      "spokenText": "小创老师：今天我们来看二维数组。",
+      "audio": {
+        "xiaozhi": "/audio/s01-xiaozhi.mp3",
+        "xiaochuang": "/audio/s01-xiaochuang.mp3",
+        "xiaowei": "/audio/s01-xiaowei.mp3",
+        "xiaolai": "/audio/s01-xiaolai.mp3"
+      }
+    }
+  ]
+}

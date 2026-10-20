@@ -1,0 +1,12 @@
+lesson: demo-lesson-01
+contentPack: content-pack.example.json
+stylePack: style-pack.example.json
+slides:
+  - id: S01
+    title: 未知组件
+    objectiveId: O1
+    objective: O1 演示
+    contentRefs: [K01]
+    components: [not-a-real-component]
+    layout: content-slide
+    status: APPROVED

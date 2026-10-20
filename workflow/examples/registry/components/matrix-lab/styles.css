@@ -1,0 +1,4 @@
+.matrix-lab td[aria-selected="true"] {
+  outline: 2px solid var(--accent, #f2b134);
+  outline-offset: -2px;
+}

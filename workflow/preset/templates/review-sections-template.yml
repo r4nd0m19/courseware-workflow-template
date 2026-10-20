@@ -1,0 +1,30 @@
+# 小节渲染审核分组
+#
+# 一整份 courseware.md 只做一次脚本审核；生成课件时，按下面的小节逐节实现、
+# 逐节渲染、逐节人工审核。上一节 approve 后才继续下一节。
+#
+# 规则：
+# - 每个 section 必须按 storyboard 顺序连续覆盖全部非 SKIP 屏，且恰好一次
+# - slides 使用脚本里的屏 ID（S01…）
+# - 审核通过后，该节脚本内容会被哈希冻结；后续小节改动不得影响已批准小节
+# - 需要返工已批准小节时，运行：
+#     node workflow/tools/reopen-section.mjs --sections review-sections.yml \
+#       --id B --reason "原因"
+#   会同时重开 B 及其后所有小节（后续页可能依赖 B）
+schemaVersion: "1.0"
+sections:
+  - id: A
+    title: 导入与复习
+    slides: [S01, S02, S03, S04]
+  - id: B
+    title: 定义与初始化
+    slides: [S05, S06, S07, S08, S09, S10]
+  - id: C
+    title: 输入输出与小练
+    slides: [S11, S12, S13, S14, S15]
+  - id: D
+    title: 四个矩阵应用
+    slides: [S16, S17, S18, S19, S20]
+  - id: E
+    title: 小结
+    slides: [S21, S22]

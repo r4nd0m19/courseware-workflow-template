@@ -1,0 +1,156 @@
+{
+  "id": "edge-sum-lab",
+  "name": "Edge Sum Lab",
+  "version": "1.0.0",
+  "status": "core",
+  "category": "interactive",
+  "description": "点击矩阵边缘格子并累计求和，提交后给出边界误区反馈。",
+  "tags": [
+    "matrix",
+    "edge",
+    "sum",
+    "grid"
+  ],
+  "interactionLevels": [
+    "modify"
+  ],
+  "whenToUse": "当学习动作是找出矩阵边界并逐格求和时。",
+  "whenNotToUse": "当只需要高亮单个格子，或求和区域是任意形状时。",
+  "learningFunction": "通过逐格选择暴露并纠正忽略边界的误区。",
+  "propsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "values"
+    ],
+    "properties": {
+      "values": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "disabled": {
+        "type": "boolean"
+      }
+    }
+  },
+  "states": [
+    "idle",
+    "selecting",
+    "correct",
+    "incorrect",
+    "disabled"
+  ],
+  "interactionModel": {
+    "states": [
+      "idle",
+      "selecting",
+      "correct",
+      "incorrect",
+      "disabled"
+    ],
+    "transitions": [
+      {
+        "from": "idle",
+        "event": "click-cell",
+        "to": "selecting",
+        "feedback": "高亮格子并更新累计和。"
+      },
+      {
+        "from": "selecting",
+        "event": "click-cell",
+        "to": "selecting",
+        "feedback": "切换选中并更新累计和。"
+      },
+      {
+        "from": "selecting",
+        "event": "reset",
+        "to": "idle",
+        "feedback": "清空选择，累计和归零。"
+      },
+      {
+        "from": "selecting",
+        "event": "submit",
+        "to": "correct",
+        "condition": "选中集合等于边缘集合",
+        "feedback": "边界完整，和为 26。"
+      },
+      {
+        "from": "selecting",
+        "event": "submit",
+        "to": "incorrect",
+        "condition": "选中集合不等于边缘集合",
+        "feedback": "标出漏选/多选格子并关联误区 M2。"
+      },
+      {
+        "from": "incorrect",
+        "event": "click-cell",
+        "to": "selecting",
+        "feedback": "清除错误标记，继续编辑。"
+      },
+      {
+        "from": "correct",
+        "event": "reset",
+        "to": "idle",
+        "feedback": "清空选择与反馈。"
+      },
+      {
+        "from": "idle",
+        "event": "disable",
+        "to": "disabled",
+        "condition": "只读演示模式"
+      }
+    ]
+  },
+  "accessibility": {
+    "keyboard": "方向键移动焦点，Space 切换选中，Enter 提交，R 重置。",
+    "aria": "role=grid，格子暴露 aria-selected；反馈区 aria-live=polite。",
+    "focus": "可见焦点环，行优先顺序，无焦点陷阱。",
+    "contrast": "正文、选中态与错误反馈达到 WCAG AA。",
+    "reducedMotion": "prefers-reduced-motion 下取消高亮过渡。"
+  },
+  "fallback": {
+    "description": "静态表格标出所有边缘格子，并给出求和算式与角上格子只计一次的说明。"
+  },
+  "implementation": "runtime.js",
+  "stories": [
+    "stories/index.html"
+  ],
+  "tests": [
+    "tests/interaction.spec.mjs"
+  ],
+  "baselines": [
+    "baselines/1440x900.png"
+  ],
+  "provenance": {
+    "type": "generated",
+    "brief": "component-briefs/edge-sum-lab.md",
+    "sourceLesson": "demo-component-lesson",
+    "reuseSearch": "matrix, edge, sum, modify — matrix-lab highlights only",
+    "approvedBy": "demo teacher",
+    "approvedAt": "2026-10-19T00:00:00.000Z"
+  },
+  "usedBy": [],
+  "runtime": "vanilla-browser",
+  "styles": [
+    "styles.css"
+  ],
+  "sourceFidelity": {
+    "kind": "generated",
+    "sourceRefs": [
+      "reference renderer: renderContent(s)",
+      "reference CSS: .matrix-table"
+    ],
+    "selectors": [
+      ".edge-sum-lab",
+      ".edge-sum-lab td[data-row]",
+      ".edge-sum-feedback"
+    ],
+    "animation": "prefers-reduced-motion: no decorative animation",
+    "notes": "Generated fixture; visual language follows the reference CSS tokens."
+  }
+}

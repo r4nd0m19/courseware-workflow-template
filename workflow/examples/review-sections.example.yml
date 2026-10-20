@@ -1,0 +1,8 @@
+schemaVersion: "1.0"
+sections:
+  - id: A
+    title: 导入
+    slides: [S01]
+  - id: B
+    title: 第一个程序
+    slides: [S02]

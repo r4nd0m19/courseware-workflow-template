@@ -1,0 +1,40 @@
+{
+  "stage": "brief",
+  "artifactPaths": [
+    "spec.md"
+  ],
+  "reviewedArtifacts": [
+    {
+      "path": "examples/courseware.example.md",
+      "sha256": "f6181eca73dfcf6d1e711dd79818cc87b778af994093f6e72b7a5aae601909ed"
+    }
+  ],
+  "automatedChecks": [
+    {
+      "name": "content pack schema",
+      "status": "pass"
+    },
+    {
+      "name": "content coverage",
+      "status": "skipped",
+      "notes": "storyboard not yet created"
+    }
+  ],
+  "checklist": [
+    {
+      "item": "objectives and assessment evidence complete",
+      "status": "pass"
+    },
+    {
+      "item": "content coverage map includes all required items",
+      "status": "pass"
+    },
+    {
+      "item": "no invented reference content",
+      "status": "pass"
+    }
+  ],
+  "issues": [],
+  "verdict": "pass",
+  "reviewedAt": "2026-10-19T00:00:00Z"
+}

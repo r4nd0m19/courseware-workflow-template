@@ -1,0 +1,60 @@
+{
+  "version": "1.0.0-smoke",
+  "source": "smoke fixture",
+  "lesson": {
+    "id": "quiz-keys-smoke",
+    "title": "quiz keys smoke",
+    "audience": "smoke"
+  },
+  "items": [
+    {
+      "id": "Q1",
+      "kind": "quiz",
+      "quizType": "single",
+      "title": "choose alpha",
+      "text": "question one",
+      "options": [
+        { "text": "alpha", "correct": true, "feedback": "correct" },
+        { "text": "beta", "correct": false, "feedback": "wrong" },
+        { "text": "gamma", "correct": false, "feedback": "wrong" }
+      ]
+    },
+    {
+      "id": "Q2",
+      "kind": "quiz",
+      "quizType": "single",
+      "title": "choose delta",
+      "text": "question two",
+      "options": [
+        { "text": "delta", "correct": true, "feedback": "correct" },
+        { "text": "epsilon", "correct": false, "feedback": "wrong" },
+        { "text": "zeta", "correct": false, "feedback": "wrong" }
+      ]
+    },
+    {
+      "id": "Q3",
+      "kind": "quiz",
+      "quizType": "single",
+      "title": "choose eta",
+      "text": "question three",
+      "options": [
+        { "text": "eta", "correct": true, "feedback": "correct" },
+        { "text": "theta", "correct": false, "feedback": "wrong" },
+        { "text": "iota", "correct": false, "feedback": "wrong" },
+        { "text": "kappa", "correct": false, "feedback": "wrong" }
+      ]
+    },
+    {
+      "id": "Q4",
+      "kind": "quiz",
+      "quizType": "single",
+      "title": "choose lambda",
+      "text": "question four",
+      "options": [
+        { "text": "lambda", "correct": true, "feedback": "correct" },
+        { "text": "mu", "correct": false, "feedback": "wrong" },
+        { "text": "nu", "correct": false, "feedback": "wrong" }
+      ]
+    }
+  ]
+}

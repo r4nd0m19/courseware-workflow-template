@@ -1,0 +1,36 @@
+{
+  "id": "demo-style",
+  "version": "1.0.0",
+  "components": [
+    {
+      "id": "eyebrow-heading",
+      "name": "Eyebrow + 标题",
+      "category": "content",
+      "status": "core",
+      "propsSchema": {
+        "type": "object",
+        "required": ["eyebrow", "title"],
+        "properties": {
+          "eyebrow": { "type": "string" },
+          "title": { "type": "string" }
+        }
+      },
+      "states": ["default"],
+      "whenToUse": "内容页标题",
+      "whenNotToUse": "封面大标题",
+      "learningFunction": "明确本页断言",
+      "accessibility": {
+        "keyboard": "not interactive",
+        "focus": "none",
+        "contrast": "AA"
+      },
+      "baseline": "baselines/eyebrow-heading.png"
+    }
+  ],
+  "layouts": [
+    {
+      "id": "content-slide",
+      "description": "内容页：eyebrow + 标题 + body"
+    }
+  ]
+}

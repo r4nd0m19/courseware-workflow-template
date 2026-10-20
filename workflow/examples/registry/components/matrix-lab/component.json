@@ -1,0 +1,123 @@
+{
+  "id": "matrix-lab",
+  "name": "Matrix Lab",
+  "version": "1.0.0",
+  "status": "core",
+  "category": "interactive",
+  "description": "点击矩阵格子并显示下标，用于讲解行列访问。",
+  "tags": [
+    "matrix",
+    "index",
+    "grid"
+  ],
+  "interactionLevels": [
+    "modify"
+  ],
+  "whenToUse": "当学习动作是点击/选择矩阵中的格子并观察下标或高亮时。",
+  "whenNotToUse": "当学习动作需要求和、输入数值或构造新矩阵时。",
+  "learningFunction": "建立行列下标与矩阵元素位置之间的对应关系。",
+  "propsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "values"
+    ],
+    "properties": {
+      "values": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "disabled": {
+        "type": "boolean"
+      }
+    }
+  },
+  "states": [
+    "idle",
+    "selected",
+    "disabled"
+  ],
+  "interactionModel": {
+    "states": [
+      "idle",
+      "selected",
+      "disabled"
+    ],
+    "transitions": [
+      {
+        "from": "idle",
+        "event": "click-cell",
+        "to": "selected",
+        "feedback": "高亮格子并显示行列下标。"
+      },
+      {
+        "from": "selected",
+        "event": "click-cell",
+        "to": "idle",
+        "feedback": "取消高亮。"
+      },
+      {
+        "from": "idle",
+        "event": "disable",
+        "to": "disabled",
+        "condition": "只读演示模式"
+      },
+      {
+        "from": "disabled",
+        "event": "enable",
+        "to": "idle"
+      }
+    ]
+  },
+  "accessibility": {
+    "keyboard": "方向键移动焦点，Space 选择/取消选择格子。",
+    "aria": "role=grid，格子暴露 aria-selected 与行列标签。",
+    "focus": "可见焦点环，按行优先顺序移动。",
+    "contrast": "文字与高亮达到 WCAG AA。",
+    "reducedMotion": "prefers-reduced-motion 下取消过渡动画。"
+  },
+  "fallback": {
+    "description": "静态表格展示矩阵，并用粗体标出示例格子的行列下标。"
+  },
+  "implementation": "runtime.js",
+  "stories": [
+    "stories/index.html"
+  ],
+  "tests": [
+    "tests/interaction.spec.mjs"
+  ],
+  "baselines": [
+    "baselines/1440x900.png"
+  ],
+  "provenance": {
+    "type": "generated",
+    "brief": "component-briefs/matrix-lab.md",
+    "sourceLesson": "demo-lesson-01",
+    "reuseSearch": "matrix, index, modify — no prior component",
+    "approvedBy": "demo teacher",
+    "approvedAt": "2026-10-19T00:00:00.000Z"
+  },
+  "usedBy": [],
+  "runtime": "vanilla-browser",
+  "styles": [
+    "styles.css"
+  ],
+  "sourceFidelity": {
+    "kind": "generated",
+    "sourceRefs": [
+      "reference renderer: renderContent(s)",
+      "reference CSS: .matrix-table"
+    ],
+    "selectors": [
+      ".matrix-lab",
+      ".matrix-lab td[data-row]"
+    ],
+    "animation": "prefers-reduced-motion: no decorative animation",
+    "notes": "Generated fixture; visual language follows the reference CSS tokens."
+  }
+}

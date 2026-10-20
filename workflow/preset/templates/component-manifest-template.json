@@ -1,0 +1,120 @@
+{
+  "id": "example-lab",
+  "name": "Example Lab",
+  "version": "1.0.0",
+  "status": "core",
+  "category": "interactive",
+  "description": "<what the learner does and sees>",
+  "tags": [
+    "<topic>",
+    "<interaction-pattern>"
+  ],
+  "interactionLevels": [
+    "modify"
+  ],
+  "whenToUse": "<use this when...>",
+  "whenNotToUse": "<do not use when...>",
+  "learningFunction": "<which objective/learning action this serves>",
+  "propsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "values"
+    ],
+    "properties": {
+      "values": {
+        "type": "array"
+      }
+    }
+  },
+  "states": [
+    "idle",
+    "selected",
+    "correct",
+    "incorrect"
+  ],
+  "interactionModel": {
+    "states": [
+      "idle",
+      "selected",
+      "correct",
+      "incorrect"
+    ],
+    "transitions": [
+      {
+        "from": "idle",
+        "event": "click-cell",
+        "to": "selected",
+        "feedback": "<feedback>"
+      },
+      {
+        "from": "selected",
+        "event": "submit",
+        "to": "correct",
+        "condition": "<success>"
+      },
+      {
+        "from": "selected",
+        "event": "submit",
+        "to": "incorrect",
+        "feedback": "<misconception feedback>"
+      },
+      {
+        "from": "correct",
+        "event": "reset",
+        "to": "idle"
+      },
+      {
+        "from": "incorrect",
+        "event": "reset",
+        "to": "idle"
+      }
+    ]
+  },
+  "accessibility": {
+    "keyboard": "Tab to the grid; arrows move; Enter/Space toggles a cell.",
+    "aria": "role=grid; cells expose aria-selected and a live feedback region.",
+    "focus": "Visible focus ring; focus order follows row-major order.",
+    "contrast": "Text and feedback meet WCAG AA.",
+    "reducedMotion": "No animated transitions under prefers-reduced-motion."
+  },
+  "fallback": {
+    "description": "Static matrix with the same values and explanation text."
+  },
+  "implementation": "ExampleLab.js",
+  "stories": [
+    "stories/index.html"
+  ],
+  "tests": [
+    "tests/interaction.spec.mjs"
+  ],
+  "baselines": [
+    "baselines/1440x900.png"
+  ],
+  "provenance": {
+    "type": "generated",
+    "brief": "component-briefs/example-lab.md",
+    "sourceLesson": "<lesson-id>",
+    "approvedBy": "<teacher>",
+    "approvedAt": "<ISO date>"
+  },
+  "usedBy": [],
+  "runtime": "vanilla-browser",
+  "styles": [
+    "styles.css"
+  ],
+  "sourceFidelity": {
+    "kind": "generated",
+    "sourceRefs": [
+      "reference renderer: renderContent(s)",
+      "classroom-polish.css: .option/.feedback"
+    ],
+    "selectors": [
+      ".example-lab",
+      ".example-grid",
+      ".example-feedback"
+    ],
+    "animation": "prefers-reduced-motion: no decorative animation; state changes are instant",
+    "notes": "Generated component: visual language copied from the reference CSS; no new tokens."
+  }
+}

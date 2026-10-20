@@ -1,0 +1,19 @@
+{
+  "id": "demo-style-bad",
+  "version": "1.0.0",
+  "components": [
+    {
+      "id": "eyebrow-heading",
+      "name": "Eyebrow + 标题",
+      "category": "content",
+      "status": "core",
+      "propsSchema": { "type": "object" },
+      "states": ["default"],
+      "whenToUse": "内容页标题",
+      "whenNotToUse": "封面大标题",
+      "accessibility": { "keyboard": "not interactive" },
+      "baseline": "baselines/eyebrow-heading.png"
+    }
+  ],
+  "layouts": [{ "id": "content-slide", "description": "内容页" }]
+}

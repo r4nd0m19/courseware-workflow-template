@@ -1,0 +1,124 @@
+# 信奥互动课件工作流模板
+
+这是 Spec Kit 的 `courseware-production` 工作流模板，用于在**新项目**里装好课件生产流水线：教学简报 → 人类可读脚本 → 概念台账 → 分镜 → 逐页组件/页面审核 → 渲染与门禁 → 壳站点。
+
+模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
+
+- 工作流版本：`0.8.1`（89 个顶层步骤）
+- preset：`courseware` `0.3.2`
+- 模板版本：`0.1.0`（2026-10-20）
+- 许可：private（对外发布前需确认 preset 许可与素材授权）
+
+## 在 Codex 图形界面里使用
+
+这是本项目推荐的入口：**新建项目 → 丢一个脚本 → 让 Codex 自己安装**。
+
+1. 在 Codex 图形界面新建/打开一个空项目目录（`Ctrl+O` / `⌘O`）。
+2. 把本仓库根目录的 `bootstrap-codex-courseware.sh` 复制到该项目根目录。
+3. 在 Codex 对话框里输入：
+
+   ```text
+   请在当前项目根目录执行：
+   bash bootstrap-codex-courseware.sh
+   安装完成后运行 specify workflow info courseware-production，并把结果报告给我。
+   ```
+
+4. 如果 Codex 询问是否信任该目录或是否允许执行命令，选择允许。脚本会先 `git init`，因为 Codex 需要可信任的 git 目录。
+5. 安装完成后，在 Codex 中重新打开项目，或执行 **Force Reload Skills**。确认技能列表里有 `speckit-script` 等技能；Codex 里用 `$speckit-*` 调用，Claude Code 里用 `/speckit-*`。
+6. 本模板不带壳；把本项目的 `shells/<shell>/`（风格包 manifest/full/freeze/source）放好后，再按 `AGENTS.md` 里的命令跑完整流程。
+
+### Codex 图形界面的限制
+
+完整课件生产需要本机环境：Node.js、npm、Microsoft Edge TTS、Playwright/Chromium、8082 端口和本地文件系统。**Codex Web / Cloud 不能跑完整流程**；请使用 Codex 桌面应用或本地 CLI，并让项目位于 WSL/Linux/macOS 本地磁盘。
+
+如果项目在 Windows 盘符下、通过 WSL 访问，路径会变成 `/mnt/c/...`；浏览器、TTS 和 Node 都应在同一个 WSL 环境里。建议把项目放在 WSL 家目录（如 `~/code/...`）。
+
+## 命令行安装
+
+```bash
+# 在项目根目录
+bash bootstrap-codex-courseware.sh
+
+# 或从任意位置指定项目
+bash bootstrap-codex-courseware.sh --target /path/to/project
+
+# 已有 Spec Kit 项目：补装 Codex 集成并保留原集成
+bash bootstrap-codex-courseware.sh --target /path/to/project
+
+# 更新工作流（覆盖已有 workflow/）
+bash bootstrap-codex-courseware.sh --force
+```
+
+脚本会：
+
+1. 检查 Node >= 18、npm、git；
+2. 缺少 `specify` 时，用 `uv tool install specify-cli` 或 `pipx install specify-cli` 安装 Spec Kit CLI；
+3. 克隆模板到临时目录；
+4. 在目标目录 `git init`，写入 `.gitignore` 和 `AGENTS.md`（已存在则保留）；
+5. 运行 `workflow/install.mjs --integration codex`，安装 preset 和工作流；
+6. `npm ci` 安装 `workflow/tools` 依赖；
+7. 检测 Chrome/Chromium；没有则用项目内的 `playwright-core` 下载 Chromium；
+8. 跑 `smoke-test.mjs` 和 `specify workflow info courseware-production` 做验证。
+
+常用选项：
+
+| 选项 | 作用 |
+| --- | --- |
+| `--repo <url\|path>` | 指定模板仓库（默认本机 `file://$HOME/code/courseware-workflow-template`） |
+| `--ref <branch\|tag>` | 指定模板分支/标签 |
+| `--target <dir>` | 安装到指定项目目录（默认脚本所在目录） |
+| `--integration <codex\|claude>` | 安装的集成（默认 `codex`） |
+| `--no-browser` | 跳过 Chromium 下载/检测 |
+| `--force` | 覆盖已有 `workflow/` |
+
+环境变量：`COURSEWARE_TEMPLATE_REPO` 覆盖默认模板仓库；`CHROME_PATH` 指定浏览器。
+
+## 安装后验证
+
+```bash
+specify workflow info courseware-production   # 应显示 0.8.1、89 steps
+specify integration status                    # 应包含 codex
+node workflow/tools/smoke-test.mjs            # 应全部 PASS
+ls .agents/skills                             # 应包含 speckit-script 等
+```
+
+Codex 里的完整流程命令见 `AGENTS.md`。注意：
+
+- 必须显式传 `-i integration=codex`；
+- 非交互运行要加 `</dev/null`；
+- 工作流需要 `concepts=...`、`style_pack=...` 等输入；模板不提供具体课件数据。
+
+## 更新模板
+
+本机模板仓库在 `~/code/courseware-workflow-template`。上游 `workflow/` 更新后，重新生成模板：
+
+```bash
+rsync -a --delete \
+  --exclude node_modules --exclude chrome-path.txt \
+  /path/to/courseware/workflow/ ~/code/courseware-workflow-template/workflow/
+cd ~/code/courseware-workflow-template
+git add -A
+git commit -m "chore: sync workflow"
+```
+
+不要把 `workflow/tools/node_modules`、`workflow/tools/chrome-path.txt`、`.specify/`、`research/`、`shells/`、`specs/`、`generated/`、`prototype/`、`screenshots/`、`review/` 或任何凭据提交进模板。
+
+## 发布
+
+当前模板是本地私有仓库，未推送到外部。需要发布时：
+
+1. 先做一次素材/许可/隐私复核：preset 的 `license: private`、壳与参考素材授权、截图和个人信息；
+2. 在 GitHub 新建**私有**仓库（公开前另做一次审查）；
+3. `git remote add origin <url>`，`git push -u origin main`；
+4. 把 `bootstrap-codex-courseware.sh` 里的默认模板仓库改成发布地址，或在调用时传 `--repo <url>`；
+5. 公开仓库确认 GitHub secret scanning / push protection / Dependabot 已开启。
+
+没有用户明确授权，不要主动推送到任何外部服务。
+
+## 安全
+
+- 账号、密码、登录会话只存在 `tools/r0/credentials.local.json`（600）和 `/tmp`；不要读取、打印、提交。
+- `research/raw/`、`research/r0/mirror/`、`research/r0/screenshots/` 含第三方内容、本机路径或个人信息，不得进入可分享产物。
+- 参考课件里的姓名、头像、平台信息不得进入风格包、截图或课件。
+- 生成的插画在授权问题解决前只在本地使用。
+- 提交会经过全局 gitleaks 钩子；不要设置仓库级 `core.hooksPath` 覆盖全局机制。
