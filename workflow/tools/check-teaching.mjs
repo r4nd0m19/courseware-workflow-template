@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
 
 const [storyboardPath, contentPath] = process.argv.slice(2)
@@ -13,13 +14,13 @@ const content = readData(contentPath)
 const errors = []
 
 const storyCheck = validateWithSchema(
-  new URL('../schemas/storyboard.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/storyboard.schema.json', import.meta.url)),
   storyboard,
 )
 for (const e of storyCheck.errors) errors.push(`storyboard ${e}`)
 
 const contentCheck = validateWithSchema(
-  new URL('../schemas/content-pack.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/content-pack.schema.json', import.meta.url)),
   content,
 )
 for (const e of contentCheck.errors) errors.push(`content pack ${e}`)

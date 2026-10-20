@@ -5,12 +5,13 @@
 // shell's inline reference illustrations. `prepare-shell-site` is fail-closed
 // by default, and this wrapper adds the art provenance gate, the component
 // bundle, and the rendered shell/art checks in the only order that is safe.
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 
-const toolsDir = path.dirname(new URL(import.meta.url).pathname)
+const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
   const i = args.indexOf(name)

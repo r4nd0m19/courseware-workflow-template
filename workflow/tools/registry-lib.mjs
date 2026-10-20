@@ -1,9 +1,10 @@
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData, validateWithSchema } from './lib.mjs'
 
-const PACKAGE_SCHEMA = new URL('../schemas/component-package.schema.json', import.meta.url).pathname
-const REGISTRY_SCHEMA = new URL('../schemas/component-registry.schema.json', import.meta.url).pathname
+const PACKAGE_SCHEMA = fileURLToPath(new URL('../schemas/component-package.schema.json', import.meta.url))
+const REGISTRY_SCHEMA = fileURLToPath(new URL('../schemas/component-registry.schema.json', import.meta.url))
 
 export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -213,13 +214,32 @@ export function loadRegistryPackages(indexPath, options = {}) {
   return { ...loaded, packages }
 }
 
+// Windows Node passes `\\?\`-prefixed paths to fs.cpSync's filter, and
+// path.relative cannot compare those against the original source root: it
+// returns the whole absolute path, so ancestors like "staging" look like part
+// of the relative path and every entry gets filtered out. Strip the prefix
+// before comparing.
+export function copyFilterRelative(source, src) {
+  const normalize = (value) => {
+    let p = String(value)
+    if (process.platform === 'win32' && p.startsWith('\\\\?\\')) {
+      p = p.slice(4)
+      if (p.startsWith('UNC\\')) p = `\\\\${p.slice(4)}`
+    }
+    return path.resolve(p)
+  }
+  return path.relative(normalize(source), normalize(src))
+}
+
 export function copyDirFiltered(source, dest) {
   fs.mkdirSync(dest, { recursive: true })
   fs.cpSync(source, dest, {
     recursive: true,
     filter: (src) => {
-      const rel = path.relative(source, src)
+      const rel = copyFilterRelative(source, src)
       const parts = rel.split(path.sep)
+      // A path outside the source means the comparison failed; fail closed.
+      if (path.isAbsolute(rel) || parts.includes('..')) return false
       return !parts.includes('node_modules') && !parts.includes('.git') && !parts.includes('staging')
     },
   })

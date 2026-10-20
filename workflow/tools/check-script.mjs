@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
@@ -48,21 +49,21 @@ try {
 
 const parsedObject = parsed.toParsedObject()
 const scriptCheck = validateWithSchema(
-  new URL('../schemas/courseware-script.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/courseware-script.schema.json', import.meta.url)),
   parsedObject,
 )
 for (const e of scriptCheck.errors) errors.push(`script ${e}`)
 
 const content = readData(contentPath)
 const contentCheck = validateWithSchema(
-  new URL('../schemas/content-pack.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/content-pack.schema.json', import.meta.url)),
   content,
 )
 for (const e of contentCheck.errors) errors.push(`content pack ${e}`)
 
 const style = readData(stylePath)
 const styleCheck = validateWithSchema(
-  new URL('../schemas/style-pack-manifest.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/style-pack-manifest.schema.json', import.meta.url)),
   style,
 )
 for (const e of styleCheck.errors) errors.push(`style pack ${e}`)
@@ -77,7 +78,7 @@ if (registryPath && registryPath.trim()) {
   if (fs.existsSync(absoluteRegistry)) {
     registry = readData(absoluteRegistry)
     const registryCheck = validateWithSchema(
-      new URL('../schemas/component-registry.schema.json', import.meta.url).pathname,
+      fileURLToPath(new URL('../schemas/component-registry.schema.json', import.meta.url)),
       registry,
     )
     for (const e of registryCheck.errors) errors.push(`component registry ${e}`)

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
 import { parseScript } from './script-lib.mjs'
 
@@ -31,20 +32,20 @@ const errors = []
 const warnings = []
 
 const storyCheck = validateWithSchema(
-  new URL('../schemas/storyboard.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/storyboard.schema.json', import.meta.url)),
   storyboard,
 )
 for (const e of storyCheck.errors) errors.push(`storyboard ${e}`)
 
 const styleCheck = validateWithSchema(
-  new URL('../schemas/style-pack-manifest.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/style-pack-manifest.schema.json', import.meta.url)),
   style,
 )
 for (const e of styleCheck.errors) errors.push(`style pack ${e}`)
 
 if (registry) {
   const registryCheck = validateWithSchema(
-    new URL('../schemas/component-registry.schema.json', import.meta.url).pathname,
+    fileURLToPath(new URL('../schemas/component-registry.schema.json', import.meta.url)),
     registry,
   )
   for (const e of registryCheck.errors) errors.push(`component registry ${e}`)

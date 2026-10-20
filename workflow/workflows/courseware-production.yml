@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.13.0"
+  version: "0.14.1"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -161,9 +161,11 @@ steps:
   # rendered shell (all native types, chrome, interactions, auto-play hold)
   # before teaching content is authored on top of it.
   - id: review-shell
-    type: gate
+    type: gui-gate
     message: "先看壳预览：{{ steps.validate-shell.output.data.previewUrl }} 。这是 {{ steps.validate-shell.output.data.slideCount }} 页占位 deck，所有文字均为占位内容，覆盖 {{ steps.validate-shell.output.data.typeCount }} 种原生类型；带 {{ steps.validate-shell.output.data.narration.voiceCount }} 个占位音色、{{ steps.validate-shell.output.data.narration.pageCount }} 页占位语音。请打开链接逐页翻、点主要互动、切换音色、试一次自动播放；审核清单和逐页截图见下方文件。这里审的是壳，不是本课内容。"
     show_file: "{{ steps.validate-shell.output.data.reviewFile }}"
+    artifacts:
+      - "{{ inputs.shell }}"
     options: [approve, reject]
     on_reject: abort
 
@@ -201,9 +203,13 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-inputs.json"
 
   - id: review-inputs
-    type: gate
+    type: gui-gate
     message: "Review inputs: content pack (required items, answers/feedback, sensitivity) and style pack (components/layouts, frozen version)."
     show_file: "review/self-review-inputs.md"
+    artifacts:
+      - "{{ inputs.content_pack }}"
+      - "{{ inputs.style_pack }}"
+      - "{{ inputs.style_pack_full }}"
     options: [approve, reject]
     on_reject: abort
 
@@ -246,9 +252,13 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-brief.json"
 
   - id: review-brief
-    type: gate
+    type: gui-gate
     message: "Review the teaching brief (spec.md): objectives, misconceptions, assessment evidence, and required-content coverage map."
     show_file: "review/self-review-brief.md"
+    artifacts:
+      - "specs/{{ inputs.lesson }}/spec.md"
+      - "{{ inputs.concepts }}"
+      - "{{ inputs.content_pack }}"
     options: [approve, reject]
     on_reject: abort
 
@@ -284,9 +294,12 @@ steps:
     run: "node workflow/tools/check-self-study.mjs review/self-study-audit.json --script {{ inputs.courseware_script }}"
 
   - id: review-self-study-audit
-    type: gate
+    type: gui-gate
     message: "Review the self-study sufficiency audit (review/self-study-audit.md): gap evidence, page impact, and the proposed 自学补充 blocks. Approve the plan, or reject to revise manually."
     show_file: "review/self-study-audit.md"
+    artifacts:
+      - "{{ inputs.courseware_script }}"
+      - "review/self-study-audit.json"
     options: [approve, reject]
     on_reject: abort
 
@@ -374,7 +387,7 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-script.json --script {{ inputs.courseware_script }} --concepts {{ inputs.concepts }}"
 
   - id: review-script
-    type: gate
+    type: gui-gate
     message: "Review the human-readable courseware script (courseware.md): per-screen content, interaction design, narration, misconception feedback, split pages."
     show_file: "review/self-review-script.md"
     options: [approve, reject]
@@ -426,9 +439,11 @@ steps:
     run: "node workflow/tools/check-shell-art.mjs --shell {{ inputs.shell }} --art {{ inputs.art_dir }}/art-manifest.json --require-all"
 
   - id: review-shell-art
-    type: gate
+    type: gui-gate
     message: "Review this lesson's generated illustrations ({{ inputs.art_dir }}): every slot must show a distinct character, not the shell's reference mascot. The manifest records prompt, seed, model and reference/output hashes. Approve to freeze these images for the lesson."
     show_file: "{{ inputs.art_dir }}/art-manifest.json"
+    artifacts:
+      - "{{ inputs.art_dir }}"
     options: [approve, reject]
     on_reject: abort
 
@@ -475,7 +490,7 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-component-plan.json"
 
   - id: review-component-plan
-    type: gate
+    type: gui-gate
     message: "Review component reuse decisions and briefs: what is reused, what is new, FSM/props/a11y/fallback/test plan for each new component."
     show_file: "review/self-review-component-plan.md"
     options: [approve, reject]
@@ -566,7 +581,7 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-storyboard.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
 
   - id: review-storyboard
-    type: gate
+    type: gui-gate
     message: "Review the projected storyboard: per-screen status, contentRefs coverage, component sources/versions, teaching gates, no-scroll. Only APPROVED screens proceed."
     show_file: "review/self-review-storyboard.md"
     options: [approve, reject]
@@ -605,7 +620,7 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-tasks.json"
 
   - id: review-tasks
-    type: gate
+    type: gui-gate
     message: "Review tasks.md: only APPROVED screens, Deps/DoD, gates, no unregistered components."
     show_file: "review/self-review-tasks.md"
     options: [approve, reject]
@@ -644,213 +659,228 @@ steps:
             run: "node workflow/tools/list-section-components.mjs --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }}"
             output_format: json
 
-          - id: build-page-components
+          # Spec Kit re-runs a nested step's parent body on resume. Without
+          # this guard, implement-section and the AI page self-review would
+          # run again before review-page and rewrite the self-review JSON
+          # (reviewedAt), changing the gate digest and discarding the
+          # teacher's verdict. When this run already has a pending/decided
+          # gate for review-page, skip straight back to the gate.
+          - id: page-review-resume-guard
+            type: shell
+            run: "node workflow/tools/check-pending-gui-gate.mjs --step-id review-page"
+            output_format: json
+
+          - id: page-pre-review
             type: if
-            condition: "{{ steps.load-page-components.output.data.buildRequired }}"
+            condition: "{{ not steps.page-review-resume-guard.output.data.resume }}"
             then:
-              - id: build-missing-page-components
-                command: speckit.component-build
+              - id: build-page-components
+                type: if
+                condition: "{{ steps.load-page-components.output.data.buildRequired }}"
+                then:
+                  - id: build-missing-page-components
+                    command: speckit.component-build
+                    integration: "{{ inputs.integration }}"
+                    input:
+                      args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --components {{ steps.load-page-components.output.data.missing | join(',') }} --staging {{ inputs.component_staging }}"
+
+              - id: check-page-components
+                type: if
+                condition: "{{ steps.load-page-components.output.data.needsWork }}"
+                then:
+                  - id: validate-staged-page-components
+                    type: shell
+                    run: "node workflow/tools/check-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --project-root . --script {{ inputs.courseware_script }}"
+
+                  - id: self-review-page-components
+                    type: prompt
+                    integration: "{{ inputs.integration }}"
+                    prompt: |
+                      AI self-review before page review (stage: page-{{ steps.advance_section.output.data.section.id }}-components).
+                      Page: {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }}
+                      Slide: {{ steps.advance_section.output.data.section.slides | join(', ') }}
+                      Unregistered components used by this page: {{ steps.load-page-components.output.data.unregistered | join(', ') }}.
+                      Read each component's brief (component-briefs/ next to the courseware script), the staged
+                      package(s) under {{ inputs.component_staging }}/<id>/ (component.json, runtime.js, styles.css,
+                      tests, stories, baselines), the page's block in courseware.md and storyboard.yml, and the
+                      validate-staged-page-components result.
+                      Check: every brief item implemented (FSM transitions, props schema, accessibility, static
+                      fallback, tests, baselines); each FSM transition has a test; no placeholder text; the
+                      component uses style-pack tokens/reference CSS only; no scrollbars/clipping; extend keeps
+                      backward compatibility; the component props in this page's deck data match the interaction
+                      design and evidence. Do not review the whole page here; the page self-review does that.
+                      Write review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json
+                      and .md. reviewedArtifacts must list every file of each staged package plus its brief with
+                      sha256. Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
+                      Do not register anything; registration happens only after the page gate approves.
+
+                  - id: check-self-review-page-components
+                    type: shell
+                    run: "node workflow/tools/check-self-review.mjs review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json --root ."
+
+              # The site is rebuilt from the shell package after every section:
+              # build-shell-site runs the art provenance gate, assembles the deck,
+              # injects the component bundle/host, and verifies the rendered site.
+              - id: implement-section
+                command: speckit.implement
                 integration: "{{ inputs.integration }}"
                 input:
-                  args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --components {{ steps.load-page-components.output.data.missing | join(',') }} --staging {{ inputs.component_staging }}"
+                  args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --deck-data {{ inputs.deck_data }} --staging {{ inputs.component_staging }}"
 
-          - id: check-page-components
-            type: if
-            condition: "{{ steps.load-page-components.output.data.needsWork }}"
-            then:
-              - id: validate-staged-page-components
+              # Refresh narration after implementation in case the section script
+              # changed. Existing MP3s are reused when their spoken text is unchanged.
+              - id: build-section-narration
                 type: shell
-                run: "node workflow/tools/check-staged-components.mjs --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --project-root . --script {{ inputs.courseware_script }}"
+                run: "node workflow/tools/build-narration.mjs {{ inputs.courseware_script }} --voices {{ inputs.voice_catalog }} --out {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --url-prefix {{ inputs.audio_url_prefix }}"
 
-              - id: self-review-page-components
+              - id: section-shell-build
+                type: shell
+                run: "node workflow/tools/build-shell-site.mjs --script {{ inputs.courseware_script }} --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --out {{ inputs.site_dir }} --force"
+
+              - id: section-narration-gate
+                type: shell
+                run: "node workflow/tools/check-narration.mjs {{ inputs.courseware_script }} {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --only {{ steps.advance_section.output.data.section.slides | join(',') }}"
+
+              - id: load-section-screens
+                type: shell
+                run: "node workflow/tools/list-approved-screens.mjs {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }}"
+                output_format: json
+
+              - id: build-section-screens
+                type: fan-out
+                items: "{{ steps.load-section-screens.output.data }}"
+                max_concurrency: 2
+                step:
+                  id: build-one-section-screen
+                  type: shell
+                  run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots"
+
+              - id: section-deck-data-gate
+                type: shell
+                run: "node workflow/tools/check-deck-data.mjs --script {{ inputs.courseware_script }} --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }}"
+
+              - id: section-shell-gate
+                type: shell
+                run: "node workflow/tools/check-shell.mjs --shell {{ inputs.shell }} --site {{ inputs.site_dir }} --require-art"
+
+              - id: section-shell-art-gate
+                type: shell
+                run: "node workflow/tools/check-shell-art.mjs --shell {{ inputs.shell }} --art {{ inputs.art_dir }}/art-manifest.json --site {{ inputs.site_dir }} --require-all"
+
+              - id: section-source-fidelity-gate
+                type: shell
+                run: "node workflow/tools/check-source-fidelity.mjs --source {{ inputs.shell_source }} --source-only"
+
+              - id: section-rendered-check
+                type: shell
+                run: "node workflow/tools/check-rendered-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --section {{ steps.advance_section.output.data.section.id }} --screenshots screenshots"
+
+              - id: section-baseline-gate
+                type: shell
+                run: "node workflow/tools/check-baseline.mjs screenshots --baseline \"{{ inputs.baseline_dir }}\" --include \"{{ steps.advance_section.output.data.section.slides | join(',') }}\""
+
+              - id: section-script-gate
+                type: shell
+                run: "node workflow/tools/check-script.mjs {{ inputs.courseware_script }} {{ inputs.content_pack }} {{ inputs.style_pack }} {{ inputs.component_registry }}"
+
+              # A page may be built faithfully while still dropping the concept it
+              # was supposed to introduce. Gate this page against the ledger before
+              # its rendering can be approved.
+              - id: section-concepts-gate
+                type: shell
+                run: "node workflow/tools/check-concepts.mjs {{ inputs.courseware_script }} {{ inputs.content_pack }} {{ inputs.storyboard }} --concepts {{ inputs.concepts }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }}"
+
+              # Check the implemented deck, not only the script: a relettering or a
+              # hand edit during implementation must not restore the all-A order.
+              - id: section-quiz-keys-gate
+                type: shell
+                run: "node workflow/tools/check-quiz-keys.mjs {{ inputs.deck_data }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }}"
+
+              - id: section-parity-gate
+                type: shell
+                run: "node workflow/tools/script-to-storyboard.mjs {{ inputs.courseware_script }} --check {{ inputs.storyboard }}"
+
+              - id: section-overflow-gate
+                type: shell
+                run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --script {{ inputs.courseware_script }} --start {{ steps.advance_section.output.data.section.start }} --pages {{ steps.advance_section.output.data.section.count }}"
+
+              - id: self-review-page
                 type: prompt
                 integration: "{{ inputs.integration }}"
                 prompt: |
-                  AI self-review before page review (stage: page-{{ steps.advance_section.output.data.section.id }}-components).
+                  AI self-review before human review (stage: page-{{ steps.advance_section.output.data.section.id }}).
                   Page: {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }}
                   Slide: {{ steps.advance_section.output.data.section.slides | join(', ') }}
-                  Unregistered components used by this page: {{ steps.load-page-components.output.data.unregistered | join(', ') }}.
-                  Read each component's brief (component-briefs/ next to the courseware script), the staged
-                  package(s) under {{ inputs.component_staging }}/<id>/ (component.json, runtime.js, styles.css,
-                  tests, stories, baselines), the page's block in courseware.md and storyboard.yml, and the
-                  validate-staged-page-components result.
-                  Check: every brief item implemented (FSM transitions, props schema, accessibility, static
-                  fallback, tests, baselines); each FSM transition has a test; no placeholder text; the
-                  component uses style-pack tokens/reference CSS only; no scrollbars/clipping; extend keeps
-                  backward compatibility; the component props in this page's deck data match the interaction
-                  design and evidence. Do not review the whole page here; the page self-review does that.
-                  Write review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json
-                  and .md. reviewedArtifacts must list every file of each staged package plus its brief with
-                  sha256. Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
-                  Do not register anything; registration happens only after the page gate approves.
+                  Read this page's block in courseware.md ({{ inputs.courseware_script }}), storyboard.yml,
+                  the content pack, component-plan.md, the registry, this page's screenshots under screenshots/,
+                  narration.json, the audio files under {{ inputs.audio_dir }}, the assembled site under
+                  {{ inputs.site_dir }} (build-manifest.json, shell-art-data.js), and the results of
+                  section-shell-build, section-rendered-check, section-baseline-gate, section-script-gate,
+                  section-quiz-keys-gate, section-parity-gate, section-overflow-gate, section-narration-gate,
+                  section-deck-data-gate, section-shell-gate, section-shell-art-gate and
+                  section-source-fidelity-gate.
+                  Check the shell build: build-manifest.json records no missingArt; shell-art-data.js maps
+                  every illustration slot to assets/generated/ and never to reference/; the cover/end art is
+                  this lesson's generated character, not the shell's inline reference mascot; the site
+                  contains no shell reference crops.
+                  Check source fidelity: copied CSS/JS hashes unchanged, inline base CSS identical,
+                  reference geometry/DOM selectors/animation present, and no page-level style overrides
+                  in deck.json or index.html. Check each slide: rendered screen text/code/output matches the script verbatim; interaction
+                  success/error feedback, completion and reset match the interaction design; no placeholder;
+                  no overflow/clipping/crowding; components are registered core versions or the staged
+                  components built for this page; no personal data.
+                  Check interaction-first design on the rendered page: the screen's interaction form
+                  follows its content learning action; a non-watch page is not rendered as a static
+                  table/code page with only a next button; a watch page's static reason still holds after
+                  rendering. The rendered evidence must be the one declared in interaction.evidence
+                  (clicked cell, filled grid, predicted next cell, modified matrix), not merely an animation
+                  the student watched. If a page says click/type/step/fill in the script but the rendered
+                  page only shows static content, it is blocking.
+                  Component review: this page's unregistered components are
+                  {{ steps.load-page-components.output.data.unregistered | join(', ') }} (empty means none).
+                  If non-empty, read review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.md and the staged packages
+                  under {{ inputs.component_staging }}/<id>/, then confirm on the rendered page that each
+                  component behaves as its brief says, that its interaction produces the declared evidence,
+                  and that the page did not silently render the static fallback. Include the component
+                  verdict in this page review; the page gate also approves these components into core.
+                  Deck data must match storyboard id/title/order and use only reference renderer types or
+                  registered component ids; no raw HTML/CSS/JS fields.
+                  Answer-position gate: read the section-quiz-keys-gate result and record the
+                  A/B/C/D distribution and each question's correct display position. If one position
+                  dominates, reorder options and update letter-specific feedback/narration; do not
+                  accept the gate by adding a note. Also check the rendered quiz shows the same
+                  option order and markers as the deck.
+                  Density / segmenting gate: run
+                  `node workflow/tools/density-report.mjs {{ inputs.courseware_script }} {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --json`
+                  and copy its `signals` unchanged into the `density` array. For every slide declare its
+                  semanticUnits (label + evidence): one slide should carry one new semantic boundary.
+                  Different forms of one rule, side-by-side comparison, or review/self-check of
+                  already-taught content count as one unit; multiple independent teaching points are
+                  blocking — split the slide or mark `exception` with a written reason. Check the rendered
+                  screen as well: a screen can be under the overflow limit and still be overcrowded.
+                  Core-concept gate: read the concept ledger ({{ inputs.concepts }}) and the
+                  section-concepts-gate result. If this page introduces a concept, confirm the rendered
+                  page shows its term, definition and every mustAppear phrase as readable screen text;
+                  the concept card must not be hidden behind an interaction step, and must survive the
+                  static fallback. If this page reinforces or assesses a concept, confirm it actually
+                  uses the concept. Record a `concepts` entry for every concept related to this page
+                  (conceptId, verdict, evidence, slideIds); a missing or `gap` entry is blocking.
+                  Check narration: the page has raw and spoken text for every voice; spoken text contains no
+                  markdown, backticks, [暂停], TODO/TBD; audio files exist and are non-empty; the player and
+                  voice selector work; the outline lists every page and jumps correctly.
+                  Note in the review that audio quality still needs a human audition and that narration uses
+                  Microsoft Edge TTS (an unofficial Edge endpoint, suitable for local/prototype use).
+                  If a safe implementation fix is needed, make it and rerun the affected gates, then recheck
+                  the screenshots. Do not edit slides outside this page.
+                  Write review/self-review-page-{{ steps.advance_section.output.data.section.id }}.json and .md.
+                  Verdict pass only if no blocking issues; otherwise stop.
 
-              - id: check-self-review-page-components
+              - id: check-self-review-page
                 type: shell
-                run: "node workflow/tools/check-self-review.mjs review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json --root ."
-
-          # The site is rebuilt from the shell package after every section:
-          # build-shell-site runs the art provenance gate, assembles the deck,
-          # injects the component bundle/host, and verifies the rendered site.
-          - id: implement-section
-            command: speckit.implement
-            integration: "{{ inputs.integration }}"
-            input:
-              args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --deck-data {{ inputs.deck_data }} --staging {{ inputs.component_staging }}"
-
-          # Refresh narration after implementation in case the section script
-          # changed. Existing MP3s are reused when their spoken text is unchanged.
-          - id: build-section-narration
-            type: shell
-            run: "node workflow/tools/build-narration.mjs {{ inputs.courseware_script }} --voices {{ inputs.voice_catalog }} --out {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --url-prefix {{ inputs.audio_url_prefix }}"
-
-          - id: section-shell-build
-            type: shell
-            run: "node workflow/tools/build-shell-site.mjs --script {{ inputs.courseware_script }} --shell {{ inputs.shell }} --deck {{ inputs.deck_data }} --art {{ inputs.art_dir }}/art-manifest.json --narration {{ inputs.narration_manifest }} --audio-dir {{ inputs.audio_dir }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --out {{ inputs.site_dir }} --force"
-
-          - id: section-narration-gate
-            type: shell
-            run: "node workflow/tools/check-narration.mjs {{ inputs.courseware_script }} {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --only {{ steps.advance_section.output.data.section.slides | join(',') }}"
-
-          - id: load-section-screens
-            type: shell
-            run: "node workflow/tools/list-approved-screens.mjs {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }}"
-            output_format: json
-
-          - id: build-section-screens
-            type: fan-out
-            items: "{{ steps.load-section-screens.output.data }}"
-            max_concurrency: 2
-            step:
-              id: build-one-section-screen
-              type: shell
-              run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots"
-
-          - id: section-deck-data-gate
-            type: shell
-            run: "node workflow/tools/check-deck-data.mjs --script {{ inputs.courseware_script }} --url \"{{ inputs.deck_url }}\" --shell {{ inputs.shell }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }}"
-
-          - id: section-shell-gate
-            type: shell
-            run: "node workflow/tools/check-shell.mjs --shell {{ inputs.shell }} --site {{ inputs.site_dir }} --require-art"
-
-          - id: section-shell-art-gate
-            type: shell
-            run: "node workflow/tools/check-shell-art.mjs --shell {{ inputs.shell }} --art {{ inputs.art_dir }}/art-manifest.json --site {{ inputs.site_dir }} --require-all"
-
-          - id: section-source-fidelity-gate
-            type: shell
-            run: "node workflow/tools/check-source-fidelity.mjs --source {{ inputs.shell_source }} --source-only"
-
-          - id: section-rendered-check
-            type: shell
-            run: "node workflow/tools/check-rendered-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --section {{ steps.advance_section.output.data.section.id }} --screenshots screenshots"
-
-          - id: section-baseline-gate
-            type: shell
-            run: "node workflow/tools/check-baseline.mjs screenshots --baseline \"{{ inputs.baseline_dir }}\" --include \"{{ steps.advance_section.output.data.section.slides | join(',') }}\""
-
-          - id: section-script-gate
-            type: shell
-            run: "node workflow/tools/check-script.mjs {{ inputs.courseware_script }} {{ inputs.content_pack }} {{ inputs.style_pack }} {{ inputs.component_registry }}"
-
-          # A page may be built faithfully while still dropping the concept it
-          # was supposed to introduce. Gate this page against the ledger before
-          # its rendering can be approved.
-          - id: section-concepts-gate
-            type: shell
-            run: "node workflow/tools/check-concepts.mjs {{ inputs.courseware_script }} {{ inputs.content_pack }} {{ inputs.storyboard }} --concepts {{ inputs.concepts }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }}"
-
-          # Check the implemented deck, not only the script: a relettering or a
-          # hand edit during implementation must not restore the all-A order.
-          - id: section-quiz-keys-gate
-            type: shell
-            run: "node workflow/tools/check-quiz-keys.mjs {{ inputs.deck_data }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }}"
-
-          - id: section-parity-gate
-            type: shell
-            run: "node workflow/tools/script-to-storyboard.mjs {{ inputs.courseware_script }} --check {{ inputs.storyboard }}"
-
-          - id: section-overflow-gate
-            type: shell
-            run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --script {{ inputs.courseware_script }} --start {{ steps.advance_section.output.data.section.start }} --pages {{ steps.advance_section.output.data.section.count }}"
-
-          - id: self-review-page
-            type: prompt
-            integration: "{{ inputs.integration }}"
-            prompt: |
-              AI self-review before human review (stage: page-{{ steps.advance_section.output.data.section.id }}).
-              Page: {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }}
-              Slide: {{ steps.advance_section.output.data.section.slides | join(', ') }}
-              Read this page's block in courseware.md ({{ inputs.courseware_script }}), storyboard.yml,
-              the content pack, component-plan.md, the registry, this page's screenshots under screenshots/,
-              narration.json, the audio files under {{ inputs.audio_dir }}, the assembled site under
-              {{ inputs.site_dir }} (build-manifest.json, shell-art-data.js), and the results of
-              section-shell-build, section-rendered-check, section-baseline-gate, section-script-gate,
-              section-quiz-keys-gate, section-parity-gate, section-overflow-gate, section-narration-gate,
-              section-deck-data-gate, section-shell-gate, section-shell-art-gate and
-              section-source-fidelity-gate.
-              Check the shell build: build-manifest.json records no missingArt; shell-art-data.js maps
-              every illustration slot to assets/generated/ and never to reference/; the cover/end art is
-              this lesson's generated character, not the shell's inline reference mascot; the site
-              contains no shell reference crops.
-              Check source fidelity: copied CSS/JS hashes unchanged, inline base CSS identical,
-              reference geometry/DOM selectors/animation present, and no page-level style overrides
-              in deck.json or index.html. Check each slide: rendered screen text/code/output matches the script verbatim; interaction
-              success/error feedback, completion and reset match the interaction design; no placeholder;
-              no overflow/clipping/crowding; components are registered core versions or the staged
-              components built for this page; no personal data.
-              Check interaction-first design on the rendered page: the screen's interaction form
-              follows its content learning action; a non-watch page is not rendered as a static
-              table/code page with only a next button; a watch page's static reason still holds after
-              rendering. The rendered evidence must be the one declared in interaction.evidence
-              (clicked cell, filled grid, predicted next cell, modified matrix), not merely an animation
-              the student watched. If a page says click/type/step/fill in the script but the rendered
-              page only shows static content, it is blocking.
-              Component review: this page's unregistered components are
-              {{ steps.load-page-components.output.data.unregistered | join(', ') }} (empty means none).
-              If non-empty, read review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.md and the staged packages
-              under {{ inputs.component_staging }}/<id>/, then confirm on the rendered page that each
-              component behaves as its brief says, that its interaction produces the declared evidence,
-              and that the page did not silently render the static fallback. Include the component
-              verdict in this page review; the page gate also approves these components into core.
-              Deck data must match storyboard id/title/order and use only reference renderer types or
-              registered component ids; no raw HTML/CSS/JS fields.
-              Answer-position gate: read the section-quiz-keys-gate result and record the
-              A/B/C/D distribution and each question's correct display position. If one position
-              dominates, reorder options and update letter-specific feedback/narration; do not
-              accept the gate by adding a note. Also check the rendered quiz shows the same
-              option order and markers as the deck.
-              Density / segmenting gate: run
-              `node workflow/tools/density-report.mjs {{ inputs.courseware_script }} {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --json`
-              and copy its `signals` unchanged into the `density` array. For every slide declare its
-              semanticUnits (label + evidence): one slide should carry one new semantic boundary.
-              Different forms of one rule, side-by-side comparison, or review/self-check of
-              already-taught content count as one unit; multiple independent teaching points are
-              blocking — split the slide or mark `exception` with a written reason. Check the rendered
-              screen as well: a screen can be under the overflow limit and still be overcrowded.
-              Core-concept gate: read the concept ledger ({{ inputs.concepts }}) and the
-              section-concepts-gate result. If this page introduces a concept, confirm the rendered
-              page shows its term, definition and every mustAppear phrase as readable screen text;
-              the concept card must not be hidden behind an interaction step, and must survive the
-              static fallback. If this page reinforces or assesses a concept, confirm it actually
-              uses the concept. Record a `concepts` entry for every concept related to this page
-              (conceptId, verdict, evidence, slideIds); a missing or `gap` entry is blocking.
-              Check narration: the page has raw and spoken text for every voice; spoken text contains no
-              markdown, backticks, [暂停], TODO/TBD; audio files exist and are non-empty; the player and
-              voice selector work; the outline lists every page and jumps correctly.
-              Note in the review that audio quality still needs a human audition and that narration uses
-              Microsoft Edge TTS (an unofficial Edge endpoint, suitable for local/prototype use).
-              If a safe implementation fix is needed, make it and rerun the affected gates, then recheck
-              the screenshots. Do not edit slides outside this page.
-              Write review/self-review-page-{{ steps.advance_section.output.data.section.id }}.json and .md.
-              Verdict pass only if no blocking issues; otherwise stop.
-
-          - id: check-self-review-page
-            type: shell
-            run: "node workflow/tools/check-self-review.mjs review/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }}"
+                run: "node workflow/tools/check-self-review.mjs review/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }}"
 
           - id: review-page
-            type: gate
+            type: gui-gate
             message: "Review rendered page {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }} ({{ steps.advance_section.output.data.section.slides | join(', ') }}). Components: {{ steps.load-page-components.output.data.summary }}. Open the courseware at {{ inputs.deck_url }} and use the outline to jump to this page; per-page screenshots and the self-review are in the attached file. Check script fidelity, interaction evidence, no overflow, narration playback/voice selection, and the outline. Approving this page also approves its new components into core; reject to rework just this page (nothing is registered)."
             show_file: "review/self-review-page-{{ steps.advance_section.output.data.section.id }}.md"
             options: [approve, reject]
@@ -999,7 +1029,7 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-alpha.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
 
   - id: review-alpha
-    type: gate
+    type: gui-gate
     message: "Review Alpha: whole-deck screenshots, baseline diffs, overflow, section approvals, and gate results."
     show_file: "review/self-review-alpha.md"
     options: [approve, reject]
@@ -1028,7 +1058,7 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-beta.json"
 
   - id: review-beta
-    type: gate
+    type: gui-gate
     message: "Review Beta: converge report, trial evidence, issue triage."
     show_file: "review/self-review-beta.md"
     options: [approve, reject]
@@ -1082,7 +1112,7 @@ steps:
     run: "node workflow/tools/check-self-review.mjs review/self-review-gold.json --concepts {{ inputs.concepts }}"
 
   - id: gold
-    type: gate
+    type: gui-gate
     message: "Gold sign-off: regression, accessibility, waivers, final teacher approval."
     show_file: "review/self-review-gold.md"
     options: [approve, reject]

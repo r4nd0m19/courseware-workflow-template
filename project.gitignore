@@ -2,6 +2,10 @@
 node_modules/
 workflow/tools/node_modules/
 workflow/tools/chrome-path.txt
+.zcode/
+workflow/mcp/panel.html
+.specify/workflows/steps/
+review/gui-gates/
 prototype/shell-site/
 prototype/dist/
 prototype/site/audio/

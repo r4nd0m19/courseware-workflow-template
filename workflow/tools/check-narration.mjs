@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fail, ok, readData, validateWithSchema } from './lib.mjs'
@@ -55,7 +56,7 @@ try {
 }
 
 const schemaCheck = validateWithSchema(
-  new URL('../schemas/narration.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/narration.schema.json', import.meta.url)),
   manifest,
 )
 for (const error of schemaCheck.errors) errors.push(`schema ${error}`)

@@ -26,6 +26,8 @@ Options:
   --force                       Re-copy workflow/ and re-init if needed
   --skip-deps                   Skip npm install for workflow/tools
   --no-smoke                    Skip post-install smoke tests
+  --zcode                       Write the ZCode MCP server entry even without .zcode/
+  --no-zcode                    Do not touch .zcode/config.json
   --dry-run                     Print commands without executing
   -h, --help                    Show this help
 
@@ -45,6 +47,8 @@ const force = flag('--force')
 const skipDeps = flag('--skip-deps')
 const noSmoke = flag('--no-smoke')
 const dryRun = flag('--dry-run')
+const zcodeRequested = flag('--zcode')
+const noZcode = flag('--no-zcode')
 
 // Ensure the project root exists before any command runs with it as cwd.
 if (!dryRun) fs.mkdirSync(projectRoot, { recursive: true })
@@ -102,12 +106,118 @@ function copyWorkflow() {
   fs.cpSync(workflowSource, dest, {
     recursive: true,
     filter: (src) => {
-      const rel = path.relative(workflowSource, src)
-      return !rel.split(path.sep).includes('node_modules') && !rel.split(path.sep).includes('.venv')
+      // Windows Node passes `\\?\`-prefixed paths to the filter; path.relative
+      // against the plain source root would return the absolute path instead
+      // of the relative one. Strip the prefix before comparing.
+      const normalize = (value) => {
+        let p = String(value)
+        if (process.platform === 'win32' && p.startsWith('\\\\?\\')) {
+          p = p.slice(4)
+          if (p.startsWith('UNC\\')) p = `\\\\${p.slice(4)}`
+        }
+        return path.resolve(p)
+      }
+      const rel = path.relative(normalize(workflowSource), normalize(src))
+      const parts = rel.split(path.sep)
+      if (path.isAbsolute(rel) || parts.includes('..')) return false
+      return !parts.includes('node_modules') && !parts.includes('.venv')
     },
   })
   console.log(`copied workflow/ -> ${dest}`)
   return dest
+}
+
+// Spec Kit loads custom step types from .specify/workflows/steps/<dir>/ before
+// `workflow add` validates a YAML, so the gui-gate package must be installed
+// first. Copy regular files: Spec Kit refuses symlinked step packages.
+function installGuiGateStep() {
+  const src = path.join(workflowDir, 'steps', 'gui-gate')
+  const dest = path.join(projectRoot, '.specify', 'workflows', 'steps', 'gui-gate')
+  const files = ['step.yml', '__init__.py']
+  for (const name of files) {
+    if (!fs.existsSync(path.join(src, name))) {
+      console.error(`gui-gate step package is incomplete: missing ${path.join(src, name)}`)
+      process.exit(1)
+    }
+  }
+  if (dryRun) {
+    console.log(`would install gui-gate step -> ${dest}`)
+    return
+  }
+  fs.rmSync(dest, { recursive: true, force: true })
+  fs.mkdirSync(dest, { recursive: true })
+  for (const name of files) fs.copyFileSync(path.join(src, name), path.join(dest, name))
+  console.log(`installed gui-gate step -> ${dest}`)
+}
+
+function resolveSpecifyBin() {
+  if (process.env.SPECIFY_BIN) return process.env.SPECIFY_BIN
+  const command = process.platform === 'win32' ? 'where.exe' : 'which'
+  const arg = process.platform === 'win32' ? 'specify.exe' : 'specify'
+  const found = capture(command, [arg])
+  if (found.status === 0 && found.stdout) return found.stdout.split(/\r?\n/)[0].trim()
+  const local = path.join(
+    os.homedir(),
+    '.local',
+    'bin',
+    process.platform === 'win32' ? 'specify.exe' : 'specify',
+  )
+  return fs.existsSync(local) ? local : ''
+}
+
+// The approval panel is an MCP App served by a project-local MCP server. ZCode
+// reads workspace servers from .zcode/config.json under mcp.servers. Merge our
+// entry instead of replacing the file: a workspace may host other servers.
+function configureZcode() {
+  if (noZcode) {
+    console.log('skipped ZCode MCP configuration (--no-zcode)')
+    return
+  }
+  const zcodeDir = path.join(projectRoot, '.zcode')
+  if (!zcodeRequested && !fs.existsSync(zcodeDir)) {
+    console.log('no .zcode/ directory; skipped ZCode MCP configuration (use --zcode to create it)')
+    return
+  }
+  const configPath = path.join(zcodeDir, 'config.json')
+  let config = {}
+  if (fs.existsSync(configPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    } catch (error) {
+      console.error(`refusing to overwrite unparseable ${configPath}: ${error.message}`)
+      process.exit(1)
+    }
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      console.error(`refusing to overwrite ${configPath}: expected a JSON object`)
+      process.exit(1)
+    }
+  }
+  const serverScript = path.join(workflowDir, 'mcp', 'approval-server.mjs')
+  const env = { COURSEWARE_PROJECT_ROOT: projectRoot }
+  const specifyBin = resolveSpecifyBin()
+  if (specifyBin) env.SPECIFY_BIN = specifyBin
+  const server = {
+    command: process.execPath,
+    args: [serverScript],
+    env,
+    protocolVersion: 'legacy',
+  }
+  config.mcp = config.mcp && typeof config.mcp === 'object' ? config.mcp : {}
+  config.mcp.servers =
+    config.mcp.servers && typeof config.mcp.servers === 'object' ? config.mcp.servers : {}
+  config.mcp.servers['courseware-approval'] = server
+  if (dryRun) {
+    console.log(`would configure ZCode MCP server courseware-approval in ${configPath}`)
+    return
+  }
+  fs.mkdirSync(zcodeDir, { recursive: true })
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`)
+  console.log(`configured ZCode MCP server courseware-approval -> ${configPath}`)
+  if (!specifyBin) {
+    console.warn(
+      'SPECIFY_BIN was not found; the MCP server will look for specify when it resumes a run.',
+    )
+  }
 }
 
 if (Number(process.versions.node.split('.')[0]) < 18) {
@@ -115,10 +225,12 @@ if (Number(process.versions.node.split('.')[0]) < 18) {
   process.exit(2)
 }
 
-const spec = capture('specify', ['--version'], { cwd: process.cwd() })
+const specifyBin = process.env.SPECIFY_BIN || 'specify'
+const spec = capture(specifyBin, ['--version'], { cwd: process.cwd() })
 if (spec.status !== 0) {
-  console.error('Spec Kit CLI (specify) not found on PATH.')
+  console.error(`Spec Kit CLI not found (${specifyBin}).`)
   console.error('Install it first, e.g.: pipx install specify-cli')
+  console.error('If it is installed but not on PATH, set SPECIFY_BIN to the specify executable.')
   process.exit(2)
 }
 console.log(`Spec Kit: ${spec.stdout || 'detected'}`)
@@ -131,7 +243,7 @@ const specifyEnv = { SPECIFY_INIT_DIR: projectRoot }
 
 log('Spec Kit project')
 if (!fs.existsSync(path.join(projectRoot, '.specify'))) {
-  run('specify', ['init', '.', '--integration', integration, '--non-interactive', '--force'])
+  run(specifyBin, ['init', '.', '--integration', integration, '--non-interactive', '--force'])
 } else {
   console.log(`.specify already exists; keeping current integration (requested: ${integration})`)
   console.log(
@@ -139,18 +251,37 @@ if (!fs.existsSync(path.join(projectRoot, '.specify'))) {
   )
 }
 
+log('Install gui-gate step type')
+installGuiGateStep()
+
 log('Install preset')
-run('specify', ['preset', 'add', '--dev', presetDir], { env: specifyEnv })
+// `preset add` refuses to replace an installed preset. `preset update` is the
+// supported remove-and-add path in both Spec Kit 1.0.x and 1.2.x, so use it
+// when re-running the installer.
+const presetInstalled = fs.existsSync(path.join(projectRoot, '.specify', 'presets', 'courseware'))
+const presetArgs = presetInstalled
+  ? ['preset', 'update', 'courseware', '--dev', presetDir]
+  : ['preset', 'add', '--dev', presetDir]
+run(specifyBin, presetArgs, { env: specifyEnv })
 
 log('Install workflow')
-run('specify', ['workflow', 'add', '--dev', workflowYaml], { env: specifyEnv })
+run(specifyBin, ['workflow', 'add', '--dev', workflowYaml], { env: specifyEnv })
 
 if (!skipDeps) {
   log('Install workflow tool dependencies')
   const hasLock = fs.existsSync(path.join(toolsDir, 'package-lock.json'))
   run('npm', [hasLock ? 'ci' : 'install', '--no-audit', '--no-fund'], { cwd: toolsDir })
+
+  log('Build approval panel')
+  run(process.execPath, [path.join(workflowDir, 'mcp', 'build-panel.mjs')])
 } else {
-  console.log('skipped tool dependencies (--skip-deps)')
+  console.log('skipped tool dependencies and panel build (--skip-deps)')
+  if (!fs.existsSync(path.join(workflowDir, 'mcp', 'panel.html'))) {
+    console.warn(
+      'workflow/mcp/panel.html is missing; GUI gates cannot render until you run ' +
+        '`npm ci --prefix workflow/tools` and `node workflow/mcp/build-panel.mjs`.',
+    )
+  }
 }
 
 log('Detect Chromium for overflow gate')
@@ -179,10 +310,13 @@ if (chrome) {
   console.warn(`  cd ${toolsDir} && npx playwright install chromium`)
 }
 
+log('Configure ZCode approval panel')
+configureZcode()
+
 if (!noSmoke) {
   log('Smoke tests')
   run(process.execPath, [path.join(toolsDir, 'smoke-test.mjs')])
-  run('specify', ['workflow', 'info', 'courseware-production'], { env: specifyEnv })
+  run(specifyBin, ['workflow', 'info', 'courseware-production'], { env: specifyEnv })
 } else {
   console.log('skipped smoke tests (--no-smoke)')
 }
@@ -194,7 +328,9 @@ console.log(`Preset:     ${presetDir}`)
 console.log(`Workflow:   ${workflowYaml}`)
 console.log(`Tools:      ${toolsDir}`)
 console.log('\nNext:')
-console.log('  1. Put the content reference through R0-C to produce content-pack.json')
-console.log('  2. Run: node workflow/tools/run-workflow.mjs courseware-production -i integration=' + integration + ' -i lesson=... -i content_pack=... -i courseware_script=... -i concepts=... -i review_sections=... -i component_registry=registry/index.json -i storyboard=... -i style_pack=... -i deck_url=... -i page_count=...')
-console.log('  3. The workflow creates/validates registry/, writes courseware.md via speckit.script, and projects storyboard.yml from it.')
-console.log('  4. Keep workflow/tools/node_modules and chrome-path.txt out of git.')
+console.log('  1. Reload the ZCode window (or its MCP servers) so courseware-approval loads.')
+console.log('  2. Put the content reference through R0-C to produce content-pack.json')
+console.log('  3. Run: node workflow/tools/run-workflow.mjs courseware-production -i integration=' + integration + ' -i lesson=... -i content_pack=... -i courseware_script=... -i concepts=... -i review_sections=... -i component_registry=registry/index.json -i storyboard=... -i style_pack=... -i deck_url=... -i page_count=...')
+console.log('  4. At a gate the wrapper exits 3; the agent calls courseware_gate_open and a human clicks in the panel.')
+console.log('  5. The workflow creates/validates registry/, writes courseware.md via speckit.script, and projects storyboard.yml from it.')
+console.log('  6. Keep workflow/tools/node_modules, review/gui-gates, workflow/mcp/panel.html and chrome-path.txt out of git.')

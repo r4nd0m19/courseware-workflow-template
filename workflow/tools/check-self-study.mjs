@@ -8,6 +8,7 @@
 //
 // This tool never edits the script. apply-self-study-audit.mjs does that only
 // after the human gate.
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 import path from 'node:path'
@@ -39,7 +40,7 @@ try {
   process.exit(1)
 }
 const schemaCheck = validateWithSchema(
-  new URL('../schemas/self-study-audit.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/self-study-audit.schema.json', import.meta.url)),
   data,
 )
 for (const error of schemaCheck.errors) errors.push(`schema ${error}`)

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
@@ -70,7 +71,7 @@ const storyboard = {
 }
 
 const schemaCheck = validateWithSchema(
-  new URL('../schemas/storyboard.schema.json', import.meta.url).pathname,
+  fileURLToPath(new URL('../schemas/storyboard.schema.json', import.meta.url)),
   storyboard,
 )
 if (!schemaCheck.ok) {
