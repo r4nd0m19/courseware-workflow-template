@@ -1,11 +1,12 @@
-"""Human review gate answered from the ZCode MCP App panel.
+"""Hash-bound human review gate answered from chat.
 
 This step is a drop-in replacement for Spec Kit's built-in ``gate`` step with
 one addition: when the workflow runs without a TTY (the normal case for an
 agent), it writes a hash-bound *pending request* under ``review/gui-gates/``
-and pauses. The MCP server in ``workflow/mcp/approval-server.mjs`` renders that
-request in ZCode's chat as an MCP App panel; only the panel can write the
-matching verdict, and the workflow resumes with that verdict.
+and pauses. The agent shows the review file/link to the teacher, asks for an
+explicit approve/reject, records that answer with
+``workflow/tools/gate-review.mjs decide``, and resumes the run. The verdict is
+bound to the pending request and consumed exactly once by this step.
 
 Design rules:
 
@@ -18,11 +19,13 @@ Design rules:
   self-review must be re-run rather than silently approved.
 * ``verdict_input`` is rejected outright. That built-in feature reads a value
   from ``resume -i`` and would let an agent cast the human's vote.
-* The panel token lives only in the MCP server and in the rendered panel; the
-  nonce is per request. A tool call without both is refused by the server.
+* The per-request ``nonce`` prevents a verdict from being replayed against a
+  different gate. The human answer itself is captured by the agent's native
+  question UI (or chat); the agent must not call ``decide`` before the teacher
+  answers.
 
 The step still behaves like ``gate`` in an interactive terminal, so a teacher
-who runs the workflow directly can answer without ZCode.
+who runs the workflow directly can answer without a chat harness.
 """
 
 from __future__ import annotations
@@ -44,11 +47,11 @@ from specify_cli.workflows.expressions import evaluate_expression
 SCHEMA_VERSION = "1.0"
 STATE_DIR_ENV = "COURSEWARE_GATE_STATE_DIR"
 DEFAULT_STATE_DIR = "review/gui-gates"
-PANEL_TOOL = "courseware_gate_open"
+REVIEW_TOOL = "workflow/tools/gate-review.mjs"
 
 #: Control characters except tab: C0 (including LF), DEL, and C1. Stripped from
 #: anything shown in the terminal fallback so review material cannot inject
-#: ANSI escapes. The GUI panel uses textContent and is not affected.
+#: ANSI escapes. The chat renderer escapes its own output.
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f]")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _NONCE_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -68,8 +71,9 @@ _SKIP_DIRS = {
     ".ruff_cache",
 }
 
-#: How many bytes of a review file are sent to the panel. The panel is a
-#: review aid, not a full document reader; the Review file remains the source.
+#: How many bytes of a review file are kept in the pending request. The excerpt
+#: is a review aid, not a full document reader; the review file remains the
+#: source of truth.
 MAX_EXCERPT_BYTES = 24 * 1024
 MAX_EXCERPT_LINES = 400
 
@@ -130,7 +134,7 @@ def _relative(project_root: Path, path: Path) -> str:
 
 
 class GuiGateStep(StepBase):
-    """Hash-bound review gate that pauses for the MCP App panel."""
+    """Hash-bound review gate that pauses for an explicit human answer."""
 
     type_key = "gui-gate"
 
@@ -173,7 +177,8 @@ class GuiGateStep(StepBase):
         if "verdict_input" in config:
             errors.append(
                 f"gui-gate step {config.get('id', '?')!r}: 'verdict_input' is not "
-                "supported; a human verdict must come from the approval panel."
+                "supported; a human verdict must come from the teacher's "
+                "explicit answer recorded by workflow/tools/gate-review.mjs."
             )
         for key in ("show_file",):
             value = config.get(key)
@@ -259,7 +264,7 @@ class GuiGateStep(StepBase):
                 output=output,
                 error=(
                     f"gui-gate {step_id!r}: 'verdict_input' is not supported. A human "
-                    "verdict must be recorded from the approval panel."
+                    "verdict must be recorded from the teacher's explicit answer."
                 ),
             )
 
@@ -283,7 +288,7 @@ class GuiGateStep(StepBase):
                 step_id=step_id,
             )
 
-        return self._execute_gui(
+        return self._execute_review_gate(
             config=config,
             context=context,
             project_root=project_root,
@@ -296,8 +301,8 @@ class GuiGateStep(StepBase):
             output=output,
         )
 
-    # ------------------------------------------------------------- GUI path
-    def _execute_gui(
+    # -------------------------------------------------------- Chat review path
+    def _execute_review_gate(
         self,
         *,
         config: dict[str, Any],
@@ -377,7 +382,7 @@ class GuiGateStep(StepBase):
                     options=options,
                     on_reject=on_reject,
                     output=output,
-                    mode="gui",
+                    mode="review",
                     step_id=step_id,
                     state_dir=state_dir,
                     project_root=project_root,
@@ -462,7 +467,7 @@ class GuiGateStep(StepBase):
 
         if rejected and on_reject == "abort":
             output["aborted"] = True
-            if mode == "gui" and state_dir is not None and gate_key:
+            if mode == "review" and state_dir is not None and gate_key:
                 self._update_pending(
                     state_dir / "pending" / f"{gate_key}.json",
                     status="rejected",
@@ -476,9 +481,9 @@ class GuiGateStep(StepBase):
             )
 
         if rejected and on_reject == "retry":
-            if mode == "gui" and state_dir is not None and project_root is not None:
+            if mode == "review" and state_dir is not None and project_root is not None:
                 # The old request is consumed; open a fresh one with a new
-                # nonce so the panel must ask the human again.
+                # nonce so the agent must ask the human again.
                 fresh = self._new_request(
                     run_id=run_id,
                     step_id=step_id,
@@ -506,7 +511,7 @@ class GuiGateStep(StepBase):
             return StepResult(status=StepStatus.PAUSED, output=output)
 
         # Approve, an extra configured option, or reject with on_reject=skip.
-        if mode == "gui" and state_dir is not None and gate_key:
+        if mode == "review" and state_dir is not None and gate_key:
             self._update_pending(
                 state_dir / "pending" / f"{gate_key}.json",
                 status="consumed",
@@ -793,8 +798,8 @@ class GuiGateStep(StepBase):
         gate_key = request["gateKey"]
         return {
             "schemaVersion": SCHEMA_VERSION,
-            "mode": "gui",
-            "panelTool": PANEL_TOOL,
+            "mode": "review",
+            "reviewTool": REVIEW_TOOL,
             "runId": request["runId"],
             "stepId": request["stepId"],
             "gateKey": gate_key,
@@ -803,6 +808,9 @@ class GuiGateStep(StepBase):
             "requestFile": _relative(project_root, state_dir / "pending" / f"{gate_key}.json"),
             "stateDir": _relative(project_root, state_dir),
             "showFile": request.get("showFile"),
+            "reviewFile": request.get("reviewFile"),
+            "links": request.get("links") or [],
+            "files": request.get("files") or [],
             "fileCount": len(request.get("files") or []),
             "options": request.get("options") or [],
             "onReject": request.get("onReject"),

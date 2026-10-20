@@ -1,12 +1,13 @@
 step:
   id: gui-gate
   type_key: gui-gate
-  name: GUI approval gate
-  version: 1.0.0
+  name: Human review gate
+  version: 2.0.0
   description: >-
-    Human review gate answered from the ZCode MCP App panel. In an interactive
-    terminal it behaves like the built-in gate; in a non-interactive agent run
-    it writes a hash-bound pending request under review/gui-gates/ and pauses
-    until the panel writes a matching verdict.
+    Hash-bound human review gate. In an interactive terminal it behaves like
+    the built-in gate; in a non-interactive agent run it writes a pending
+    request under review/gui-gates/ and pauses. The agent shows the review
+    file/link to the teacher, records the teacher's explicit answer with
+    workflow/tools/gate-review.mjs, and resumes the workflow.
   author: courseware-workflow
   license: MIT

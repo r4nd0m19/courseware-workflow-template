@@ -152,9 +152,6 @@ log "安装工具依赖"
   npm ci --no-audit --no-fund
 )
 
-log "构建审核面板"
-node "$TARGET/workflow/mcp/build-panel.mjs"
-
 cat > "$TMP/detect-chrome.mjs" <<'JS'
 import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -217,8 +214,7 @@ cat <<EOF
 
 下一步:
   1. 在 Codex 中重新打开该项目，或执行 Force Reload Skills，确认能看到 speckit-* 技能。
-  2. 如果使用 ZCode 图形界面审核：确认项目里有 .zcode/config.json 的 courseware-approval server；重载窗口后，gate 会以内联面板显示，老师点击即可，不需要终端。
-  3. 本模板只含工作流，不含具体课件的壳、注册表、研究资料和插画；把本项目的 shell/style pack 放到 shells/ 后再跑完整流程。
-  4. 完整流程示例见 AGENTS.md；Codex 中运行 workflow 时加 -i integration=codex，并使用 node workflow/tools/run-workflow.mjs（退出码 3 = 停在人工 gate；GUI gate 由 agent 调用 courseware_gate_open，老师在面板点击）。
-  5. 更新工作流: bash bootstrap-codex-courseware.sh --force
+  2. 本模板只含工作流，不含具体课件的壳、注册表、研究资料和插画；把本项目的 shell/style pack 放到 shells/ 后再跑完整流程。
+  3. 完整流程示例见 AGENTS.md；Codex 中运行 workflow 时加 -i integration=codex，并使用 node workflow/tools/run-workflow.mjs（退出码 3 = 停在人工 gate）。agent 把审核文件/链接发给老师，用原生提问拿到 approve/reject 后运行 gate-review.mjs decide，再用 run-workflow.mjs resume 继续。
+  4. 更新工作流: bash bootstrap-codex-courseware.sh --force
 EOF

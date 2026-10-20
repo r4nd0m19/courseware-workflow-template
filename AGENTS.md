@@ -8,16 +8,22 @@
 - Claude Code 调用命令用 `/speckit-*`；Codex 用 `$speckit-*`。不要手动编辑这两个目录里的 `SKILL.md`，它们由 `specify preset add` / `specify integration use` 生成。
 - 工作流的 `integration` 输入默认 `auto`（跟随 `.specify/integration.json` 的项目默认）。在 Codex 中运行完整流程时显式传 `-i integration=codex`，不要修改默认集成。
 - 非交互/脚本化运行必须通过 `node workflow/tools/run-workflow.mjs`，不要直接调用 `specify workflow run`。包装器会忽略非 TTY stdin，把 Spec Kit 的 `paused` 变成退出码 3，并打印 gate 的审核请求（逐页 gate 含课件 URL）与审核文件路径；直接调用 `specify workflow run` 在 gate 处会以退出码 0 返回 `paused`，容易被误判为成功。
-- 看到退出码 3 表示工作流停在人工审核闸门。若输出里出现 `courseware_gate_open`，这是 GUI 闸门：停止，调用 MCP 工具 `courseware_gate_open`（参数 `{"runId":"<run_id>"}`）把审核面板展示给老师，然后等待。老师在 ZCode 面板里点击选项；面板写入与 run/step/nonce/证据哈希绑定的 verdict，MCP 服务器随即自动 `resume` 该 run。不要运行 `specify workflow resume`，不要传 `-i`，不要调用 `courseware_gate_verdict`——agent 不能代答。
-- 只有内置 gate（输出里没有 `courseware_gate_open`）或老师显式在交互式终端运行时，才走终端回答；`node workflow/tools/run-workflow.mjs resume <run_id>` 保留为后备路径。
+- 看到退出码 3 表示工作流停在人工审核闸门。包装器会打印 `Review file:`（绝对路径）、`Review links:`（课件/预览 URL）、gate options，以及 `gate-review.mjs show/decide` 与 `run-workflow.mjs resume` 命令。
+- 每次人工 gate 都按同一顺序处理：
+  1. 运行 `node workflow/tools/gate-review.mjs show <run_id>`（或直接读包装器输出）拿到待审 gate 与审核文件。
+  2. 把审核文件/链接发给老师：脚本审核给 `courseware.md` 的绝对路径；页面审核给可运行的课件 URL + 本页自审文件。
+  3. 用当前 harness 的原生提问/选择 UI 让老师明确选择 approve / reject：ZCode、Claude Code 用 `AskUserQuestion`，Codex 用其原生 user-input / approval 提示。不要用普通聊天消息代替原生选择；只有 harness 确实没有原生提问 UI 时才退回聊天提问。
+  4. **只有老师明确回答后**，才运行 `node workflow/tools/gate-review.mjs decide <run_id> --step <step> --choice <approve|reject> --by teacher`。不要在老师回答前调用 `decide`，不要替老师选择。
+  5. 运行 `node workflow/tools/run-workflow.mjs resume <run_id>`，把输出继续处理到下一个 gate 或完成。不要直接调用 `specify workflow resume`，不要传 `-i`。
+- 内置 gate（输出里没有 `Review file:` / `Gate options:`）或老师显式在交互式终端运行时，才走终端回答；`node workflow/tools/run-workflow.mjs resume <run_id>` 仍是统一恢复入口。
 - 非交互运行不需要额外加 `</dev/null`；包装器已把 stdin 置空。交互式恢复时保留 TTY，gate 才会显示选项。
 
-### GUI 审核闸门（ZCode MCP App 面板）
+### 人工审核闸门（文件地址 + 原生选择）
 
-- 工作流里 13 个人工 gate 都是 `gui-gate`（定义在 `workflow/steps/gui-gate/`）。非 TTY 运行时它把审核请求写到 `review/gui-gates/`，并停在 `paused`；面板点击后由 `workflow/mcp/approval-server.mjs` 自动恢复。
-- 安装 `workflow/install.mjs` 会把 step 包复制到 `.specify/workflows/steps/gui-gate/`，构建 `workflow/mcp/panel.html`，并把 `courseware-approval` 合并进 `.zcode/config.json`（保留其他 server）。改完配置要重载 ZCode 窗口/MCP servers。
-- 面板 token 只出现在 MCP resource 里，不出现在任何工具结果或日志中；verdict 绑定 `runId` / `stepId` / `gateKey` / `digest` / `nonce`，且一次性消费。`review/gui-gates/` 是运行时状态，不要提交。
-- agent 不得直接写 `review/gui-gates/verdicts/*.json`、不得篡改 pending 记录、不得用 `-i` 预填 gate 答案。人工审核点必须由老师在本人的 ZCode 面板里完成。
+- 工作流里 13 个人工 gate 都是 `gui-gate`（类型名保留，定义在 `workflow/steps/gui-gate/`）。非 TTY 运行时它把审核请求写到 `review/gui-gates/`，并停在 `paused`。
+- 安装 `workflow/install.mjs` 会把 step 包复制到 `.specify/workflows/steps/gui-gate/`。旧版本安装的 `courseware-approval` MCP server 条目会被移除；审核不再依赖 MCP 面板。
+- verdict 绑定 `runId` / `stepId` / `gateKey` / `digest` / `nonce`，一次性消费。`review/gui-gates/` 是运行时状态，不要提交。
+- agent 不得手写 `review/gui-gates/verdicts/*.json`、不得篡改 pending 记录、不得用 `-i` 预填 gate 答案。verdict 只能由 `gate-review.mjs decide` 在老师明确回答后记录。
 
 完整工作流示例（参数按当前 lesson 替换）：
 
@@ -46,8 +52,8 @@ node workflow/tools/run-workflow.mjs courseware-production \
 - 批准与**当时的文本**绑定。任何对 `courseware.md` 的编辑（包括只改旁白、制作字段或 frontmatter）都会使账本失效；必须重新走 `review-script` 人工 gate。
 - 所有下游工具（component-plan、narration、storyboard 修订、组件、deck、截图、冻结）都会重新校验账本及其 gate run 状态。`node workflow/tools/check-script-approval.mjs <courseware.md>` 失败就是阻断项；不要通过传别的账本、改判据或删除检查绕过。
 - 工作流在 `approve-script` 之后立刻运行 `verify-script-approval`，并用 `--expect-run` 要求账本来自当前 run；不匹配会让整次运行失败，而不是等到几阶段之后。
-- 本地文件无法证明“某个真人按了键”：能改文件的人也能改账本。上面的检查保证正常路径不会误放行、暂停的 gate 不能被当成批准。GUI 闸门把点击路径收进 ZCode 面板：agent 的工具里没有 verdict 写入口，token 也不出现在工具结果里；但真正的信任边界仍是老师在自己面前的 ZCode 面板点击，agent 不代答、不伪造 verdict。
-- 页循环内的 `review-page` 有 resume guard：Spec Kit 恢复嵌套步骤时会重跑父 body；`check-pending-gui-gate.mjs` 用 wrapper 设置的 `SPECKIT_WORKFLOW_RUN_ID` 认出同一 run 的 pending/decided gate，跳过页重建与自审后再进入 gate，避免 `reviewedAt` 改写使已批准的 digest 失效。不要手工删 pending/verdict、改 run 状态或绕过 guard；guard 不是批准来源，verdict 仍由面板按 token/nonce/digest 写入并一次性消费。
+- 本地文件无法证明“某个真人按了键”：能改文件的人也能改账本。上面的检查保证正常路径不会误放行、暂停的 gate 不能被当成批准。`gate-review.mjs decide` 只在老师明确回答后由 agent 调用，verdict 记录 `source: chat` / `decidedBy: teacher` 并绑定 run/step/digest/nonce；真正的信任边界是老师在自己面前的 harness 里做出的选择，agent 不代答、不伪造 verdict。
+- 页循环内的 `review-page` 有 resume guard：Spec Kit 恢复嵌套步骤时会重跑父 body；`check-pending-gui-gate.mjs` 用 wrapper 设置的 `SPECKIT_WORKFLOW_RUN_ID` 认出同一 run 的 pending/decided gate，跳过页重建与自审后再进入 gate，避免 `reviewedAt` 改写使已批准的 digest 失效。不要手工删 pending/verdict、改 run 状态或绕过 guard；guard 不是批准来源，verdict 仍由 `gate-review.mjs` 按 nonce/digest 写入并一次性消费。
 
 
 ## 产物与事实源
@@ -60,7 +66,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 - `review/shell-preview.md` / `review/shell-shots/`：壳审核证据，由 `validate-shell` 生成；`review/shell-preview.json` 记录预览服务的 URL/PID。壳预览自带 30 页占位内容与 4 音色占位语音（`shells/<id>/site/preview-audio/`、`preview-data.json`）。不要手改。
 - `registry/`：组件库；页面需要的组件先暂存，页面审核通过后才注册进 core。
 - `review/page-approvals.json`：逐页审核账本，按 section/slide 记录脚本与截图哈希。不要绕过或手改冻结状态。
-- `review/gui-gates/`：GUI 审核闸门的 pending/verdict/resume 运行时状态；由 `gui-gate` 与 MCP 服务器读写，不要手改或提交。
+- `review/gui-gates/`：人工审核闸门的 pending/verdict 运行时状态；由 `gui-gate` 与 `gate-review.mjs` 读写，不要手改或提交。
 
 ## 门禁
 
@@ -92,7 +98,7 @@ node workflow/tools/smoke-test.mjs
 
 ## 不要做的事
 
-- 不要把 `paused` 当成成功，不要手动运行 `approve-script.mjs`，不要让 agent 代替老师回答 gate；GUI 闸门不要用 `resume` / `-i` / `courseware_gate_verdict` 绕过。
+- 不要把 `paused` 当成成功，不要手动运行 `approve-script.mjs`，不要让 agent 代替老师回答 gate；不要在老师回答前调用 `gate-review.mjs decide`，不要用 `-i` 或手写 verdict 绕过。
 - 不要为了单页改壳渲染器、壳 CSS 或 `deck.json` 结构；退回组件阶段或页面设计阶段解决。
 - 不要手画参考组件；参考已有的交互按源码逐字节复制，参考没有的走 component-plan → brief → build → review → core。
 - 不要在页面里塞多个语义单元来“一次讲完”；一页一个语义边界，放不下就拆页或改交互。
