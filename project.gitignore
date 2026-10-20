@@ -9,6 +9,9 @@ generated/
 .specify/workflows/runs/
 .specify/integrations/.cache/
 .codex/
+review/shell-preview.md
+review/shell-preview.json
+review/shell-shots/
 
 # 研究资料与第三方内容（不要提交）
 research/raw/

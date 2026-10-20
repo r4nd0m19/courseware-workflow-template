@@ -49,7 +49,7 @@ const MIME = {
   '.woff2': 'font/woff2',
 }
 
-export function serveDir(root) {
+export function serveDir(root, port = 0) {
   const base = path.resolve(root)
   const server = http.createServer((req, res) => {
     try {
@@ -78,11 +78,14 @@ export function serveDir(root) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(port, '127.0.0.1', () => {
       const address = server.address()
       resolve({
         url: `http://127.0.0.1:${address.port}/`,
-        close: () => new Promise((done) => server.close(() => done())),
+        close: () => new Promise((done) => {
+          server.closeAllConnections?.()
+          server.close(() => done())
+        }),
       })
     })
   })

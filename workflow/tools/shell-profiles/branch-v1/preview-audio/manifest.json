@@ -1,0 +1,272 @@
+{
+  "schemaVersion": "1.0",
+  "description": "Dummy narration fixtures for the shell preview. Not lesson audio.",
+  "generator": "workflow/tools/make-preview-voice.mjs",
+  "provider": "Microsoft Edge TTS",
+  "locale": "zh-CN",
+  "outputFormat": "audio-24khz-48kbitrate-mono-mp3",
+  "voices": [
+    {
+      "id": "xiaolai",
+      "name": "小来老师",
+      "providerVoice": "zh-CN-XiaoxiaoNeural"
+    },
+    {
+      "id": "xiaochuang",
+      "name": "小创老师",
+      "providerVoice": "zh-CN-YunyangNeural"
+    },
+    {
+      "id": "xiaozhi",
+      "name": "小智",
+      "providerVoice": "zh-CN-YunxiaNeural"
+    },
+    {
+      "id": "xiaowei",
+      "name": "小未",
+      "providerVoice": "zh-CN-XiaoyiNeural"
+    }
+  ],
+  "phrases": [
+    {
+      "id": "p01",
+      "text": "占位语音一。这是壳功能预览，页面上的文字全部是占位内容。",
+      "files": {
+        "xiaolai": {
+          "file": "p01-xiaolai.mp3",
+          "bytes": 38736,
+          "duration": 6.46,
+          "sha256": "6bcda584075d226667bc7088a972c4fca47c42508f92f5bab860a64382de38d2"
+        },
+        "xiaochuang": {
+          "file": "p01-xiaochuang.mp3",
+          "bytes": 36720,
+          "duration": 6.12,
+          "sha256": "7add59d5e7b620a292d6deb4f0c84649c5d68a96cc54e4b7598eb37d02796956"
+        },
+        "xiaozhi": {
+          "file": "p01-xiaozhi.mp3",
+          "bytes": 41328,
+          "duration": 6.89,
+          "sha256": "ba5d84696e56a6e7a556f9a6e511934ec80020208fa55a9651d30ca60966c996"
+        },
+        "xiaowei": {
+          "file": "p01-xiaowei.mp3",
+          "bytes": 39024,
+          "duration": 6.5,
+          "sha256": "6b465719cb919f80a854eee267f76e50805530af9e9ff5d85f8ceae575c7b6ed"
+        }
+      }
+    },
+    {
+      "id": "p02",
+      "text": "占位语音二。请检查基础版式、留白和内容层级。",
+      "files": {
+        "xiaolai": {
+          "file": "p02-xiaolai.mp3",
+          "bytes": 34272,
+          "duration": 5.71,
+          "sha256": "705f946214c57d24d0f2f99609e5fb67db3225134c4e25a304ab2af00e2aa3e8"
+        },
+        "xiaochuang": {
+          "file": "p02-xiaochuang.mp3",
+          "bytes": 32112,
+          "duration": 5.35,
+          "sha256": "92ce23171bbd86e67a61537e6b70e0092dd02760c370f1eda2b1b5228467eb0f"
+        },
+        "xiaozhi": {
+          "file": "p02-xiaozhi.mp3",
+          "bytes": 36720,
+          "duration": 6.12,
+          "sha256": "53f6b5c3b908183ee80da4da996dd322876b0c3c7507161a7307a2a05c3fe0a2"
+        },
+        "xiaowei": {
+          "file": "p02-xiaowei.mp3",
+          "bytes": 36000,
+          "duration": 6,
+          "sha256": "d85d979c0324b90be04e8716b38bc32e93d159a9c929f897651c34872a11fb3b"
+        }
+      }
+    },
+    {
+      "id": "p03",
+      "text": "占位语音三。请检查卡片、表格和对比布局。",
+      "files": {
+        "xiaolai": {
+          "file": "p03-xiaolai.mp3",
+          "bytes": 31680,
+          "duration": 5.28,
+          "sha256": "641aaa5db20c7e6ad02163d1378b257c7c9b7ef1208b4afcef3db7ec2bef98bd"
+        },
+        "xiaochuang": {
+          "file": "p03-xiaochuang.mp3",
+          "bytes": 31248,
+          "duration": 5.21,
+          "sha256": "3472c3aaf96ec4fe593dee5d4bf66b92d23d2b2392128d6123eecdaa2bc0270e"
+        },
+        "xiaozhi": {
+          "file": "p03-xiaozhi.mp3",
+          "bytes": 34560,
+          "duration": 5.76,
+          "sha256": "6e5ac86e6e23df90afb8a9ae26bc3c09c40d85c3dc6f6acac45ecd38e28d0b7a"
+        },
+        "xiaowei": {
+          "file": "p03-xiaowei.mp3",
+          "bytes": 33840,
+          "duration": 5.64,
+          "sha256": "cda05af7e51eddd38ca502f569582a63046405c0e1fa5e1d352e163e7e2f8dd3"
+        }
+      }
+    },
+    {
+      "id": "p04",
+      "text": "占位语音四。请检查代码块和流程图的显示。",
+      "files": {
+        "xiaolai": {
+          "file": "p04-xiaolai.mp3",
+          "bytes": 29952,
+          "duration": 4.99,
+          "sha256": "d0377872884da86c1fc86c9b170d0856e5452cb6205408ee9f1952a6ae2c630d"
+        },
+        "xiaochuang": {
+          "file": "p04-xiaochuang.mp3",
+          "bytes": 27936,
+          "duration": 4.66,
+          "sha256": "45b14792c593032eff25d193c1a822ff08393bd3ff21f419e3abb0dec212f280"
+        },
+        "xiaozhi": {
+          "file": "p04-xiaozhi.mp3",
+          "bytes": 31968,
+          "duration": 5.33,
+          "sha256": "11fc4ce895e8bd6a65b8fdb49a5e22eac1260276828c292197937d0e4ad8844b"
+        },
+        "xiaowei": {
+          "file": "p04-xiaowei.mp3",
+          "bytes": 31824,
+          "duration": 5.3,
+          "sha256": "88688dfa52a214ffaee68de5ed99bfe2435f34f9e278c981811724f908ea7804"
+        }
+      }
+    },
+    {
+      "id": "p05",
+      "text": "占位语音五。请点击按钮，检查互动反馈。",
+      "files": {
+        "xiaolai": {
+          "file": "p05-xiaolai.mp3",
+          "bytes": 28944,
+          "duration": 4.82,
+          "sha256": "e35a6007650db981787d18d4cd8b4a21059bc8e4fd1d12e413e456f27bb99eb2"
+        },
+        "xiaochuang": {
+          "file": "p05-xiaochuang.mp3",
+          "bytes": 27792,
+          "duration": 4.63,
+          "sha256": "7b1c4b764820c38cc521c9bc6ccbb75acc1c1615cc1aff3cfec2ef5420469c6f"
+        },
+        "xiaozhi": {
+          "file": "p05-xiaozhi.mp3",
+          "bytes": 30816,
+          "duration": 5.14,
+          "sha256": "6ceb574acf0ce884fe99f639602ac906281ecca773a7444d9a0a99cba4a87e07"
+        },
+        "xiaowei": {
+          "file": "p05-xiaowei.mp3",
+          "bytes": 30240,
+          "duration": 5.04,
+          "sha256": "75f6df965632675f545202bbf1a35b5f876eeaa42192c313b4028172fad5ba6f"
+        }
+      }
+    },
+    {
+      "id": "p06",
+      "text": "占位语音六。请运行实验，观察数值和步骤变化。",
+      "files": {
+        "xiaolai": {
+          "file": "p06-xiaolai.mp3",
+          "bytes": 33408,
+          "duration": 5.57,
+          "sha256": "5a73f6709be9f9f91eee373b63808169b1223ac722381c34c3efc4354f1c5a4a"
+        },
+        "xiaochuang": {
+          "file": "p06-xiaochuang.mp3",
+          "bytes": 32544,
+          "duration": 5.42,
+          "sha256": "afd017a0d02b64e321f75f4d1b009f139e1dfd01301aec02a5952067f08d6096"
+        },
+        "xiaozhi": {
+          "file": "p06-xiaozhi.mp3",
+          "bytes": 35424,
+          "duration": 5.9,
+          "sha256": "f5e654a0acfc4e70fac3b62b248f67e1cdce1e4cbd4d631d12e4c411376a09ce"
+        },
+        "xiaowei": {
+          "file": "p06-xiaowei.mp3",
+          "bytes": 33840,
+          "duration": 5.64,
+          "sha256": "df9d235ab02e362b4c248bba1ad78ce69b3ff9e06080308beb0c1f1f5b1095cb"
+        }
+      }
+    },
+    {
+      "id": "p07",
+      "text": "占位语音七。请检查复盘、自查和总结区域。",
+      "files": {
+        "xiaolai": {
+          "file": "p07-xiaolai.mp3",
+          "bytes": 32112,
+          "duration": 5.35,
+          "sha256": "6025c9d3dbbb29a8555a12bcbda5ec97324f0fff38706a9369490d93ee5ccf2d"
+        },
+        "xiaochuang": {
+          "file": "p07-xiaochuang.mp3",
+          "bytes": 31248,
+          "duration": 5.21,
+          "sha256": "fe95c29aec618f9527eed33f1b4c08d5483bd532bd34760fb5b72032057e34c0"
+        },
+        "xiaozhi": {
+          "file": "p07-xiaozhi.mp3",
+          "bytes": 34560,
+          "duration": 5.76,
+          "sha256": "5cc848360aab1d395070db9e9a02ff32c16fb4fc6250d49800023dde1f887be6"
+        },
+        "xiaowei": {
+          "file": "p07-xiaowei.mp3",
+          "bytes": 34704,
+          "duration": 5.78,
+          "sha256": "13ab9d3eb13497064fe7e4784e08a49a0d6df8a17a36eda90aca6a173266f9ab"
+        }
+      }
+    },
+    {
+      "id": "p08",
+      "text": "占位语音八。请切换角色音色，确认四个占位语音都能播放。",
+      "files": {
+        "xiaolai": {
+          "file": "p08-xiaolai.mp3",
+          "bytes": 37296,
+          "duration": 6.22,
+          "sha256": "071b1a8e1f80113c7f51b2cfe0fa7e6885269f48c0c57f4220bf46c883a200f0"
+        },
+        "xiaochuang": {
+          "file": "p08-xiaochuang.mp3",
+          "bytes": 36000,
+          "duration": 6,
+          "sha256": "7e4c5b5cf84c502909134d02e3473f824e50646f2de286b505e62b4f4df40644"
+        },
+        "xiaozhi": {
+          "file": "p08-xiaozhi.mp3",
+          "bytes": 39312,
+          "duration": 6.55,
+          "sha256": "50fd0f132a1f236674184344df797a63a3c072cf9f693b849967b495befea8c4"
+        },
+        "xiaowei": {
+          "file": "p08-xiaowei.mp3",
+          "bytes": 38304,
+          "duration": 6.38,
+          "sha256": "26135a97fc8a8eb11d3bb87983661e6e9e9a883e271909576c3ab0d91f3d882f"
+        }
+      }
+    }
+  ]
+}

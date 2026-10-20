@@ -1,0 +1,151 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import crypto from 'node:crypto'
+
+const PREVIEW_AUDIO_DIR = 'preview-audio'
+
+function sha256(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+}
+
+function readJson(file, label = file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (error) {
+    throw new Error(`${label}: ${error.message}`)
+  }
+}
+
+function writeJson(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`)
+}
+
+// Write the shell's preview deck, dummy narration plans and dummy voice files.
+//
+// The preview is deliberately content-free: it exists to exercise the shell,
+// not to teach. A production deck replaces deck.js wholesale. This function is
+// shared by extract-shell.mjs (fresh extraction) and its --preview-only mode
+// (refresh an existing shell after editing the profile).
+export function writePreviewData({ profile, siteDir, profileDir, audioDir }) {
+  const deck = profile.deck
+  const narration = profile.previewNarration
+  if (!deck?.slides?.length) throw new Error('profile.deck.slides is empty')
+  if (!deck.meta?.preview?.dummy) throw new Error('profile.deck.meta.preview.dummy must be true: the preview deck must be placeholder content')
+  if (!narration?.voices?.length) throw new Error('profile.previewNarration.voices is empty')
+  if (!narration?.phrases?.length) throw new Error('profile.previewNarration.phrases is empty')
+
+  const marker = narration.contentMarker || '占位'
+  const undmarked = deck.slides
+    .map((slide, index) => ({ slide, index }))
+    .filter(({ slide }) => !String(slide.title || '').includes(marker))
+  if (undmarked.length) {
+    throw new Error(
+      `preview slide(s) are missing the dummy marker "${marker}": ` +
+        undmarked.map(({ slide, index }) => `${index + 1}:${slide.title || '(no title)'}`).join(', '),
+    )
+  }
+  if (narration.pagePhrases?.length !== deck.slides.length) {
+    throw new Error(
+      `previewNarration.pagePhrases has ${narration.pagePhrases?.length || 0} entries for ${deck.slides.length} slides`,
+    )
+  }
+
+  const sourceAudioDir = audioDir || path.join(profileDir, PREVIEW_AUDIO_DIR)
+  const manifestFile = path.join(sourceAudioDir, 'manifest.json')
+  if (!fs.existsSync(manifestFile)) {
+    throw new Error(
+      `dummy preview voice manifest missing: ${manifestFile} ` +
+        `(run: node workflow/tools/make-preview-voice.mjs --profile ${profile.id})`,
+    )
+  }
+  const audioManifest = readJson(manifestFile, 'preview-audio/manifest.json')
+  const phraseById = new Map((audioManifest.phrases || []).map((phrase) => [phrase.id, phrase]))
+  const voiceIds = narration.voices.map((voice) => voice.id)
+  const referenced = new Set()
+
+  for (const phraseId of narration.pagePhrases) {
+    const phrase = phraseById.get(phraseId)
+    if (!phrase) throw new Error(`previewNarration.pagePhrases references unknown phrase "${phraseId}"`)
+    for (const voiceId of voiceIds) {
+      const file = phrase.files?.[voiceId]
+      if (!file?.file) throw new Error(`dummy voice missing for phrase ${phraseId}, voice ${voiceId}`)
+      const absolute = path.join(sourceAudioDir, file.file)
+      if (!fs.existsSync(absolute)) throw new Error(`dummy voice file missing: ${absolute}`)
+      if (Number(file.bytes) !== fs.statSync(absolute).size) {
+        throw new Error(`dummy voice size mismatch: ${file.file} (manifest ${file.bytes}, disk ${fs.statSync(absolute).size})`)
+      }
+      if (sha256(absolute) !== file.sha256) {
+        throw new Error(`dummy voice hash mismatch: ${file.file} (regenerate with make-preview-voice.mjs --force)`)
+      }
+      if (!(Number(file.duration) > 0)) throw new Error(`dummy voice duration missing: ${file.file}`)
+      referenced.add(file.file)
+    }
+  }
+
+  const targetAudioDir = path.join(siteDir, PREVIEW_AUDIO_DIR)
+  fs.rmSync(targetAudioDir, { recursive: true, force: true })
+  fs.mkdirSync(targetAudioDir, { recursive: true })
+  for (const file of referenced) {
+    fs.copyFileSync(path.join(sourceAudioDir, file), path.join(targetAudioDir, file))
+  }
+
+  const pages = deck.slides.map((slide, index) => {
+    const phrase = phraseById.get(narration.pagePhrases[index])
+    const files = {}
+    for (const voice of narration.voices) {
+      const file = phrase.files[voice.id]
+      files[voice.id] = { src: `${PREVIEW_AUDIO_DIR}/${file.file}`, duration: file.duration }
+    }
+    const segments = [{ kind: 'audio', id: phrase.id, text: phrase.text, files }]
+    const pause = Number(narration.pagePauses?.[index] || 0)
+    if (pause > 0) segments.push({ kind: 'pause', id: `pause-${index + 1}`, label: '占位停顿', seconds: pause })
+    return { title: slide.title, dummy: true, segments }
+  })
+
+  const voices = narration.voices.map((voice) => ({
+    id: voice.id,
+    name: voice.name,
+    voice: voice.providerVoice,
+  }))
+
+  const deckStub = `// Generated by workflow/tools/extract-shell.mjs. Dummy preview deck:
+// every slide is placeholder content for exercising the shell, not a lesson.
+window.COURSEWARE_SHELL_DATA = ${JSON.stringify({ meta: deck.meta, slides: deck.slides }, null, 2)};
+`
+  fs.writeFileSync(path.join(siteDir, 'deck.js'), deckStub)
+
+  const planPages = pages.map((page) => ({
+    title: page.title,
+    dummy: page.dummy,
+    segments: page.segments.map((segment) =>
+      segment.kind === 'audio'
+        ? { kind: segment.kind, id: segment.id, text: segment.text }
+        : { kind: segment.kind, id: segment.id, label: segment.label, seconds: segment.seconds },
+    ),
+  }))
+  const plan = { version: 1, dummy: true, label: narration.label || '占位语音', voices, pages: planPages }
+  fs.writeFileSync(path.join(siteDir, 'narration-plan.js'), `// Generated by workflow/tools/extract-shell.mjs. Dummy preview narration.
+window.COURSEWARE_NARRATION_PLAN = ${JSON.stringify(plan, null, 2)};
+`)
+
+  const voiceManifest = { version: 1, dummy: true, label: narration.label || '占位语音', voices, pages }
+  fs.writeFileSync(path.join(siteDir, 'voice-manifest.js'), `// Generated by workflow/tools/extract-shell.mjs. Dummy preview voice manifest.
+window.COURSEWARE_VOICE_MANIFEST = ${JSON.stringify(voiceManifest, null, 2)};
+`)
+
+  // Machine-readable evidence for review tooling.
+  const summary = {
+    dummy: true,
+    contentLabel: deck.meta.preview.contentLabel || '占位内容',
+    voiceLabel: narration.label || '占位语音',
+    slideCount: deck.slides.length,
+    pageCount: pages.length,
+    phraseCount: narration.phrases.length,
+    voiceCount: voices.length,
+    audioFiles: [...referenced].sort(),
+    audioBytes: [...referenced].reduce((sum, file) => sum + fs.statSync(path.join(targetAudioDir, file)).size, 0),
+  }
+  writeJson(path.join(siteDir, 'preview-data.json'), summary)
+  return summary
+}

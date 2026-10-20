@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
+import { ensurePreviewServer, fileUrl, openUrl, writeShellPreview } from './preview-lib.mjs'
 import { readJson, resolveShellDir, serveDir, validateShellPackage } from './shell-lib.mjs'
 
 const args = process.argv.slice(2)
@@ -30,12 +31,32 @@ const urlArg = opt('--url')
 const shotsDir = opt('--shots')
 const jsonOut = flag('--json')
 const requireArt = flag('--require-art')
+const reviewOut = opt('--review-out')
+const servePreview = flag('--serve-preview')
+const openPreview = flag('--open-preview')
+const previewPort = Number(opt('--preview-port', '8083')) || 8083
+const previewState = opt('--preview-state', path.join('review', 'shell-preview.json'))
 // The shell's own site ships a preview deck whose job is to exercise every
 // declared native slide type. A production site is expected to cover only the
 // types its lesson uses, so the full-coverage requirement applies by default
 // only when checking the package itself.
 const requireFullPreview = flag('--require-full-preview') || (!siteOverride && !urlArg)
-const report = { shell: shellDir, site: siteOverride || '', ok: false, errors: [], warnings: [], notes: [], types: [], slides: [] }
+const report = {
+  shell: shellDir,
+  site: siteOverride || '',
+  ok: false,
+  errors: [],
+  warnings: [],
+  notes: [],
+  types: [],
+  slides: [],
+  interactions: { passed: [], failed: [] },
+  preview: {},
+  narration: {},
+  previewUrl: '',
+  reviewFile: '',
+  shotsDir: '',
+}
 
 const packageCheck = validateShellPackage(shellDir)
 report.errors.push(...packageCheck.errors)
@@ -53,8 +74,8 @@ if (!chrome) {
 }
 let server = null
 let url = urlArg
+const siteDir = siteOverride ? path.resolve(siteOverride) : path.join(shellDir, 'site')
 if (!url) {
-  const siteDir = siteOverride ? path.resolve(siteOverride) : path.join(shellDir, 'site')
   if (!fs.existsSync(siteDir)) {
     report.errors.push(`site directory not found: ${siteDir}`)
     finish()
@@ -71,6 +92,17 @@ const browser = await chromium.launch({
 })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' })
 const page = await context.newPage()
+// Record which media file the shell actually asks the browser to play. The
+// audio element is created in a closure and is not attached to the DOM, so
+// instrumenting play() is the least invasive way to verify the voice switch.
+await page.addInitScript(() => {
+  window.__coursewareMedia = []
+  const originalPlay = HTMLMediaElement.prototype.play
+  HTMLMediaElement.prototype.play = function (...args) {
+    window.__coursewareMedia.push({ src: this.currentSrc || this.src, at: Date.now() })
+    return originalPlay.apply(this, args)
+  }
+})
 const consoleErrors = []
 page.on('console', (m) => { if (m.type() === 'error' && !/favicon/i.test(m.text())) consoleErrors.push(`console: ${m.text()}`) })
 page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${e.message}`))
@@ -167,13 +199,45 @@ if (unexercised.length) {
   else report.warnings.push(message)
 }
 
+if (requireFullPreview) {
+  const previewSlides = snapshot.deckSlides || []
+  const previewMeta = snapshot.meta?.preview || {}
+  report.preview = {
+    dummy: previewMeta.dummy === true,
+    contentLabel: previewMeta.contentLabel || '',
+    voiceLabel: previewMeta.voiceLabel || '',
+    markedSlides: previewSlides.filter((slide) => String(slide.title || '').includes('占位')).length,
+    totalSlides: previewSlides.length,
+  }
+  if (!report.preview.dummy) report.errors.push('preview deck is not marked as dummy content (meta.preview.dummy)')
+  const unmarked = previewSlides
+    .map((slide, index) => ({ slide, index }))
+    .filter(({ slide }) => !String(slide.title || '').includes('占位'))
+  if (unmarked.length) {
+    report.errors.push(
+      `preview deck has ${unmarked.length} slide(s) without the 占位 marker: ` +
+        unmarked.map(({ slide, index }) => `${index + 1}:${slide.title || '(no title)'}`).join(', '),
+    )
+  }
+  await checkPreviewNarration(page, snapshot)
+}
+
 if (requireFullPreview) await exercisePreviewInteractions(page, snapshot.deckSlides || [])
 
-// Auto-play must narrate an interactive (component) page and then hold; the
-// learner decides when the task is done and clicks 下一页. Use a fake Audio
-// element so the check does not depend on clip length or a real decoder.
-const componentSlides = await page.evaluate(() => (window.COURSEWARE_SHELL_DATA?.slides || []).map((slide, i) => slide.component ? i : -1).filter((i) => i >= 0))
-if (componentSlides.length) {
+// Auto-play must narrate an interactive page and then hold; the learner
+// decides when the task is done and clicks 下一页. The preview deck marks its
+// hands-on slides with component:true, but a probe should not depend on real
+// clip length or pause segments, so this context replaces the probe page's
+// narration with a 0.2s stub and uses FakeAudio.
+const deckSlides = snapshot.deckSlides || []
+const explicitComponentSlides = await page.evaluate(() => (window.COURSEWARE_SHELL_DATA?.slides || []).map((slide, i) => slide.component ? i : -1).filter((i) => i >= 0))
+const interactiveTypes = new Set(['rain', 'judgment', 'quiz', 'expr', 'numberLab', 'chainLab', 'tripleLab', 'fill', 'stone', 'checklist'])
+const probeIndex = explicitComponentSlides.length
+  ? explicitComponentSlides[0]
+  : requireFullPreview
+    ? deckSlides.findIndex((slide) => interactiveTypes.has(slide.type))
+    : -1
+if (probeIndex >= 0) {
   const probeContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
   await probeContext.addInitScript(() => {
     class FakeAudio {
@@ -188,7 +252,17 @@ if (componentSlides.length) {
   })
   const probe = await probeContext.newPage()
   await probe.goto(url, { waitUntil: 'networkidle', timeout: 60000 })
-  const held = await probe.evaluate(async (index) => {
+  const held = await probe.evaluate(async ({ index, preview }) => {
+    // Mutating the object works because lesson.js captured this same object in
+    // its `voiceManifest` const. A production manifest is left untouched.
+    const manifest = window.COURSEWARE_VOICE_MANIFEST || window.BRANCH_VOICE_MANIFEST
+    if (preview && manifest) {
+      if (!Array.isArray(manifest.pages)) manifest.pages = []
+      const segment = { kind: 'audio', id: 'probe', files: { xiaolai: { src: 'data:audio/wav;base64,UklGRg==', duration: 0.2 } } }
+      manifest.pages[index] = { dummy: true, segments: [segment] }
+    }
+    const slide = window.COURSEWARE_SHELL_DATA?.slides?.[index]
+    if (slide) slide.component = true
     window.COURSEWARE_DEBUG.go(index)
     document.querySelector('#autoMode').click()
     await new Promise((resolve) => setTimeout(resolve, 700))
@@ -196,37 +270,252 @@ if (componentSlides.length) {
       index: window.COURSEWARE_DEBUG.index,
       toast: document.querySelector('#toast')?.textContent || '',
     }
-  }, componentSlides[0]).catch((error) => ({ error: String(error) }))
+  }, { index: probeIndex, preview: requireFullPreview }).catch((error) => ({ error: String(error) }))
   if (held.error) report.errors.push(`auto-play hold: ${held.error}`)
   else {
-    if (held.index !== componentSlides[0]) report.errors.push(`auto-play advanced off interactive slide ${componentSlides[0] + 1} to ${held.index + 1}`)
+    if (held.index !== probeIndex) report.errors.push(`auto-play advanced off interactive slide ${probeIndex + 1} to ${held.index + 1}`)
     if (!/下一页/.test(held.toast)) report.errors.push('auto-play hold did not show the continue hint')
     else report.notes.push('auto-play holds on interactive pages and shows the continue hint')
-    const advanced = await probe.evaluate(async (index) => {
+    const advanced = await probe.evaluate(async () => {
       document.querySelector('#next').click()
       await new Promise((resolve) => setTimeout(resolve, 350))
       return window.COURSEWARE_DEBUG.index
-    }, componentSlides[0]).catch((error) => ({ error: String(error) }))
+    }).catch((error) => ({ error: String(error) }))
     if (advanced.error) report.errors.push(`auto-play continue: ${advanced.error}`)
-    else if (advanced <= componentSlides[0]) report.errors.push('auto-play did not continue after 下一页 on an interactive page')
+    else if (advanced <= probeIndex) report.errors.push('auto-play did not continue after 下一页 on an interactive page')
   }
   await probeContext.close()
 } else {
-  report.notes.push('no component slide in this deck; auto-play hold check skipped')
+  report.notes.push('no interactive slide in this deck; auto-play hold check skipped')
 }
 
 if (consoleErrors.length) report.errors.push(...consoleErrors)
 report.url = url
 report.consoleErrors = consoleErrors
+report.slideCount = report.slides.length
+report.nativeTypes = [...new Set(report.types)]
+report.typeCount = report.nativeTypes.length
 await browser.close()
 if (server) await server.close()
+
+// Human review needs a URL that survives this process. Start a detached
+// server only for a local site; an explicit --url is already someone else's
+// live server. If the detached server cannot start, fall back to file:// so
+// the review sheet still names the artifact instead of failing the gate.
+if (urlArg) {
+  report.previewUrl = urlArg
+} else if (servePreview) {
+  try {
+    const preview = await ensurePreviewServer({
+      root: siteDir,
+      stateFile: path.resolve(previewState),
+      preferredPort: previewPort,
+    })
+    report.previewUrl = preview.url
+    report.previewPid = preview.pid
+    report.previewReused = preview.reused
+    report.previewState = path.resolve(previewState)
+    const opener = openPreview ? openUrl(preview.url) : ''
+    if (opener) report.openedWith = opener
+    report.notes.push(`preview server: ${preview.url}${preview.reused ? ' (reused)' : ''}`)
+  } catch (error) {
+    report.previewUrl = fileUrl(path.join(siteDir, 'index.html'))
+    report.warnings.push(`preview server unavailable (${error.message}); using file URL`)
+  }
+}
+if (reviewOut) {
+  try {
+    writeShellPreview({
+      file: reviewOut,
+      shell,
+      shellDir,
+      report,
+      previewUrl: report.previewUrl || report.url,
+      shotsDir,
+    })
+    report.reviewFile = path.resolve(reviewOut)
+    report.shotsDir = shotsDir ? path.resolve(shotsDir) : ''
+  } catch (error) {
+    report.errors.push(`review sheet: ${error.message}`)
+  }
+}
 finish()
+
+async function checkPreviewNarration(page, snapshot) {
+  const info = await page.evaluate(() => {
+    const manifest = window.COURSEWARE_VOICE_MANIFEST || window.BRANCH_VOICE_MANIFEST
+    const plan = window.COURSEWARE_NARRATION_PLAN || window.BRANCH_NARRATION_PLAN
+    const slides = window.COURSEWARE_SHELL_DATA?.slides || []
+    const voiceIds = (manifest?.voices || []).map((voice) => voice.id)
+    const pages = (manifest?.pages || []).map((page, index) => ({
+      index,
+      dummy: page?.dummy === true,
+      title: page?.title || '',
+      segments: (page?.segments || []).map((segment) => ({
+        kind: segment.kind,
+        id: segment.id,
+        text: segment.text || '',
+        seconds: Number(segment.seconds) || 0,
+        files: segment.files || {},
+      })),
+    }))
+    const planPages = (plan?.pages || []).map((page) => ({
+      dummy: page?.dummy === true,
+      title: page?.title || '',
+      segments: (page?.segments || []).map((segment) => ({
+        kind: segment.kind,
+        id: segment.id,
+        text: segment.text || '',
+        seconds: Number(segment.seconds) || 0,
+      })),
+    }))
+    return {
+      manifestDummy: manifest?.dummy === true,
+      planDummy: plan?.dummy === true,
+      label: manifest?.label || plan?.label || '',
+      voiceIds,
+      pages,
+      planPages,
+      slideCount: slides.length,
+    }
+  })
+
+  report.narration = {
+    dummy: info.manifestDummy && info.planDummy,
+    label: info.label,
+    voiceCount: info.voiceIds.length,
+    pageCount: info.pages.length,
+    clipCount: 0,
+    decodedClips: 0,
+    playedVoices: [],
+  }
+  if (!info.manifestDummy) report.errors.push('voice manifest is not marked dummy')
+  if (!info.planDummy) report.errors.push('narration plan is not marked dummy')
+  if (info.voiceIds.length < 2) report.errors.push(`preview voice manifest has ${info.voiceIds.length} voice(s); at least 2 are needed to test switching`)
+  if (info.pages.length !== info.slideCount) report.errors.push(`voice manifest has ${info.pages.length} page(s) for ${info.slideCount} slide(s)`)
+  if (info.planPages.length !== info.slideCount) report.errors.push(`narration plan has ${info.planPages.length} page(s) for ${info.slideCount} slide(s)`)
+
+  const uniqueClips = new Map()
+  for (const page of info.pages) {
+    if (!page.dummy) report.errors.push(`narration page ${page.index + 1} is not marked dummy`)
+    if (!page.title) report.errors.push(`narration page ${page.index + 1} has no title`)
+    if (!page.segments.length) {
+      report.errors.push(`narration page ${page.index + 1} has no segments`)
+      continue
+    }
+    const audioSegments = page.segments.filter((segment) => segment.kind === 'audio')
+    if (!audioSegments.length) report.errors.push(`narration page ${page.index + 1} has no audio segment`)
+    for (const segment of audioSegments) {
+      if (!String(segment.text || '').includes('占位')) report.errors.push(`narration page ${page.index + 1} segment ${segment.id} text is not marked 占位`)
+      for (const voiceId of info.voiceIds) {
+        const file = segment.files?.[voiceId]
+        if (!file?.src) {
+          report.errors.push(`narration page ${page.index + 1} voice ${voiceId}: missing audio src`)
+          continue
+        }
+        if (!(Number(file.duration) > 0)) {
+          report.errors.push(`narration page ${page.index + 1} voice ${voiceId}: invalid duration`)
+          continue
+        }
+        if (!file.src.startsWith('preview-audio/')) report.errors.push(`narration page ${page.index + 1} voice ${voiceId}: audio is not from preview-audio/ (${file.src})`)
+        if (!uniqueClips.has(file.src)) uniqueClips.set(file.src, { src: file.src, duration: Number(file.duration) })
+      }
+    }
+    const planPage = info.planPages[page.index]
+    if (!planPage) continue
+    const planIds = planPage.segments.map((segment) => `${segment.kind}:${segment.id}`).join('|')
+    const manifestIds = page.segments.map((segment) => `${segment.kind}:${segment.id}`).join('|')
+    if (planIds !== manifestIds) report.errors.push(`narration plan page ${page.index + 1} segments differ from the voice manifest`)
+  }
+  report.narration.clipCount = uniqueClips.size
+  if (!uniqueClips.size) return
+
+  const clips = [...uniqueClips.values()]
+  const decoded = await page.evaluate(async (items) => {
+    const results = []
+    for (const clip of items) {
+      const response = await fetch(clip.src)
+      if (!response.ok) {
+        results.push({ ...clip, error: `HTTP ${response.status}` })
+        continue
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio()
+      const duration = await new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(0), 8000)
+        audio.onloadedmetadata = () => { clearTimeout(timer); resolve(audio.duration) }
+        audio.onerror = () => { clearTimeout(timer); resolve(0) }
+        audio.src = url
+      })
+      URL.revokeObjectURL(url)
+      results.push({
+        ...clip,
+        bytes: blob.size,
+        contentType: response.headers.get('content-type') || '',
+        actualDuration: Number.isFinite(duration) ? duration : 0,
+      })
+    }
+    return results
+  }, clips).catch((error) => [{ error: String(error) }])
+  for (const clip of decoded) {
+    if (clip.error) {
+      report.errors.push(`preview audio ${clip.src || '?'}: ${clip.error}`)
+      continue
+    }
+    if (clip.bytes < 1024) report.errors.push(`preview audio ${clip.src}: too small (${clip.bytes} bytes)`)
+    if (!/^audio\//.test(clip.contentType)) report.errors.push(`preview audio ${clip.src}: content-type is ${clip.contentType}`)
+    if (!(clip.actualDuration > 0)) {
+      report.errors.push(`preview audio ${clip.src}: browser could not decode it`)
+      continue
+    }
+    if (Math.abs(clip.actualDuration - clip.duration) > 0.3) {
+      report.errors.push(`preview audio ${clip.src}: manifest duration ${clip.duration}s != decoded ${clip.actualDuration.toFixed(2)}s`)
+    }
+    report.narration.decodedClips += 1
+  }
+  if (!report.errors.some((error) => /preview audio/.test(error))) {
+    report.notes.push(`dummy preview voice decoded: ${report.narration.decodedClips} clip(s) across ${info.voiceIds.length} voices`)
+  }
+
+  const played = []
+  const probeVoices = [info.voiceIds[0], info.voiceIds[2] || info.voiceIds[1]].filter((voice, index, all) => all.indexOf(voice) === index)
+  for (const voiceId of probeVoices) {
+    await page.evaluate((voice) => {
+      window.COURSEWARE_DEBUG.go(0)
+      window.__coursewareMedia = []
+      const select = document.querySelector('#voiceSelect')
+      select.value = voice
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    }, voiceId)
+    await page.click('#sound')
+    const started = await page.waitForFunction(
+      (voice) => (window.__coursewareMedia || []).some((entry) => new RegExp(`preview-audio/.*${voice}\\.mp3`).test(entry.src)),
+      voiceId,
+      { timeout: 10000 },
+    ).then(() => true).catch(() => false)
+    const state = await page.evaluate(() => ({
+      speaking: document.querySelector('#sound')?.classList.contains('speaking') || false,
+      toast: document.querySelector('#toast')?.textContent || '',
+    }))
+    if (!started) report.errors.push(`preview voice ${voiceId}: shell did not play the matching dummy clip`)
+    else played.push(voiceId)
+    if (!state.speaking) report.errors.push(`preview voice ${voiceId}: player did not enter the playing state`)
+    if (/失败/.test(state.toast)) report.errors.push(`preview voice ${voiceId}: ${state.toast}`)
+    await page.click('#sound').catch(() => {})
+  }
+  report.narration.playedVoices = played
+  if (played.length) report.notes.push(`dummy preview voice played: ${played.join(', ')}`)
+}
 
 async function exercisePreviewInteractions(page, slides) {
   const passed = []
   const record = (name, ok, detail = '') => {
     if (ok) passed.push(name)
-    else report.errors.push(`preview interaction ${name}: ${detail || 'failed'}`)
+    else {
+      report.errors.push(`preview interaction ${name}: ${detail || 'failed'}`)
+      report.interactions.failed.push(`${name}: ${detail || 'failed'}`)
+    }
   }
   const find = (type) => slides.findIndex((slide) => slide.type === type)
   const go = (index) => page.evaluate((i) => window.COURSEWARE_DEBUG.go(i), index)
@@ -451,6 +740,7 @@ async function exercisePreviewInteractions(page, slides) {
   })
 
   if (passed.length) report.notes.push(`preview interactions exercised: ${passed.join(', ')}`)
+  report.interactions.passed = passed
 }
 
 function finish() {

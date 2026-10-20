@@ -39,6 +39,7 @@ specify workflow run courseware-production \
 - `specs/<lesson>/courseware.md`：人类可读课件脚本，整份一次人工审核。
 - `specs/<lesson>/storyboard.yml`：从 `courseware.md` 投影出的分镜，不应手工改。
 - `specs/<lesson>/deck.json`：声明式 deck；只允许 `type` / `component` / `props` 等数据字段，禁止 `style`、`className`、`html`、`innerHTML`、`on*`。
+- `review/shell-preview.md` / `review/shell-shots/`：壳审核证据，由 `validate-shell` 生成；`review/shell-preview.json` 记录预览服务的 URL/PID。壳预览自带 30 页占位内容与 4 音色占位语音（`shells/<id>/site/preview-audio/`、`preview-data.json`）。不要手改。
 - `registry/`：组件库；页面需要的组件先暂存，页面审核通过后才注册进 core。
 - `review/page-approvals.json`：逐页审核账本，按 section/slide 记录脚本与截图哈希。不要绕过或手改冻结状态。
 
