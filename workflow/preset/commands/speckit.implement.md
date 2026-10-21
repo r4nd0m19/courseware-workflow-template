@@ -98,6 +98,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
 ## Self-review（强制，人工审核前）
 
 - 写 `$COURSEWARE_REVIEW_DIR/self-review-page-<id>.json` 和 `.md`，模板按 `specify preset resolve self-review-template`。
+- 参考适配：读参考课件源码（如 `<shell>/source/lesson.js`）和本课内容，自己判断参考课里哪些可见内容属于参考课（文字、代码、文件名、标签、图片、人物道具、例子等，由你识别，不套固定清单），本课对应应该是什么；把识别项和替换写进自审的 `referenceAdaptation`。渲染页面不能残留参考课内容；壳/品牌/风格/布局保持不变。
 - `stage` 写 `page-<id>`；`artifactPaths` 必须包含本页的 `courseware.md` 区块、`storyboard.yml`、`deck.json`、截图、闸门结果。
 - 逐屏核对：屏幕文字/代码/输出、交互反馈、完成条件、重置与脚本一致；无占位符；无未注册组件（本页暂存组件除外）；无个人信息。
 - 若本页有暂存组件：读取 `$COURSEWARE_REVIEW_DIR/self-review-page-<id>-components.md` 与暂存包，确认渲染出来的行为符合简报、交互产生了声明的证据、没有静默退化为静态降级；把组件结论并入本页自审，不另开一次人工组件审核。

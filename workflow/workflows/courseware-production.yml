@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.17.0"
+  version: "0.17.1"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -874,12 +874,19 @@ steps:
                   Microsoft Edge TTS (an unofficial Edge endpoint, suitable for local/prototype use).
                   If a safe implementation fix is needed, make it and rerun the affected gates, then recheck
                   the screenshots. Do not edit slides outside this page.
+                  Reference adaptation: read the reference shell's lesson source ({{ inputs.shell }}/source/lesson.js
+                  and related source files) and this lesson's content. Decide yourself which visible content
+                  belongs to the reference lesson—text, code, file names, labels, images, character props,
+                  examples, and anything else you identify; this is not a fixed list. Decide what this lesson's
+                  equivalent is, replace it, and write your identified items and replacements into
+                  `referenceAdaptation` in the self-review. The rendered page must not retain reference-lesson
+                  content; keep the shell/brand/style/layout.
                   Write review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json and .md.
                   Verdict pass only if no blocking issues; otherwise stop.
 
               - id: check-self-review-page
                 type: shell
-                run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }}"
+                run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }} --require-reference-adaptation"
 
           - id: review-page
             type: gui-gate
