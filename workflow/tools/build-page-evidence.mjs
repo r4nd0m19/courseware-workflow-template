@@ -9,6 +9,7 @@ import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readData } from './lib.mjs'
+import { parseScript } from './script-lib.mjs'
 import { readSectionManifest, sectionById } from './section-lib.mjs'
 import { requireProductionRun } from './review-guard.mjs'
 
@@ -47,6 +48,11 @@ const reviewMd = opt(
   '--review-md',
   path.join('review', lessonSlug, `self-review-page-${sectionId}.md`),
 )
+const referenceSource = opt('--reference-source')
+const referenceAdaptationPath = opt(
+  '--reference-adaptation',
+  path.join('review', lessonSlug, 'reference-adaptation.json'),
+)
 
 if (
   !lessonSlug ||
@@ -82,6 +88,26 @@ const slideIds = section.slides.join(',')
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 
 function summarize(stdout, stderr) {
+  const parsed = parseJson(String(stdout || '').trim())
+  if (parsed) {
+    if (parsed.ok === false) {
+      const problems = parsed.problems || parsed.errors || []
+      return `failed: ${problems.slice(0, 2).join('; ') || 'see check output'}`
+    }
+    if (Array.isArray(parsed.reports)) {
+      const missing = parsed.reports.reduce((sum, report) => sum + (report.missing?.length || 0), 0)
+      const coverage = parsed.reports
+        .map((report) => report.proseCoverage)
+        .filter((value) => typeof value === 'number')
+      return `${parsed.reports.length} slide(s), ${missing} missing high-signal string(s)${
+        coverage.length ? `, prose coverage ${Math.min(...coverage).toFixed(2)}` : ''
+      }`
+    }
+    if (Array.isArray(parsed.slides)) return `${parsed.slides.length} slide(s)`
+    if (Array.isArray(parsed.questions)) return `${parsed.questions.length} question(s)`
+    if (Array.isArray(parsed.checks)) return `${parsed.checks.length} check(s)`
+    return 'ok'
+  }
   const lines = `${stdout || ''}\n${stderr || ''}`
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -184,6 +210,58 @@ checks.push(
   ]),
 )
 
+// Per-lesson reference map + deterministic residue scan. The map is generated
+// once after the storyboard is projected; the page review only confirms deltas.
+let referenceAdaptation = null
+if (fs.existsSync(referenceAdaptationPath)) {
+  try {
+    const mapping = readData(referenceAdaptationPath)
+    referenceAdaptation = {
+      path: referenceAdaptationPath,
+      referenceLesson: mapping.referenceLesson || '',
+      entries: (mapping.entries || []).filter((entry) =>
+        (entry.pages || []).some((id) => section.slides.includes(id)),
+      ),
+      unmapped: mapping.unmapped || [],
+    }
+  } catch (error) {
+    checks.push({
+      name: 'check-reference-residue',
+      status: 'fail',
+      summary: `cannot read ${referenceAdaptationPath}: ${error.message}`,
+      error: error.message,
+    })
+  }
+} else {
+  checks.push({
+    name: 'reference adaptation map',
+    status: 'fail',
+    summary: `missing ${referenceAdaptationPath}; run build-reference-adaptation before the page loop`,
+    error: `missing ${referenceAdaptationPath}`,
+  })
+}
+
+// High-signal rendered text is deterministic. The page self-review no longer
+// judges verbatim screen text; it only reviews visual/interaction semantics.
+checks.push(
+  run('check-rendered-text.mjs', [
+    '--url',
+    url,
+    '--deck',
+    deckPath,
+    '--storyboard',
+    storyboardPath,
+    '--slides',
+    slideIds,
+    '--concepts',
+    conceptsPath,
+    '--reference-adaptation',
+    referenceAdaptationPath,
+    '--json',
+    ...(manual ? ['--manual'] : []),
+  ]),
+)
+
 const screenshots = section.slides.map((id) => {
   const metadataPath = path.join(screenshotsDir, `${id}.json`)
   return {
@@ -196,6 +274,40 @@ const screenshots = section.slides.map((id) => {
 
 const failed = checks.filter((check) => check.status !== 'pass')
 const publicChecks = checks.map(({ stdout, ...rest }) => rest)
+
+// The reviewer needs the page's script text, not the whole courseware.md.
+// Ship the parsed fields with the evidence so the page review is a single-file
+// read plus the screenshot.
+const parsedScript = parseScript(scriptPath)
+const scriptById = new Map(parsedScript.slides.map((slide) => [slide.id, slide]))
+const scriptSlides = section.slides.map((id) => {
+  const slide = scriptById.get(id)
+  if (!slide) return { id, missing: true }
+  return {
+    id: slide.id,
+    title: slide.headingTitle,
+    screenContent: slide.screenContent,
+    interactionDesign: slide.interactionDesign,
+    narration: slide.narration,
+    transition: slide.transition,
+    machine: slide.machine,
+  }
+})
+let relatedConcepts = []
+if (conceptsPath && fs.existsSync(conceptsPath)) {
+  try {
+    const ledger = readData(conceptsPath)
+    const slideIds = new Set(section.slides)
+    relatedConcepts = (ledger.concepts || []).filter((concept) =>
+      [concept.introducedOn, ...(concept.reinforcedOn || []), ...(concept.assessedOn || [])].some(
+        (id) => slideIds.has(id),
+      ),
+    )
+  } catch {
+    relatedConcepts = []
+  }
+}
+
 const evidence = {
   schemaVersion: '1.0',
   lessonSlug,
@@ -212,6 +324,10 @@ const evidence = {
   screenshotsDir,
   reviewJson,
   reviewMd,
+  referenceSource: referenceSource || '',
+  referenceAdaptation,
+  scriptSlides,
+  relatedConcepts,
   density: densityJson,
   quizKeys: quizJson,
   overlap: overlapJson,
@@ -230,7 +346,14 @@ function hashFile(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')
 }
 const reviewedArtifacts = []
-for (const file of [scriptPath, storyboardPath, deckPath, outPath]) {
+for (const file of [
+  scriptPath,
+  storyboardPath,
+  deckPath,
+  outPath,
+  referenceSource,
+  referenceAdaptationPath,
+]) {
   if (fs.existsSync(path.resolve(file))) {
     reviewedArtifacts.push({ path: relative(file), sha256: hashFile(file) })
   }
@@ -261,13 +384,10 @@ const skeleton = {
     notes: check.summary,
   })),
   checklist: [
-    { item: 'rendered text matches script', status: 'n/a' },
-    { item: 'interaction evidence', status: 'n/a' },
-    { item: 'no overflow/overlap', status: 'n/a' },
-    { item: 'reference adaptation', status: 'n/a' },
-    { item: 'component behavior', status: 'n/a' },
-    { item: 'narration', status: 'n/a' },
-    { item: 'no personal data', status: 'n/a' },
+    { item: 'interaction produces the declared evidence (not just watch/next)', status: 'n/a' },
+    { item: 'reference-lesson content replaced; no reference residue', status: 'n/a' },
+    { item: 'staged component behavior matches its brief (only if components are listed)', status: 'n/a' },
+    { item: 'no placeholder, no personal data', status: 'n/a' },
   ],
   issues: [],
   referenceAdaptation: '',
@@ -277,39 +397,9 @@ const skeleton = {
 fs.mkdirSync(path.dirname(path.resolve(reviewJson)), { recursive: true })
 fs.writeFileSync(reviewJson, JSON.stringify(skeleton, null, 2) + '\n')
 
-const md = [
-  `# AI 自审：page-${sectionId}`,
-  '',
-  `- 页面：${sectionId} · ${section.title}`,
-  `- 屏：${section.slides.join(', ')}`,
-  `- 证据包：\`${relative(outPath)}\``,
-  `- 本文件由 build-page-evidence 生成骨架；AI 只需填写“需要判断”的字段，不要重算哈希或自动检查。`,
-  '',
-  '## 自动检查',
-  '',
-  '| 检查 | 结果 | 摘要 |',
-  '|---|---|---|',
-  ...publicChecks.map((check) => `| ${check.name} | ${check.status} | ${check.summary.replace(/\|/g, '\\|')} |`),
-  '',
-  '## 逐屏信号',
-  '',
-  '| 屏 | 语义单元（待填） | 结论（待填） |',
-  '|---|---|---|',
-  ...densityEntries.map((entry) => `| ${entry.slideId} |  |  |`),
-  '',
-  '## 需要 AI 判断并填写',
-  '',
-  '- `density[].semanticUnits` / `density[].verdict` / `density[].notes`',
-  '- `concepts[]`（本页涉及的概念；verdict + evidence + slideIds）',
-  '- `checklist` 中适用的项与 `issues`',
-  '- `referenceAdaptation`（参考课件专属内容与本课替换；自由判断，不套固定清单）',
-  '- `verdict`: pass / fail',
-  '',
-  '不要重跑 density/concepts/quiz/narration/overflow/overlap/rendered 命令；这些结果已在证据包里。',
-  '',
-]
-fs.mkdirSync(path.dirname(path.resolve(reviewMd)), { recursive: true })
-fs.writeFileSync(reviewMd, md.join('\n'))
+// The Markdown review is rendered from the JSON after the AI fills it
+// (render-self-review-md.mjs). Keeping the skeleton JSON as the only AI output
+// avoids writing the same review twice and keeps hashes machine-owned.
 
 if (failed.length) {
   console.error(`FAIL page evidence — ${failed.map((check) => check.name).join(', ')}`)

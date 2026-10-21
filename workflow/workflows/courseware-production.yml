@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.21.0"
+  version: "0.25.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -185,26 +185,12 @@ steps:
     type: shell
     run: "node workflow/tools/check-registry.mjs {{ inputs.component_registry }} --style-pack {{ inputs.style_pack }} --project-root ."
 
+  # Deterministic input review: the gates above already established the
+  # machine-checkable facts. This step turns those results plus the content-pack
+  # rules into the review artifact without another model call.
   - id: self-review-inputs
-    type: prompt
-    integration: "{{ inputs.integration }}"
-    prompt: |
-      AI self-review before human review (stage: inputs).
-      Read the content pack ({{ inputs.content_pack }}), style pack manifest ({{ inputs.style_pack }}),
-      full style pack ({{ inputs.style_pack_full }}) and its freeze manifest ({{ inputs.style_pack_freeze }}),
-      workflow/schemas/*, and the constitution.
-      Check:
-      - every content item has reviewStatus "reviewed"; no draft items
-      - every quiz item has exactly one correct option and non-empty feedback for every option
-      - no personal data (sensitivity personal); no required items deleted
-      - style pack components/layouts are unique and registered; no per-lesson style overrides
-      - validate-style-pack-full passed: baselines exist and the freeze hash matches the full pack
-      - the shell package validates, its preview deck covers every declared slide type, and the main interactions respond (validate-shell)
-      Run/read the relevant gates. Write review/{{ inputs.lesson_slug }}/self-review-inputs.json per
-      workflow/schemas/self-review.schema.json and review/{{ inputs.lesson_slug }}/self-review-inputs.md per
-      workflow/preset/templates/self-review-template.md.
-      Verdict pass only if no blocking issues; fix safe issues and re-check; otherwise stop and report.
-      Do not request human review unless verdict is pass.
+    type: shell
+    run: "node workflow/tools/build-self-review-inputs.mjs --lesson-slug {{ inputs.lesson_slug }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --style-full {{ inputs.style_pack_full }} --style-freeze {{ inputs.style_pack_freeze }} --source {{ inputs.style_pack_source }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }} --shell-ok \"{{ steps.validate-shell.output.data.ok }}\" --shell-review \"{{ steps.validate-shell.output.data.reviewFile }}\" --out review/{{ inputs.lesson_slug }}/self-review-inputs.json --md review/{{ inputs.lesson_slug }}/self-review-inputs.md"
 
   - id: check-self-review-inputs
     type: shell
@@ -332,67 +318,52 @@ steps:
     type: shell
     run: "node workflow/tools/check-quiz-keys.mjs {{ inputs.courseware_script }} --content {{ inputs.content_pack }}"
 
+  # Build one compact evidence bundle so the script review reads the per-slide
+  # script fields and gate results once, instead of re-reading courseware.md,
+  # the content pack, style pack and registry. The skeleton JSON already has
+  # hashes and automated checks; the AI fills only judgment fields.
+  - id: build-script-review-evidence
+    type: shell
+    run: "node workflow/tools/build-script-review-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --concepts {{ inputs.concepts }} --registry {{ inputs.component_registry }} --review-sections {{ inputs.review_sections }} --review-dir review/{{ inputs.lesson_slug }} --evidence-out review/{{ inputs.lesson_slug }}/self-review-script-evidence.json --out review/{{ inputs.lesson_slug }}/self-review-script.json --md review/{{ inputs.lesson_slug }}/self-review-script.md"
+
   - id: self-review-script
     type: prompt
     integration: "{{ inputs.integration }}"
     prompt: |
       AI self-review before human review (stage: script).
-      Read courseware.md ({{ inputs.courseware_script }}), spec.md, content pack, style pack and registry.
-      Check: every slide has screen content, interaction design, narration, transition, machine fields;
-      screen text is separated from narration; every interaction states student action, success feedback,
-      misconception-linked error feedback, completion and reset.
-      Interaction-first gate: every screen must first attempt an interaction derived from its content.
-      For each screen, read interaction.contentDemand, learningAction, evidence and whyStatic. The
-      interaction form must follow from the learning action the content demands, not from the component
-      types already available. A watch screen is an exception: whyStatic must be a teaching reason
-      (e.g. the cover only orients and an interaction would add no new evidence), never "no component"
-      or "hard to build". watch may only use learningAction=observe. If a screen describes clicking,
-      typing, stepping, filling or rewriting but is marked watch, it is blocking: either make it a real
-      non-watch interaction with success/error/completion, or show why the interaction is not better
-      than static. Quiz is appropriate only where the content asks for retrieval or prediction; if the
-      content asks for locating, labelling, tracing, constructing or modifying, a quiz alone is not
-      sufficient evidence. Record a per-screen interaction table in the review: content learning action,
-      interaction attempt, evidence, verdict (interactive/watch), and static reason for every watch.
-      Every objective has an answer-level or higher interaction; every non-watch interaction names the
-      component that produces its evidence; no TODO/TBD/placeholder;
-      example code/output and quiz question/options appear verbatim; required content refs covered;
-      componentPlan entries are declared (existing/extend/new) but no ad-hoc component invented.
-      Also confirm the applied self-study audit (review/{{ inputs.lesson_slug }}/self-study-audit.json,
-      review/{{ inputs.lesson_slug }}/self-study-apply.json): every 自学补充 block is labelled, keeps its basis, and did not
-      change a core knowledge point; the final slide count matches pageBudget.proposed.
-      Read the validate-script result.
-      Answer-position gate: run
-      `node workflow/tools/check-quiz-keys.mjs {{ inputs.courseware_script }} --content {{ inputs.content_pack }}`
-      and record its A/B/C/D distribution and every question's correct display position.
-      All correct answers in one position, or one position over the share limit, is blocking.
-      When reordering an option, keep a natural order if one exists (ascending numbers,
-      row-major indices) and update every letter-specific feedback bullet and narration line;
-      do not merely move the correct option. A balanced distribution is a floor, not a target:
-      students must still have to evaluate each choice.
-      Density / segmenting gate: run
-      `node workflow/tools/density-report.mjs {{ inputs.courseware_script }} --json`
-      (contentRefs come from each slide's machine fields at this stage) and copy its `signals`
-      unchanged into the `density` array. For every screen declare its
-      semanticUnits (label + evidence): one screen should carry one new semantic boundary.
-      Different forms of one rule, two sides of a side-by-side comparison, or review/{{ inputs.lesson_slug }}/self-check
-      of already-taught content count as one unit; multiple independent teaching points
-      (e.g. seat grid + declaration syntax + subscript range + element count on one screen)
-      are a blocking issue and must be split, or marked `exception` with a written reason.
-      White space or smaller type is not a substitute for segmenting.
-      Core-concept gate: read the concept ledger ({{ inputs.concepts }}) and the
-      validate-concepts result. For every concept, open its introducedOn slide and confirm the
-      student can read the term, the one-sentence definition, and every mustAppear phrase in
-      屏幕内容 — not only in narration, not only inside a code declaration. A content item titled
-      "定义" that only shows declaration syntax does not satisfy the concept. Confirm reinforcedOn /
-      assessedOn pages actually use the concept. Record a `concepts` entry for every concept
-      (conceptId, verdict, evidence, slideIds); a missing or `gap` entry is blocking.
-      Write review/{{ inputs.lesson_slug }}/self-review-script.json and review/{{ inputs.lesson_slug }}/self-review-script.md.
-      Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
+      Read ONLY review/{{ inputs.lesson_slug }}/self-review-script-evidence.json and
+      the spec.md path recorded in that bundle (`spec.path`). The evidence bundle contains every slide's
+      screenContent, interactionDesign, narration, transition, interaction/componentPlan
+      fields, quiz-key results, concept results and the self-study audit summary.
+      Do not re-read courseware.md/content pack/style pack/registry, and do not
+      re-run gates; the auto-generated checks and hashes are already in the skeleton.
+      Density/segmenting is judged by the rendered page self-review, where the
+      screenshot and page evidence exist; do not fill `density` here and do not
+      duplicate that judgment.
+      Fill the skeleton review/{{ inputs.lesson_slug }}/self-review-script.json in place:
+      - concepts[]: one entry per ledger concept (conceptId, pass/gap, evidence,
+        slideIds). Cite the introducing slide and confirm the term, one-sentence
+        definition and every mustAppear phrase are readable in 屏幕内容, not only in
+        narration or a code declaration. A missing or gap entry is blocking.
+      - checklist: interaction-first (per screen, use interaction.contentDemand /
+        learningAction / evidence / whyStatic; watch only for observe with a teaching
+        reason, never "no component"; quiz only for retrieval or prediction; every
+        objective has at least one non-watch interaction), verbatim
+        code/output/quiz text, no TODO/placeholder, answer-position distribution from
+        quizKeys, self-study supplements labelled and page count matching pageBudget,
+        no personal data.
+      - issues and verdict.
+      Record the per-screen interaction table in
+      review/{{ inputs.lesson_slug }}/self-review-script.md (keep the skeleton's
+      automatedChecks and reviewedArtifacts unchanged).
+      Verdict pass only if no blocking issues; if a safe script fix is needed,
+      edit courseware.md, rerun build-script-review-evidence to refresh hashes and
+      the skeleton, then refill the judgment fields. Do not hand-edit hashes.
       Do not mark the script APPROVED; only the teacher can.
 
   - id: check-self-review-script
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --script {{ inputs.courseware_script }} --concepts {{ inputs.concepts }}"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --concepts {{ inputs.concepts }}"
 
   - id: review-script
     type: gui-gate
@@ -484,8 +455,9 @@ steps:
     integration: "{{ inputs.integration }}"
     prompt: |
       AI self-review before human review (stage: component-plan).
-      Read component-plan.md and component-briefs/, courseware.md, the registry, and the
-      validate-component-plan result.
+      Read component-plan.md, component-briefs/, the registry, and the
+      validate-component-plan result. Do not re-read courseware.md: the validated
+      plan is the authoritative derivation of interaction needs from the approved script.
       Check: every interaction need has a reuse-search record (command + hits); every gap has a
       brief with reuse search, gap decision, learning objective/success criteria, interaction FSM,
       props API, visual/layout constraints, accessibility, static fallback, test plan, risks/non-goals;
@@ -526,6 +498,40 @@ steps:
   - id: script-storyboard-parity
     type: shell
     run: "node workflow/tools/script-to-storyboard.mjs {{ inputs.courseware_script }} --check {{ inputs.storyboard }}"
+
+  # One reference adaptation map per lesson. It is generated after the
+  # storyboard exists and before the page loop, so every page review can read
+  # the same mapping instead of re-reading shells/<id>/source/lesson.js.
+  - id: build-reference-adaptation
+    type: prompt
+    integration: "{{ inputs.integration }}"
+    prompt: |
+      Build the per-lesson reference adaptation map (stage: reference-adaptation).
+      Read the approved courseware.md ({{ inputs.courseware_script }}), the projected
+      storyboard.yml ({{ inputs.storyboard }}), the shell package ({{ inputs.shell }}:
+      shell.json, source/lesson.js, reference/), concepts.yml ({{ inputs.concepts }})
+      and the content pack ({{ inputs.content_pack }}).
+      Identify every visible item of the reference lesson — titles, leads, questions,
+      options, code, table cells, labels, example values, character props and images —
+      and map it to this lesson's equivalent. Write
+      review/{{ inputs.lesson_slug }}/reference-adaptation.json per
+      workflow/schemas/reference-adaptation.schema.json and a readable
+      review/{{ inputs.lesson_slug }}/reference-adaptation.md table.
+      Rules:
+      - Use stable ids RA01, RA02, …
+      - `pages` lists the lesson slide ids where the replacement appears.
+      - `residue: "replace"` for reference-specific content that must not appear;
+        `residue: "allow"` only for generic C++ syntax or shell chrome that may remain.
+      - Fill `lessonText` with the exact visible replacement when it is a literal
+        string; the deterministic residue check will require it.
+      - Put reference content intentionally not carried over in `unmapped` with a
+        reason; mark it `residue: "replace"` if seeing it in the lesson is residue.
+      - Do not edit the shell, the script or the deck.
+      Verdict: write the files; do not request a human review here.
+
+  - id: check-reference-adaptation
+    type: shell
+    run: "node workflow/tools/check-reference-adaptation.mjs review/{{ inputs.lesson_slug }}/reference-adaptation.json --storyboard {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --shell {{ inputs.shell }} --lesson-slug {{ inputs.lesson_slug }}"
 
   # Re-check the ledger against the projected storyboard: the introducing
   # slide must reference the concept's source items and must not be SKIP.
@@ -723,7 +729,7 @@ steps:
               # one JSON instead of re-running commands/reading every file.
               - id: build-page-evidence
                 type: shell
-                run: "node workflow/tools/build-page-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --deck {{ inputs.deck_data }} --screenshots screenshots/{{ inputs.lesson_slug }} --url \"{{ inputs.deck_url }}\" --concepts {{ inputs.concepts }} --narration {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --out review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"
+                run: "node workflow/tools/build-page-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --deck {{ inputs.deck_data }} --screenshots screenshots/{{ inputs.lesson_slug }} --url \"{{ inputs.deck_url }}\" --concepts {{ inputs.concepts }} --narration {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --reference-source \"{{ inputs.shell }}/source/lesson.js\" --reference-adaptation review/{{ inputs.lesson_slug }}/reference-adaptation.json --out review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"
 
               - id: self-review-page
                 type: prompt
@@ -732,70 +738,46 @@ steps:
                   AI self-review before human review (stage: page-{{ steps.advance_section.output.data.section.id }}).
                   Page: {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }}
                   Slide: {{ steps.advance_section.output.data.section.slides | join(', ') }}
-                  Read this page's block in courseware.md ({{ inputs.courseware_script }}), the page
-                  screenshot under screenshots/{{ inputs.lesson_slug }}/, the self-review template, and the
-                  evidence bundle review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json.
-                  The evidence bundle contains the density signals, concepts/quiz/narration/overflow/
-                  overlap/rendered-check results and screenshot metadata. Do not re-run those commands or
-                  re-read the full script/storyboard/deck; use the evidence and the page screenshot.
-                  A JSON/MD skeleton is already written at review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json and .md. Fill its empty judgment fields; keep its `reviewedArtifacts` and `automatedChecks` (the tool computed the hashes/checks), and do not rewrite the skeleton from scratch. The evidence bundle and the page screenshot are already in `reviewedArtifacts`.
-                  Check each slide: rendered screen text/code/output matches the script verbatim; interaction
-                  success/error feedback, completion and reset match the interaction design; no placeholder;
-                  no overflow/clipping/crowding; components are registered core versions or the staged
-                  components built for this page; no personal data.
-                  Check interaction-first design on the rendered page: the screen's interaction form
-                  follows its content learning action; a non-watch page is not rendered as a static
-                  table/code page with only a next button; a watch page's static reason still holds after
-                  rendering. The rendered evidence must be the one declared in interaction.evidence
-                  (clicked cell, filled grid, predicted next cell, modified matrix), not merely an animation
-                  the student watched. If a page says click/type/step/fill in the script but the rendered
-                  page only shows static content, it is blocking.
-                  Component review: this page's unregistered components are
-                  {{ steps.load-page-components.output.data.unregistered | join(', ') }} (empty means none).
-                  There is no separate component self-review call. If non-empty, read each component's brief,
-                  the staged package(s) under {{ inputs.component_staging }}/<id>/ (component.json, runtime.js,
-                  styles.css, tests, stories, baselines) and the validate-staged-page-components result
-                  directly, then confirm on the rendered page that each component behaves as its brief says,
-                  that its interaction produces the declared evidence, and that the page did not silently
-                  render the static fallback. Include the component verdict in this page review and record
-                  the staged package files in `reviewedArtifacts`; the page gate also approves these
-                  components into core.
-                  Deck data must match storyboard id/title/order and use only reference renderer types or
-                  registered component ids; no raw HTML/CSS/JS fields.
-                  Answer-position gate: read the evidence bundle's `quizKeys` and record the
-                  A/B/C/D distribution and each question's correct display position. If one position
-                  dominates, reorder options and update letter-specific feedback/narration; do not
-                  accept the gate by adding a note. Also check the rendered quiz shows the same
-                  option order and markers as the deck.
-                  Density / segmenting gate: the skeleton's `density` entries already contain the
-                  evidence signals; fill `semanticUnits` (label + evidence), `verdict` and `notes`
-                  only. One slide should carry one new semantic boundary.
-                  Different forms of one rule, side-by-side comparison, or review/{{ inputs.lesson_slug }}/self-check of
-                  already-taught content count as one unit; multiple independent teaching points are
-                  blocking — split the slide or mark `exception` with a written reason. Check the rendered
-                  screen as well: a screen can be under the overflow limit and still be overcrowded.
-                  Core-concept gate: read the concept ledger ({{ inputs.concepts }}) and the
-                  evidence bundle's concepts check. If this page introduces a concept, confirm the rendered
-                  page shows its term, definition and every mustAppear phrase as readable screen text;
-                  the concept card must not be hidden behind an interaction step, and must survive the
-                  static fallback. If this page reinforces or assesses a concept, confirm it actually
-                  uses the concept. Add a `concepts` entry in the skeleton for every concept related
-                  to this page (conceptId, verdict, evidence, slideIds); a missing or `gap` entry is blocking.
-                  Check narration: the page has raw and spoken text for every voice; spoken text contains no
-                  markdown, backticks, [暂停], TODO/TBD; audio files exist and are non-empty; the player and
-                  voice selector work; the outline lists every page and jumps correctly.
-                  Note in the review that audio quality still needs a human audition and that narration uses
-                  Microsoft Edge TTS (an unofficial Edge endpoint, suitable for local/prototype use).
-                  If a safe implementation fix is needed, make it and rerun the affected gates, then recheck
-                  the screenshots. Do not edit slides outside this page.
-                  Reference adaptation: read the reference shell's lesson source ({{ inputs.shell }}/source/lesson.js
-                  and related source files) and this lesson's content. Decide yourself which visible content
-                  belongs to the reference lesson—text, code, file names, labels, images, character props,
-                  examples, and anything else you identify; this is not a fixed list. Decide what this lesson's
-                  equivalent is, replace it, and write your identified items and replacements into
-                  `referenceAdaptation` in the self-review. The rendered page must not retain reference-lesson
-                  content; keep the shell/brand/style/layout.
-                  Fill the skeleton JSON and MD. Verdict pass only if no blocking issues; otherwise stop.
+                  Read ONLY the evidence bundle
+                  review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json
+                  and the page screenshot under screenshots/{{ inputs.lesson_slug }}/. The bundle contains
+                  the page's parsed script fields (`scriptSlides`), related concepts, and the
+                  density/concepts/quiz/narration/overflow/overlap/rendered-check/rendered-text
+                  results. Do not read
+                  courseware.md/storyboard/deck and do not rerun those checks; the skeleton already has
+                  the hashes and automated checks.
+                  Fill review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json in place:
+                  - density[].semanticUnits / verdict / notes: name what the screen newly asks the
+                    student to connect. Same-rule variants, two sides of a comparison, and review of
+                    taught content are one unit; multiple independent teaching points are blocking
+                    unless split, or marked exception with a written reason.
+                  - concepts[]: one entry for every related concept in the bundle (conceptId, pass/gap,
+                    evidence, slideIds). If this page introduces a concept, the rendered page must show
+                    its term, definition and every mustAppear phrase as readable screen text, including
+                    the static fallback.
+                  - checklist: interaction produces the declared evidence (not just watch/next);
+                    reference-lesson content replaced; staged component behavior matches its brief
+                    (only if components are listed); no placeholder or personal data. High-signal
+                    rendered text (title/code/quiz/table/items/concepts) is already checked by
+                    `check-rendered-text` in automatedChecks; do not re-judge it.
+                  - referenceAdaptation: the bundle's `referenceAdaptation` is the per-lesson map,
+                    already filtered to this page. Confirm each mapped replacement is visible on
+                    the rendered page; if you see reference-lesson content not covered by the map,
+                    record the new reference string and its lesson replacement here. Do not re-read
+                    shells/<shell>/source/lesson.js unless the map is missing or clearly incomplete.
+                    The deterministic `check-rendered-text` pass also scans the mapped
+                    `residue: replace` strings; you only handle deltas. Keep shell/brand/style.
+                  - If the bundle lists unregistered components, read their staged packages under
+                    {{ inputs.component_staging }}/<id>/ and confirm behavior; add those files to
+                    `reviewedArtifacts`. The page gate also approves them into core.
+                  - issues and verdict.
+                  Do not write the MD; it is rendered from the JSON. If a safe fix is needed, make it
+                  and rerun build-page-evidence plus the affected gate. Verdict pass only if no blocking
+                  issues; otherwise stop.
+
+              - id: render-page-review
+                type: shell
+                run: "node workflow/tools/render-self-review-md.mjs review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --out review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.md --screenshots screenshots/{{ inputs.lesson_slug }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }}"
 
               - id: check-self-review-page
                 type: shell
@@ -807,6 +789,8 @@ steps:
             show_file: "review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.md"
             artifacts:
               - "review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"
+              - "review/{{ inputs.lesson_slug }}/reference-adaptation.json"
+              - "review/{{ inputs.lesson_slug }}/reference-adaptation.md"
             options: [approve, reject]
             on_reject: abort
 
@@ -913,40 +897,13 @@ steps:
     type: shell
     run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --script {{ inputs.courseware_script }} --pages {{ inputs.page_count }}"
 
+  # Alpha is a whole-deck aggregation, not a second visual review: every page
+  # was already seen by the teacher and its self-review is on disk. The
+  # expensive render/shell/art/narration gates already ran above and stopped
+  # the run on failure, so this step aggregates their evidence deterministically.
   - id: self-review-alpha
-    type: prompt
-    integration: "{{ inputs.integration }}"
-    prompt: |
-      AI self-review before human review (stage: alpha).
-      Read screenshots/{{ inputs.lesson_slug }}/, baseline-report.json, review/{{ inputs.lesson_slug }}/page-approvals.md, courseware.md,
-      storyboard.yml, content pack, component-plan.md, the registry, the assembled site
-      (build-manifest.json, shell-art-data.js), and the results of
-      all-sections-frozen, alpha-shell-build, alpha-script-gates, alpha-concepts-gate, alpha-quiz-keys-gate,
-      alpha-parity-gate, baseline-gate, alpha-gates, alpha-deck-data-gate,
-      alpha-source-fidelity-gate, alpha-bundle-gate, alpha-shell-gate, alpha-shell-art-gate
-      and alpha-narration-gate.
-      Check: every section was approved and remains hash-frozen; all APPROVED screens recaptured;
-      copied reference CSS/JS hashes are unchanged and the fidelity contract still passes;
-      every illustration slot maps to this lesson's generated art under assets/generated/,
-      build-manifest.json records no missingArt, and no reference crop ships in the site;
-      rendered content matches the script (screen text, interaction feedback, code/output);
-      no overflow/scrollbars; baseline diffs acceptable or explained; all used components are
-      registered core versions; no missing assets; no personal data; all automated gates pass.
-      Core-concept gate: read the concept ledger ({{ inputs.concepts }}) and the alpha-concepts-gate
-      result. Confirm every concept is introduced on its declared page, that the whole-deck build
-      still renders the definition and mustAppear phrases on that page, and that reinforcement /
-      assessment pages still exist. Record a `concepts` entry for every concept; a missing or `gap`
-      entry is blocking.
-      Density / segmenting gate: re-run
-      `node workflow/tools/density-report.mjs {{ inputs.courseware_script }} {{ inputs.storyboard }} --json`
-      against the final script/storyboard and copy its `signals` unchanged into `density`.
-      Confirm every screen still carries one semantic boundary and that no fix introduced a new
-      multi-unit screen; exceptions need notes.
-      Answer-position gate: use the alpha-quiz-keys-gate result and record the whole-deck
-      A/B/C/D distribution in the review. Check that every section's relettering survived the
-      whole-deck build and that no quiz has all correct answers in one position.
-      Write review/{{ inputs.lesson_slug }}/self-review-alpha.json and review/{{ inputs.lesson_slug }}/self-review-alpha.md.
-      Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
+    type: shell
+    run: "node workflow/tools/build-self-review-alpha.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --concepts {{ inputs.concepts }} --registry {{ inputs.component_registry }} --sections {{ inputs.review_sections }} --approvals review/{{ inputs.lesson_slug }}/page-approvals.json --script-approval review/{{ inputs.lesson_slug }}/script-approval.json --deck {{ inputs.deck_data }} --screenshots screenshots/{{ inputs.lesson_slug }} --review-dir review/{{ inputs.lesson_slug }} --out review/{{ inputs.lesson_slug }}/self-review-alpha.json --md review/{{ inputs.lesson_slug }}/self-review-alpha.md"
 
   - id: check-self-review-alpha
     type: shell
@@ -967,15 +924,8 @@ steps:
       args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
 
   - id: self-review-beta
-    type: prompt
-    integration: "{{ inputs.integration }}"
-    prompt: |
-      AI self-review before human review (stage: beta).
-      Read the converge report, trial logs, and open issue list.
-      Check: no unresolved hard gate failures; all issues triaged with severity/owner;
-      teacher/student trial evidence present; waivers documented.
-      Write review/{{ inputs.lesson_slug }}/self-review-beta.json and review/{{ inputs.lesson_slug }}/self-review-beta.md.
-      Verdict pass only if no blocking issues; otherwise stop.
+    type: shell
+    run: "node workflow/tools/build-self-review-beta.mjs --lesson-slug {{ inputs.lesson_slug }} --report review/{{ inputs.lesson_slug }}/converge-report.md --out review/{{ inputs.lesson_slug }}/self-review-beta.json --md review/{{ inputs.lesson_slug }}/self-review-beta.md"
 
   - id: check-self-review-beta
     type: shell
@@ -1017,19 +967,8 @@ steps:
     run: "node workflow/tools/check-shell-art.mjs --shell {{ inputs.shell }} --art {{ inputs.art_dir }}/art-manifest.json --site {{ inputs.site_dir }} --require-all"
 
   - id: self-review-gold
-    type: prompt
-    integration: "{{ inputs.integration }}"
-    prompt: |
-      AI self-review before human review (stage: gold).
-      Read final gate results, shell/site and illustration-provenance results, regression/accessibility
-      checks, checklist, and review log.
-      Check: all hard gates pass or have written waivers; no open blockers; sign-off artifacts complete.
-      Confirm gold-quiz-keys-gate still passes and the final deck's answer-position distribution
-      matches the Alpha self-review; a late content edit must not restore an all-A pattern.
-      Confirm gold-concepts-gate still passes: no late edit removed a concept's definition or
-      mustAppear phrases from its introducing page. Record a `concepts` entry for every concept.
-      Write review/{{ inputs.lesson_slug }}/self-review-gold.json and review/{{ inputs.lesson_slug }}/self-review-gold.md.
-      Verdict pass only if no blocking issues; otherwise stop.
+    type: shell
+    run: "node workflow/tools/build-self-review-gold.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --concepts {{ inputs.concepts }} --registry {{ inputs.component_registry }} --deck {{ inputs.deck_data }} --review-dir review/{{ inputs.lesson_slug }} --alpha review/{{ inputs.lesson_slug }}/self-review-alpha.json --out review/{{ inputs.lesson_slug }}/self-review-gold.json --md review/{{ inputs.lesson_slug }}/self-review-gold.md"
 
   - id: check-self-review-gold
     type: shell

@@ -2,12 +2,15 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.21.0 / 88 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.25.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
 核心变化：
 
+- **自审分层（0.22.0 / 0.23.0）**：`inputs` / `alpha` / `beta` / `gold` 改为由门禁结果与逐页自审确定性汇总，不再启动 AI 复述；`script` 自审改读一份紧凑证据包（逐屏脚本字段 + 闸门结果），不再读整份 `courseware.md`、content pack、style pack 和 registry；页自审只读证据包 + 截图，MD 由 JSON 自动渲染。**density/segmenting 自 0.23.0 起以页面自审为唯一权威**：脚本自审不再填 `density`、不再跑 `density-report`，`check-self-review-script` 也不再带 `--script`；页面证据包提供密度信号，页自审做最终判断。AI 自审只保留 `brief` / `script` / `component-plan` / 每页一次判断；参考适配映射每课生成一次。
+- **渲染文本确定性对比（0.25.0）**：`check-rendered-text` 从 deck 提取初始可见的高信号字面量（标题、代码、quiz 题干/选项、表格、items、chapter topics/flow、矩阵题活动面板、概念 mustAppear），在渲染后的 `#slide.textContent` 上归一化后精确包含，缺失即阻断；长散文用 `#slide.innerText` 的 token 覆盖率做非阻断提示。页自审不再判断逐字文本。
+- **参考适配每课一次（0.24.0）**：`build-reference-adaptation` 在脚本批准、storyboard 投影后读一次参考壳源码，生成 `review/<lesson>/reference-adaptation.json`（参考内容 → 本课替换、适用页、`residue`）；页自审只读这份映射做本页增量确认。`check-reference-residue` 在渲染后的 `#slide` 文本里确定性扫描 `residue: replace` 的参考字符串，命中即失败。
 - **人工审核 = 文件地址 + 原生选择**：11 个 `gui-gate` 在非 TTY 运行时写哈希绑定的 pending 请求并暂停；agent 把审核文件绝对路径/课件 URL 发给老师，用 harness 原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject，再用 `tools/gate-review.mjs decide` 记录，最后用 `tools/run-workflow.mjs resume` 继续。verdict 绑定 run/step/gate/digest/nonce 并一次性消费；agent 不能 `-i` 代答。
 - **人工闸门 fail-closed**：非交互运行必须通过 `tools/run-workflow.mjs`；Spec Kit 的 `paused` 被映射为退出码 3，agent 不能再把“停在 gate”当成成功。脚本批准与 `courseware.md` 的整份 SHA-256、每屏哈希绑定（`review/script-approval.json`），编辑脚本即失效；所有下游工具和 `verify-script-approval` 步骤都会重新校验。
 - **逐页 gate 的 resume 幂等保护**：Spec Kit 在嵌套步骤暂停后会重跑父 body（引擎明确说明，精确嵌套 resume 尚未实现）。页循环因此在 `implement-section`/AI 页自审之前运行 `tools/check-pending-gui-gate.mjs`；同一 run 已有 pending/decided 的 `review-page` gate 时跳过重建与自审，直接回到 gate，避免自审的 `reviewedAt` 改写导致 digest 变化、老师刚点的 verdict 失效。run id 由 wrapper 通过 Spec Kit 自带的 `SPECKIT_WORKFLOW_RUN_ID` 传给 shell 步骤。
@@ -25,10 +28,15 @@
 |---|---|
 | `install.mjs` | 一键安装：复制 workflow、初始化 Spec Kit、装 preset/workflow/依赖、检测 Chromium、smoke tests |
 | `preset/` | courseware preset：模板 + 命令（`speckit.script`、`component-plan`、`component-build`、`implement` 等） |
-| `workflows/courseware-production.yml` | 88 步生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套） |
+| `workflows/courseware-production.yml` | 91 步生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套） |
 | `steps/gui-gate/` | Spec Kit 自定义 gate step：非 TTY 写 pending 并暂停；TTY 退化为终端提问；校验 `verdict_input` 禁用与证据哈希 |
 | `tools/gate-review.mjs` | 人工审核助手：`show` 打印审核文件/链接/证据；`decide` 在老师明确回答后写入一次性 verdict；`status` 查看 run/gate |
-| `tools/build-page-evidence.mjs` | 汇总本页 density/concepts/quiz/narration/overflow/overlap/rendered/截图，生成自审 JSON/MD 骨架 |
+| `tools/build-page-evidence.mjs` | 汇总本页 density/concepts/quiz/narration/overflow/overlap/rendered-text/参考残留/截图，生成自审 JSON 骨架 |
+| `tools/build-self-review-inputs.mjs` / `build-script-review-evidence.mjs` / `build-self-review-{alpha,beta,gold}.mjs` | 确定性自审与脚本证据包；不再启动 AI 复述门禁 |
+| `tools/render-self-review-md.mjs` | 从自审 JSON 渲染 Markdown（页自审不再让 AI 写 MD） |
+| `tools/check-reference-adaptation.mjs` / `check-reference-residue.mjs` | 每课参考适配映射校验 + 渲染页参考字符串残留扫描 |
+| `tools/check-rendered-text.mjs` / `rendered-text-lib.mjs` | 高信号渲染文本阻断 + 散文覆盖率提示；归一化规则集中在 lib |
+| `schemas/reference-adaptation.schema.json` | 参考适配映射（参考内容 → 本课替换、页、residue） |
 | `tools/check-overlap.mjs` | Playwright 几何门禁：文字框不得与人物/插画相交 |
 | `tools/build-tasks.mjs` | 从 `storyboard.yml` / `review-sections.yml` 确定性生成 tasks.md |
 | `tools/list-missing-components.mjs` | 找出所有已声明但未注册/未暂存的 new/extend 组件，供页循环前预构建 |
