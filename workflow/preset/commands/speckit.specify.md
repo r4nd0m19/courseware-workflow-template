@@ -8,7 +8,7 @@ description: 生成信奥互动课件的教学简报（UbD），并建立内容�
 $ARGUMENTS
 ```
 
-> 如果内容包还不存在，先不要向老师要 `content-pack.json`；问老师要这门课的教案/讲义/网页/Word/PDF/Markdown，并用 `speckit.extract-content` 生成内容包。
+> 如果内容包还不存在，不要向老师要 `content-pack.json`、JSON、路径或命令。只问老师有没有这门课的教案、讲义、网页、Word、PDF 或图片；用 `speckit.extract-content` 生成内容包。
 
 ## Outline
 

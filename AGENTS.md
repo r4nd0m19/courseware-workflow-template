@@ -12,19 +12,27 @@
 - 看到退出码 3 表示工作流停在人工审核闸门。包装器会打印 `Review file:`（绝对路径）、`Review links:`（课件/预览 URL）、gate options，以及 `gate-review.mjs show/decide` 与 `run-workflow.mjs resume` 命令。
 - 每次人工 gate 都按同一顺序处理：
   1. 运行 `node workflow/tools/gate-review.mjs show <run_id>`（或直接读包装器输出）拿到待审 gate 与审核文件。
-  2. 把审核文件/链接发给老师：脚本审核给 `courseware.md` 的绝对路径；页面审核给可运行的课件 URL + 本页自审文件。
-  3. 用当前 harness 的原生提问/选择 UI 让老师明确选择 approve / reject：ZCode、Claude Code 用 `AskUserQuestion`，Codex 用其原生 user-input / approval 提示。不要用普通聊天消息代替原生选择；如果原生 UI 不可用或报错，停下并报告，不要退回文字提问。
+  2. 用通俗中文告诉老师这次看什么，并给**可点击的预览链接或文件链接**（不要给仓库路径、`show_file` 原文、哈希或技术字段）。
+  3. 用原生提问 UI 让老师直接点：ZCode / Claude Code 用 `AskUserQuestion`，Codex 用其原生 user-input / approval 提示。选项标签只用中文 **“通过，继续”** / **“不通过，需要改”**；内部再映射到 `approve` / `reject`，不要把英文选项给老师看。不要用普通聊天消息代替原生选择；如果原生 UI 不可用或报错，停下并报告，不要退回文字提问。
   4. **只有老师明确回答后**，才运行 `node workflow/tools/gate-review.mjs decide <run_id> --step <step> --choice <approve|reject> --by teacher`。不要在老师回答前调用 `decide`，不要替老师选择。
   5. 运行 `node workflow/tools/run-workflow.mjs resume <run_id>`，把输出继续处理到下一个 gate 或完成。不要直接调用 `specify workflow resume`，不要传 `-i`。
 - 内置 gate（输出里没有 `Review file:` / `Gate options:`）或老师显式在交互式终端运行时，才走终端回答；`node workflow/tools/run-workflow.mjs resume <run_id>` 仍是统一恢复入口。
 - 非交互运行不需要额外加 `</dev/null`；包装器已把 stdin 置空。交互式恢复时保留 TTY，gate 才会显示选项。
 
-### 对老师说话
+### 对老师说话（硬要求）
 
-- 每个 gate 必须调用当前 harness 的原生提问 UI：ZCode / Claude Code 用 `AskUserQuestion`，Codex 用其原生 user-input / approval 提示。选项用老师能直接点的中文，例如“通过，继续” / “不通过，返工”；不要用普通聊天让老师输入 `approve` / `reject`。原生提问 UI 失败就停下并报告，不要退回文字提问。
-- 不要把 wrapper 的英文技术块、`gate` / `verdict` / `digest` / `nonce` / `run id` 原样贴给老师。用通俗中文说明：这次审什么、点“通过”后会发生什么、点“不通过”会怎样。
-- 缺少内容包时，不要问老师要 `content-pack.json`。问老师手里有没有这门课的教案、讲义、网页、Word、PDF 或 Markdown；把源文件放进项目或给出路径，agent 用 `speckit.extract-content` 整理成工作流需要的内容包。
-- 壳审核与具体课程内容无关：可以先审壳；内容不对时再换 `lesson` / `content_pack` 重跑，不要用错误课件的草稿内容继续。
+- **默认老师不懂英语、不懂工作流/编程术语。** 老师看到的每一句话都必须是通俗中文。
+- 禁止对老师使用：`approve`、`reject`、`gate`、`verdict`、`digest`、`nonce`、`hash`、`run id`、`content-pack`、`lesson_slug`、`site_dir`、`storyboard`、`deck`、`self-review`、`JSON`、`Markdown`、`pipeline`、`workflow`、`repository`、`branch`、`commit`、`配置`、`部署`、`命令`、`终端`、`路径`。
+- 需要老师选择时，必须调用原生选择框，选项只用中文：**“通过，继续”** / **“不通过，需要改”**。不要出现 `approve` / `reject`；不要在聊天里让老师打字选择。原生 UI 失败就停下报告，不要退回文字提问。
+- **不要要求老师做任何技术动作**：不要运行命令、不要改文件、不要打开仓库里的路径、不要提供 JSON、不要安装软件、不要配置环境。技术动作 agent 自己做；做不到就说明“我需要先处理一个技术问题”，不要让老师代做。
+- 需要课程资料时，只问：**“您有没有这门课的教案、讲义、网页、Word、PDF 或图片？放到项目文件夹里，或者告诉我文件叫什么、在哪里就行。”** 不要提 `content-pack.json`、路径格式、JSON。
+- 审核时用老师能理解的说法：
+  - 壳：**“这是课件的整体外观和操作方式。您点开链接翻几页、点一下按钮、听一下声音，看看是否正常。”**
+  - 内容：**“这是每页要讲的内容和旁白。您看看知识点、例子、练习对不对。”**
+  - 页面：**“这是第 X 页。您点开链接操作一下，看看这一页的内容和互动。”**
+  - 不要说“自审报告”“哈希绑定”“证据文件”“gate”“verdict”。
+- 文件只给**可点击的链接或预览地址**，不要给需要老师自己去文件夹里找的路径；如果必须给文件，给一个可点击的链接并说明“点开就能看”。
+- 壳审核与具体课程内容无关：可以先审壳；内容不对时再换课程重新跑，不要用错误课件的草稿内容继续。
 
 ### 人工审核闸门（文件地址 + 原生选择）
 
