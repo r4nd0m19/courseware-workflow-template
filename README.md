@@ -51,6 +51,8 @@ specify integration use zcode
 
 一个项目可以放多个课件：每次运行传 `-i lesson_slug=<slug>`，运行时状态会隔离到 `review/<slug>/`、`screenshots/<slug>/`、`review/<slug>/gui-gates/`；`shells/`、`registry/`、`workflow/` 共享。
 
+审核时 agent 必须调用当前 harness 的原生提问 UI，用中文选项让老师直接点（如“通过，继续”/“不通过，返工”）；不要把 wrapper 的技术块或 `content-pack.json` 这类术语直接甩给老师。缺少内容包时，先问老师要教案、讲义、网页、Word、PDF 或 Markdown。
+
 ## 命令行安装
 
 ```bash
