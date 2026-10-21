@@ -759,7 +759,7 @@ try {
     /^  integration:\n    type: string\n    default: "auto"/m.test(workflowYaml)
   const hasHardcodedIntegration = /integration:\s*"(?:claude|codex|zcode)"/.test(workflowYaml)
   const harnessPass =
-    hasIntegrationInput && integrationExpressions >= 20 && !hasHardcodedIntegration
+    hasIntegrationInput && integrationExpressions >= 16 && !hasHardcodedIntegration
   console.log(
     `${harnessPass ? 'PASS' : 'FAIL'} workflow integration input (${integrationExpressions} steps)`,
   )

@@ -41,7 +41,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 ## Outline
 
-1. 读取 `tasks.md`、`courseware.md`、`review-sections.yml`、`storyboard.yml`、`component-plan.md`、`style-pack/source/SOURCE.json`、`style-pack/source/fidelity.json`、风格包 manifest、组件注册表和 `plan.md`；从参数解析 `--section`、`--sections`、`--storyboard`、`--deck-data`、`--staging`。
+1. 页模式只读本页相关部分：本页在 `courseware.md` 的区块、`storyboard.yml` 对应 slide、`component-plan.md`/简报中本页组件条目、`tasks.md` 中本页任务、当前 `review-sections.yml` 的 section，以及风格包 manifest/registry 的必要字段。**不要整份读** `tasks.md` / `courseware.md` / `storyboard.yml` / `component-plan.md`；生产 workflow 不再生成 `plan.md`，不要读它。整份模式（手动兜底）才读取全量文件。从参数解析 `--section`、`--sections`、`--storyboard`、`--deck-data`、`--staging`。
 2. 解析 `review-sections.yml`，确定本页与屏 ID；校验：
    ```bash
    node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml --script courseware.md --require-approved
