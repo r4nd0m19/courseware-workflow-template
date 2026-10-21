@@ -387,6 +387,19 @@ try {
     [scriptPlaceholder, content, style],
     1,
   )
+  const badTitleScript = path.join(tmpRoot, 'courseware-bad-title.md')
+  let badTitleText = fs.readFileSync(script, 'utf8')
+  badTitleText = badTitleText
+    .replace('## S01 · 程序是一组指令', '## S01 · 封面：程序是一组指令')
+    .replace('title: "程序是一组指令"', 'title: "封面：程序是一组指令"')
+  fs.writeFileSync(badTitleScript, badTitleText)
+  run(
+    'courseware script fail (production title prefix)',
+    'check-script.mjs',
+    [badTitleScript, content, style, registry],
+    1,
+    'production label',
+  )
   run(
     'quiz keys script pass',
     'check-quiz-keys.mjs',
@@ -602,6 +615,29 @@ try {
     ['--sections', reviewSections, '--storyboard', storyboard, '--section', 'A', '--screenshots', tmpShots],
     1,
     'courseware-production',
+  )
+  const freshDeck = path.join(tmpRoot, 'fresh-deck.json')
+  fs.writeFileSync(freshDeck, JSON.stringify({ slides: [{ id: 'S01' }] }, null, 2))
+  const freshShots = path.join(tmpRoot, 'fresh-shots')
+  fs.mkdirSync(freshShots, { recursive: true })
+  fs.writeFileSync(path.join(freshShots, 'S01.png'), 'smoke-png-S01')
+  fs.writeFileSync(
+    path.join(freshShots, 'S01.json'),
+    JSON.stringify({ slideId: 'S01', deckSha256: sha256File(freshDeck) }),
+  )
+  run(
+    'rendered screenshot matches the current deck',
+    'check-rendered-section.mjs',
+    ['--sections', reviewSections, '--storyboard', storyboard, '--section', 'A', '--screenshots', freshShots, '--deck', freshDeck, '--manual'],
+    0,
+  )
+  fs.writeFileSync(freshDeck, JSON.stringify({ slides: [{ id: 'S01', title: 'changed' }] }, null, 2))
+  run(
+    'rendered screenshot is stale after a deck change',
+    'check-rendered-section.mjs',
+    ['--sections', reviewSections, '--storyboard', storyboard, '--section', 'A', '--screenshots', freshShots, '--deck', freshDeck, '--manual'],
+    1,
+    'stale',
   )
   run(
     'freeze-section rejects outside the production workflow',
@@ -947,6 +983,13 @@ try {
       [],
       0,
       'OK lesson paths',
+    )
+    run(
+      'text/character overlap geometry',
+      'test-overlap.mjs',
+      [],
+      0,
+      'OK overlap geometry',
     )
   } else {
     skip('workflow wrapper fail-closed', 'specify CLI not on PATH')

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { readData } from './lib.mjs'
 import { DEFAULT_SCREENSHOTS_DIR } from './approval-lib.mjs'
 import { requireProductionRun } from './review-guard.mjs'
@@ -23,10 +24,11 @@ const sectionsPath = opt('--sections')
 const storyboardPath = opt('--storyboard')
 const sectionId = opt('--section')
 const screenshots = opt('--screenshots', DEFAULT_SCREENSHOTS_DIR)
+const deckPath = opt('--deck')
 
 if (!sectionsPath || !storyboardPath || !sectionId) {
   console.error(
-    'usage: node check-rendered-section.mjs --sections <file> --storyboard <file> --section <id> [--screenshots <dir>] [--manual|--alpha]',
+    'usage: node check-rendered-section.mjs --sections <file> --storyboard <file> --section <id> [--screenshots <dir>] [--deck <deck.json>] [--manual|--alpha]',
   )
   process.exit(2)
 }
@@ -35,6 +37,9 @@ requireProductionRun({
   manual: flag('--manual') || flag('--alpha'),
 })
 
+const expectedDeckSha256 = deckPath
+  ? crypto.createHash('sha256').update(fs.readFileSync(deckPath)).digest('hex')
+  : null
 const manifest = readSectionManifest(sectionsPath)
 const storyboard = readData(storyboardPath)
 const errors = validateSectionManifest(manifest, storyboard.slides || [], {
@@ -64,6 +69,17 @@ if (!errors.length) {
       const meta = JSON.parse(fs.readFileSync(json, 'utf8'))
       if (meta.slideId !== id) {
         errors.push(`screenshot metadata for ${json} says slideId=${meta.slideId}`)
+      }
+      if (expectedDeckSha256) {
+        if (typeof meta.deckSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(meta.deckSha256)) {
+          errors.push(
+            `screenshot for ${id} has no deck hash; re-capture it with build-screen --deck after the current build`,
+          )
+        } else if (meta.deckSha256 !== expectedDeckSha256) {
+          errors.push(
+            `screenshot for ${id} is stale: deck ${meta.deckSha256.slice(0, 12)}…, current ${expectedDeckSha256.slice(0, 12)}…; rebuild and re-capture`,
+          )
+        }
       }
     } catch (err) {
       errors.push(`screenshot metadata unreadable for ${id}: ${err.message}`)

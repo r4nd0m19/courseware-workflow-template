@@ -87,6 +87,9 @@ node workflow/tools/run-workflow.mjs courseware-production \
 - `register-staged-components` 也只允许在 production run 内、且当前 run 的 `review-page` gate 已 `approve` 时注册；手工注册必须显式 `--manual`。
 - `script-to-storyboard --out` 只允许从已批准脚本投影；`--check` / `--print` 不受影响。测试/调试用 `--manual`。
 - 页自审必须做“参考适配”：读参考课件源码（如 `<shell>/source/lesson.js`）和本课内容，**自己判断**参考课里哪些可见内容属于参考课，本课对应应该是什么；不套固定清单。把识别项和替换写进 self-review 的 `referenceAdaptation`；`check-self-review-page` 会强制非空。渲染页面不能残留参考课内容，壳/品牌/风格/布局保持不变。
+- 学生可见标题不得带制作前缀：`check-script` 拒绝 `封面：` / `标题：` / `第 X 页` / `Sxx` 开头的标题；封面用 `layout`/`type` 表达。
+- 页循环有 `check-overlap`：文字框（标题、lead、cover-output、monitor-bar、pre 等）与人物/插画 bounding box 相交超过 4px 即失败；在 `review-page` 之前。
+- 截图绑定当前 deck：`build-screen --deck` 记录 `deckSha256`；`check-rendered-section --deck` 发现截图缺少哈希或与当前 deck 不一致就失败，必须重建重截。老师看到的图必须来自当前构建。
 - 本地文件无法证明“某个真人按了键”：能改文件的人也能改账本。上面的检查保证正常路径不会误放行、暂停的 gate 不能被当成批准。`gate-review.mjs decide` 只在老师明确回答后由 agent 调用，verdict 记录 `source: chat` / `decidedBy: teacher` 并绑定 run/step/digest/nonce；真正的信任边界是老师在自己面前的 harness 里做出的选择，agent 不代答、不伪造 verdict。
 - 页循环内的 `review-page` 有 resume guard：Spec Kit 恢复嵌套步骤时会重跑父 body；`check-pending-gui-gate.mjs` 用 wrapper 设置的 `SPECKIT_WORKFLOW_RUN_ID` 认出同一 run 的 pending/decided gate，跳过页重建与自审后再进入 gate，避免 `reviewedAt` 改写使已批准的 digest 失效。不要手工删 pending/verdict、改 run 状态或绕过 guard；guard 不是批准来源，verdict 仍由 `gate-review.mjs` 按 nonce/digest 写入并一次性消费。
 

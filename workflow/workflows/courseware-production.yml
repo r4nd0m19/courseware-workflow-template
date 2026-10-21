@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.17.1"
+  version: "0.18.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -755,7 +755,7 @@ steps:
                 step:
                   id: build-one-section-screen
                   type: shell
-                  run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots/{{ inputs.lesson_slug }}"
+                  run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --deck {{ inputs.deck_data }} --out screenshots/{{ inputs.lesson_slug }}"
 
               - id: section-deck-data-gate
                 type: shell
@@ -775,7 +775,7 @@ steps:
 
               - id: section-rendered-check
                 type: shell
-                run: "node workflow/tools/check-rendered-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --section {{ steps.advance_section.output.data.section.id }} --screenshots screenshots/{{ inputs.lesson_slug }}"
+                run: "node workflow/tools/check-rendered-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --section {{ steps.advance_section.output.data.section.id }} --screenshots screenshots/{{ inputs.lesson_slug }} --deck {{ inputs.deck_data }}"
 
               - id: section-baseline-gate
                 type: shell
@@ -805,6 +805,13 @@ steps:
               - id: section-overflow-gate
                 type: shell
                 run: "node workflow/tools/check-overflow.mjs {{ inputs.deck_url }} --script {{ inputs.courseware_script }} --start {{ steps.advance_section.output.data.section.start }} --pages {{ steps.advance_section.output.data.section.count }}"
+
+              # Text must not run under the absolutely-positioned character or
+              # illustration. This catches the cover-output/character collision
+              # before the teacher sees the page.
+              - id: section-overlap-gate
+                type: shell
+                run: "node workflow/tools/check-overlap.mjs {{ inputs.deck_url }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --storyboard {{ inputs.storyboard }}"
 
               - id: self-review-page
                 type: prompt
@@ -945,7 +952,7 @@ steps:
     step:
       id: build-one-screen
       type: shell
-      run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots/{{ inputs.lesson_slug }}"
+      run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --deck {{ inputs.deck_data }} --out screenshots/{{ inputs.lesson_slug }}"
 
   - id: baseline-gate
     type: shell
