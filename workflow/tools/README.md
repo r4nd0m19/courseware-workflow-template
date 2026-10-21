@@ -207,7 +207,23 @@ node workflow/tools/check-rendered-text.mjs \
 # 固定 1440×900 播放器（0.26.0）
 node workflow/tools/write-player-page.mjs --site shells/<id>/site
 # extract-shell / prepare-shell-site / check-shell --serve-preview 会自动写入
+
+# 页自审性能测试（0.27.0）
+# 1) 确定性管线：证据包/截图/JSON/MD，重复测平均
+node workflow/tools/bench-page-review.mjs \
+  --lesson-slug <slug> --script specs/<slug>/courseware.md \
+  --content <content-pack.json> --storyboard specs/<slug>/storyboard.yml \
+  --sections specs/<slug>/review-sections.yml --deck specs/<slug>/deck.json \
+  --concepts specs/<slug>/concepts.yml --site-dir site/<slug> \
+  --screenshots screenshots/<slug> --repeat 3 --out /tmp/page-bench.json
+# 2) 真实 run：按 step 统计实际耗时（含 self-review-page AI 步骤）
+node workflow/tools/workflow-timing.mjs --latest --filter 'page|evidence' --json
+# 或指定 run：
+node workflow/tools/workflow-timing.mjs --run <run-id>
 ```
+
+`bench-page-review` 不调用 AI，只测确定性部分；真正的 `self-review-page` 耗时用
+`workflow-timing` 从真实 run 的 `log.jsonl` 读。基准不是门禁，失败项只记录状态。
 
 ```bash
 node workflow/tools/check-self-review.mjs review/self-review-brief.json

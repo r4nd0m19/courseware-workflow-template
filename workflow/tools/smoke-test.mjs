@@ -1194,6 +1194,66 @@ try {
     failed += 1
     console.error('write-player-page.mjs must emit a 1440×900 iframe player with whole-canvas scaling')
   }
+
+  // ---- performance tools ----
+  total += 1
+  const timingRun = path.join(tmpRunsDir, 'timing-perf')
+  fs.mkdirSync(timingRun, { recursive: true })
+  const timingStart = Date.now()
+  const timingEvents = [
+    ['step_started', 'build-page-evidence', timingStart],
+    ['step_completed', 'build-page-evidence', timingStart + 1500],
+    ['step_started', 'self-review-page', timingStart + 1500],
+    ['step_completed', 'self-review-page', timingStart + 4500],
+  ].map(([event, step_id, timestamp]) => ({
+    event,
+    step_id,
+    status: event === 'step_completed' ? 'completed' : undefined,
+    timestamp: new Date(timestamp).toISOString(),
+  }))
+  fs.writeFileSync(
+    path.join(timingRun, 'log.jsonl'),
+    `${timingEvents.map((event) => JSON.stringify(event)).join('\n')}\n`,
+  )
+  fs.writeFileSync(
+    path.join(timingRun, 'state.json'),
+    JSON.stringify({
+      run_id: 'timing-perf',
+      workflow_id: 'courseware-production',
+      status: 'completed',
+      inputs: { lesson_slug: 'smoke-lesson' },
+    }),
+  )
+  const timingRes = spawnSync(
+    process.execPath,
+    [
+      path.join(toolsDir, 'workflow-timing.mjs'),
+      '--run',
+      'timing-perf',
+      '--dir',
+      tmpRunsDir,
+      '--json',
+    ],
+    { encoding: 'utf8' },
+  )
+  let timingPass = false
+  try {
+    const parsed = JSON.parse(timingRes.stdout)
+    const page = parsed.steps.find((step) => step.step === 'self-review-page')
+    const evidence = parsed.steps.find((step) => step.step === 'build-page-evidence')
+    timingPass =
+      timingRes.status === 0 &&
+      page?.totalSeconds === 3 &&
+      evidence?.totalSeconds === 1.5 &&
+      fs.existsSync(path.join(toolsDir, 'bench-page-review.mjs'))
+  } catch {
+    timingPass = false
+  }
+  console.log(`${timingPass ? 'PASS' : 'FAIL'} page-review performance tools`)
+  if (!timingPass) {
+    failed += 1
+    console.error('workflow-timing.mjs must pair step timestamps; bench-page-review.mjs must exist')
+  }
 } finally {
   fs.rmSync(tmpRoot, { recursive: true, force: true })
 }
