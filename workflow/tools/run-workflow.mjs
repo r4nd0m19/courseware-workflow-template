@@ -243,13 +243,16 @@ if (status === 'paused') {
         : ''
     const lines = [
       `REVIEW REQUIRED (run ${runId}, step ${step})`,
-      'Do not paste this block to the teacher. Explain the review in plain Chinese: what it is, what "通过" does next, and what "不通过" changes. Avoid workflow jargon (gate, verdict, digest, content-pack, run id).',
-      'Ask now with the native question UI: ZCode and Claude Code call AskUserQuestion with Chinese options such as "通过，继续" / "不通过，返工"; Codex uses its native user-input/approval prompt. Do not ask in plain chat. If the native UI fails, stop and report the failure.',
-      `Get the gate details: node workflow/tools/gate-review.mjs show ${runId}${stateDir}`,
-      `Record the teacher's answer: node workflow/tools/gate-review.mjs decide ${runId} --step ${gateStep} --choice <approve|reject>${stateDir}`,
-      `Then resume the workflow: node workflow/tools/run-workflow.mjs resume ${runId}`,
+      'FOR THE AGENT ONLY — never paste this block to the teacher. The teacher may not read English or technical terms.',
+      'Explain in plain Chinese only: what is being reviewed, what happens if the teacher chooses "通过，继续", and what changes if they choose "不通过，需要改". Do not show approve/reject/gate/verdict/digest/run id/content-pack, repository paths, or commands.',
+      'Call AskUserQuestion now with exactly two Chinese labels: "通过，继续" and "不通过，需要改". Do not ask the teacher to type a choice. If the native UI fails, stop and report the failure.',
+      'Do not ask the teacher to run commands, edit files, install tools, configure anything, or provide JSON. Do the technical work yourself. If you need source material, ask in plain Chinese for lesson notes, a webpage, Word/PDF, or Markdown and offer to handle the rest.',
+      'Show a clickable preview URL or file link, not a repository path.',
+      `Agent commands (never show): node workflow/tools/gate-review.mjs show ${runId}${stateDir}`,
+      `Record the internal answer: node workflow/tools/gate-review.mjs decide ${runId} --step ${gateStep} --choice <approve|reject>${stateDir}`,
+      `Then resume: node workflow/tools/run-workflow.mjs resume ${runId}`,
       'Do not call `specify workflow resume` directly, do not pass -i, and do not edit pending/verdict files by hand.',
-      Array.isArray(guiGate.options) ? `Gate options: ${guiGate.options.join(' / ')}` : '',
+      Array.isArray(guiGate.options) ? `Internal choice values (never show): ${guiGate.options.join(' / ')}` : '',
     ]
     if (message) lines.push('', 'Review request:', message)
     if (absoluteReviewFile) {
