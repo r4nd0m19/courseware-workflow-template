@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.26.1 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.27.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
@@ -69,6 +69,9 @@
 | `tools/check-script-approval.mjs` / `approval-lib.mjs` | 校验批准账本：schema、人工批准人、gate 结果与 run 状态、整份/每屏哈希、APPROVED 状态 |
 | `tools/run-workflow.mjs` | fail-closed 运行 `specify workflow run/resume`；`paused` → 退出码 3；人工 gate 打印审核文件绝对路径、链接、`gate-review.mjs show/decide` 与 `resume` 命令，内置 gate 仍打印人工恢复命令 |
 | `tools/build-narration.mjs` / `check-narration.mjs` | Edge TTS 语音生成与校验；按旁白文本 + 音色 + rate/pitch/format/provider 哈希复用 MP3，文本变化才重生成 |
+| `tools/bench-page-review.mjs` | 页自审确定性基准：证据包/截图/JSON/MD 的耗时与上下文大小 |
+| `tools/workflow-timing.mjs` | 真实 run 的逐步骤耗时报告（含 `self-review-page` AI 步骤） |
+| `tools/write-player-page.mjs` / `runtime/player.html` | 固定 1440×900 无工具栏播放器；缩放只改变整体大小 |
 | `tools/smoke-test.mjs` | 全量工具回归（含人工 gate 静态检查与端到端） |
 | `tools/test-gui-gate.mjs` | 人工 gate 端到端：暂停 → pending → `gate-review show/decide` → `run-workflow resume` → completed |
 | `examples/` | 脚本/组件计划/注册表/组件包/故事板的通过/失败 fixture |
