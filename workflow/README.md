@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.15.1 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
+当前版本：**workflow 0.16.0 / 92 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。核心变化：
 
 - **人工审核 = 文件地址 + 原生选择**：13 个 `gui-gate` 在非 TTY 运行时写哈希绑定的 pending 请求并暂停；agent 把审核文件绝对路径/课件 URL 发给老师，用 harness 原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject，再用 `tools/gate-review.mjs decide` 记录，最后用 `tools/run-workflow.mjs resume` 继续。verdict 绑定 run/step/gate/digest/nonce 并一次性消费；agent 不能 `-i` 代答。
 - **人工闸门 fail-closed**：非交互运行必须通过 `tools/run-workflow.mjs`；Spec Kit 的 `paused` 被映射为退出码 3，agent 不能再把“停在 gate”当成成功。脚本批准与 `courseware.md` 的整份 SHA-256、每屏哈希绑定（`review/script-approval.json`），编辑脚本即失效；所有下游工具和 `verify-script-approval` 步骤都会重新校验。
@@ -21,7 +21,7 @@
 |---|---|
 | `install.mjs` | 一键安装：复制 workflow、初始化 Spec Kit、装 preset/workflow/依赖、检测 Chromium、smoke tests |
 | `preset/` | courseware preset：模板 + 命令（`speckit.script`、`component-plan`、`component-build`、`implement` 等） |
-| `workflows/courseware-production.yml` | 91 步生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套） |
+| `workflows/courseware-production.yml` | 92 步生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套） |
 | `steps/gui-gate/` | Spec Kit 自定义 gate step：非 TTY 写 pending 并暂停；TTY 退化为终端提问；校验 `verdict_input` 禁用与证据哈希 |
 | `tools/gate-review.mjs` | 人工审核助手：`show` 打印审核文件/链接/证据；`decide` 在老师明确回答后写入一次性 verdict；`status` 查看 run/gate |
 | `schemas/` | content-pack、courseware-script、storyboard、style-pack、component-package/registry、narration、self-review 等 schema |
@@ -78,6 +78,19 @@ specify integration use claude    # 恢复默认；Codex 技能保留
 ```
 
 之后运行 workflow 时传 `-i integration=codex`（输入默认 `auto` 跟随项目默认）。Codex 需要项目是 git 仓库。非交互运行必须用 `node workflow/tools/run-workflow.mjs ...`，不要直接 `specify workflow run`：Spec Kit 在 gate 处会以 exit 0 返回 `paused`，包装器则返回 exit 3。人工 gate 的 exit 3 会打印审核文件绝对路径、链接、`gate-review.mjs show/decide` 与 `resume` 命令；内置 gate 仍打印终端恢复命令。详见 [integrations/README.md](integrations/README.md)。
+
+## 多课件项目
+
+一个项目可放多个 `specs/<lesson>/`。运行 workflow 时传 `-i lesson_slug=<slug>`，包装器会把运行时状态隔离到：
+
+- `review/<slug>/`（script/page approvals、self-review、self-study、gui-gates）
+- `screenshots/<slug>/`
+- `site/<slug>/`、`baselines/<slug>/`（由 `site_dir` / `baseline_dir` 输入指定）
+- `generated/<slug>/`（`art_dir` 输入）
+
+`shells/`、`registry/`、`style-pack/`、`workflow/` 共享。工具默认路径读取 `COURSEWARE_REVIEW_DIR` / `COURSEWARE_SCREENSHOTS_DIR` / `COURSEWARE_SCRIPT_APPROVAL` / `COURSEWARE_PAGE_APPROVALS` / `COURSEWARE_GATE_STATE_DIR`；手工调用时也可以用对应的 `--approval` / `--approvals` / `--screenshots` / `--state-dir` 覆盖。不传 `lesson_slug` 时保持旧的单课件默认路径。
+
+旧的手工示例里出现的 `prototype/shell-site` / `prototype/site` 是单课件路径；多课件项目必须用 `site/<slug>`、`site/<slug>/narration.json`、`site/<slug>/audio` 等带 lesson 段的路径，否则 `validate-lesson-paths` 会拒绝运行。
 
 ## 核心架构（先读这一节）
 
@@ -368,7 +381,9 @@ node workflow/tools/run-workflow.mjs courseware-production \
   -i lesson_slug="001-2d-arrays" \
   -i art_prompts="specs/001-2d-arrays/art-prompts.json" \
   -i art_dir="generated/001-2d-arrays" \
-  -i site_dir="prototype/shell-site" \
+  -i site_dir="site/001-2d-arrays" \
+  -i narration_manifest="site/001-2d-arrays/narration.json" \
+  -i audio_dir="site/001-2d-arrays/audio" \
   -i deck_data="specs/001-2d-arrays/deck.json" \
   -i deck_url="http://127.0.0.1:8082/" \
   -i page_count=16 \
@@ -453,7 +468,7 @@ prompt self-review → check-self-review → human gate
 - Windows 兼容修复实测：`fs.cpSync` 的 filter 收到 `\\?\` 前缀路径，`path.relative` 因此把祖先目录（如 `staging`）当成相对路径的一部分，注册组件时只复制了 `component.json`；现在统一去掉长路径前缀并按“目标必须在源内”失败关闭。包装器非交互分支改用管道 stdin（不是 NUL），避免 Python `isatty()` 在 Windows 上误判为交互式而卡在终端 gate。
 - `check-source-fidelity --source-only` 与完整 DOM 模式已对 `style-pack/source` + `prototype/site` 实测通过（含 26 个组件选择器与 3 个自定义组件）；壳路径的 source 闸门对 `shells/branch-choice/SOURCE.json` 实测通过（15 个源文件哈希一致）。
 - 壳路径已在 001 Section A 实测：`build-shell-site`（插画 provenance → fail-closed 站点 → bundle/宿主 → 壳/插画站点闸门）、`check-deck-data --shell`、`check-shell --site prototype/shell-site --require-art`、`check-shell-art --site --require-all`、`check-overflow --debug-go`、`check-rendered-section` 与 68 项运行时检查全部通过；7 屏 × 4 声线 = 28 个非空 MP3，站点 `missingArt: []`。
-- 0.15.0 workflow YAML 经 `specify workflow info` 解析成功：91 个顶层步骤、含逐页循环嵌套，无重复 ID；13 个人工 gate 均为 `gui-gate`，自定义 step 由 `.specify/workflows/steps/gui-gate/` 加载；`review-shell` 门禁能读取 `validate-shell` 的 JSON 输出（`previewUrl` / `reviewFile` / `slideCount` / `typeCount` / `narration.voiceCount` / `narration.pageCount`）；`approve-script` 读取 `steps.review-script.output.choice` 与 `context.run_id` 并核对 run state，`verify-script-approval` 紧随其后且要求当前 run。
+- 0.16.0 workflow YAML 经 `specify workflow info` 解析成功：92 个顶层步骤、含逐页循环嵌套，无重复 ID；13 个人工 gate 均为 `gui-gate`，自定义 step 由 `.specify/workflows/steps/gui-gate/` 加载；`review-shell` 门禁能读取 `validate-shell` 的 JSON 输出（`previewUrl` / `reviewFile` / `slideCount` / `typeCount` / `narration.voiceCount` / `narration.pageCount`）；`approve-script` 读取 `steps.review-script.output.choice` 与 `context.run_id` 并核对 run state，`verify-script-approval` 紧随其后且要求当前 run。
 - `check-shell --shots review/shell-shots --review-out review/shell-preview.md --serve-preview` 实测：30 页占位内容、30 张截图、21 种原生类型、29 项互动自检通过；所有标题含“占位”，4 个音色共 32 个占位 MP3 全部解码成功，并在真实壳里播放了 `xiaolai` 与 `xiaozhi`；自动播放会在互动页停住并提示“下一页”，点“下一页”后才继续；detached 预览服务可复用（第二次运行 `previewReused: true`）。
 - 双 harness 已实测：Claude Code 与 Codex 并装后 `.claude/skills` 与 `.agents/skills` 并存；workflow 的 `prompt` 与 `command` 步骤都能经 `codex exec` 调度（command 步骤发送 `$speckit-<name>`）；Codex 在非 git 目录报 `Not inside a trusted directory`，`git init` 后通过；非交互运行必须经 `run-workflow.mjs`，`paused` 返回 exit 3 而不是 0。
 - `generate-shell-art --reuse` 已在 001 实测：prompt / 参考图哈希 / 输出哈希 / provenance 全部匹配时复用 cover、end，不读 API key；`check-shell-art --require-all` 仍通过。

@@ -41,7 +41,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
    - `build-narration.mjs` → `build-audio-adapter.mjs`；参考 `lesson-audio.js` 与外壳目录不动
    - 四种声线（小智/小创老师/小未/小来老师）均可选、可播放、可暂停/拖动
 8. 生成一个全局闸门任务（全部页批准后），运行：
-   - `node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --approval review/script-approval.json --require-all`
+   - `node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --approval $COURSEWARE_SCRIPT_APPROVAL --require-all`
    - `node workflow/tools/check-script.mjs courseware.md <content-pack> <style-pack-manifest> registry/index.json`
    - `node workflow/tools/script-to-storyboard.mjs courseware.md --check storyboard.yml`
    - `node workflow/tools/validate-json.mjs workflow/schemas/storyboard.schema.json <storyboard>`
@@ -57,7 +57,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 ## Self-review（强制，人工审核前）
 
-- 按 `specify preset resolve self-review-template` 解析到的模板 写 `review/self-review-tasks.json` 和 `.md`。
+- 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-tasks.json` 和 `.md`。
 - 检查只含 APPROVED 屏、Deps/DoD 完整、所有组件已注册、闸门命令完整；`verdict` 必须为 `pass`。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。
 - 只有自审 pass 后才进入下面的 Human Review。

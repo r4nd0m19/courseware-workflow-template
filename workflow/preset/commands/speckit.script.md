@@ -8,6 +8,8 @@ description: 生成人类可读的课件脚本 courseware.md（屏幕内容、�
 $ARGUMENTS
 ```
 
+> 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`--approval` 用 `$COURSEWARE_SCRIPT_APPROVAL`。workflow 会设置这些变量，并通过 `$ARGUMENTS` 传 `--lesson-slug <slug>`。
+
 ## Outline
 
 1. 前置条件：`spec.md` 已获人工 `approve`；内容包、风格包 manifest 与 `.specify/memory/constitution.md` 可读。
@@ -34,7 +36,7 @@ $ARGUMENTS
 8. 运行闸门：
    ```bash
    node workflow/tools/check-script.mjs courseware.md <content-pack.json> <style-pack-manifest.json> [registry/index.json]
-   node workflow/tools/script-to-storyboard.mjs courseware.md --out storyboard.yml
+   node workflow/tools/script-to-storyboard.mjs courseware.md --out storyboard.yml --draft
    node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml
    node workflow/tools/check-source-fidelity.mjs --source-only
    ```
@@ -43,7 +45,7 @@ $ARGUMENTS
 
 ## Self-review（强制，人工审核前）
 
-- 按 `specify preset resolve self-review-template` 解析到的模板 写 `review/self-review-script.json` 和 `.md`。
+- 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-script.json` 和 `.md`。
 - 必须运行 `check-script.mjs` 且 `verdict` 为 `pass`；逐屏检查屏幕内容/旁白分离、交互反馈完整、无占位符。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。
 - 只有自审 pass 后才进入 Human Review；不得自行把脚本标成 APPROVED。
@@ -53,5 +55,5 @@ $ARGUMENTS
 - 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为 `courseware.md` + `review-sections.yml` + 自审结果。
 - 主动提出审核请求：逐屏屏幕内容、交互设计、旁白、误区反馈、拆页建议、逐页清单、自动检查结果。
 - 明确询问：`Approve courseware script? (approve / reject / request changes)`。
-- 只有老师批准后，才进入下游阶段；批准状态只能由工作流的 `review-script` gate 记录，并由紧随其后的 `approve-script` 步骤把 frontmatter 与各屏 `status` 改为 `APPROVED`、写入 `review/script-approval.json`。你（AI）不得自行把状态改为 `APPROVED`，不得手动运行 `approve-script.mjs`；未获 `approve` 不得进入 component-plan/plan/tasks/implement。
+- 只有老师批准后，才进入下游阶段；批准状态只能由工作流的 `review-script` gate 记录，并由紧随其后的 `approve-script` 步骤把 frontmatter 与各屏 `status` 改为 `APPROVED`、写入 `$COURSEWARE_SCRIPT_APPROVAL`。你（AI）不得自行把状态改为 `APPROVED`，不得手动运行 `approve-script.mjs`；未获 `approve` 不得进入 component-plan/plan/tasks/implement。
 - 脚本批准后，课件按 `review-sections.yml` 逐页实现、逐页渲染、逐页人工审核；某一页 reject 只返工该页（已批准页由哈希冻结），不要重做整份课件。

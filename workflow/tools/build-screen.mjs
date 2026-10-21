@@ -4,7 +4,11 @@ import path from 'node:path'
 import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
 import { readData } from './lib.mjs'
-import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
+import {
+  assertScriptApproved,
+  DEFAULT_SCREENSHOTS_DIR,
+  DEFAULT_SCRIPT_APPROVAL,
+} from './approval-lib.mjs'
 import { requireProductionRun } from './review-guard.mjs'
 
 const args = process.argv.slice(2)
@@ -24,7 +28,7 @@ Options:
   --storyboard <path>     storyboard.yml for slide order
   --script <path>         courseware.md; when set, its approval ledger must match
   --approval <path>       whole-script approval ledger (default: review/script-approval.json)
-  --out <dir>             screenshot output (default: screenshots)
+  --out <dir>             screenshot output (default: $COURSEWARE_SCREENSHOTS_DIR or screenshots)
   --wait <ms>             wait after navigation (default: 500)
   --index <n>             zero-based index in the current deck (for section-filtered decks)
   --next-selector <css>   optional next control
@@ -39,7 +43,7 @@ const url = opt('--url', '')
 const storyboardPath = opt('--storyboard', '')
 const scriptPath = opt('--script', '')
 const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
-const outDir = path.resolve(opt('--out', 'screenshots'))
+const outDir = path.resolve(opt('--out', DEFAULT_SCREENSHOTS_DIR))
 const waitMs = Number(opt('--wait', '500'))
 const explicitIndex = opt('--index', '')
 const nextSelector = opt('--next-selector', '')

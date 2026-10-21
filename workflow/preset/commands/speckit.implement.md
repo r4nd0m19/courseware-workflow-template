@@ -10,6 +10,8 @@ $ARGUMENTS
 
 ## 运行模式
 
+> 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`screenshots/` 路径用 `$COURSEWARE_SCREENSHOTS_DIR/...`，`--approval` 用 `$COURSEWARE_SCRIPT_APPROVAL`，`--approvals` 用 `$COURSEWARE_PAGE_APPROVALS`；站点输出用 `site/<lesson_slug>`，不要写死 `prototype/shell-site`。workflow 会设置这些变量，并通过 `$ARGUMENTS` 传 `--lesson-slug <slug>`。
+
 - **逐页模式（工作流默认）**：参数含 `--section <id>`。只实现/修改该页，渲染该页，提交老师审核；上一页未 `approve` 不得继续。
 - **整份模式（仅手动兜底）**：参数不含 `--section`。实现全部 `APPROVED` 屏；仍需按 `review-sections.yml` 逐页自审和人工审核，不得跳过页 gate。正常生产必须由 `courseware-production` workflow 驱动；`build-screen` / `check-rendered-section` / `freeze-section` 在 workflow 外会 fail closed，不要用整份模式绕过页 gate（调试/测试才加 `--manual`）。
 - **数据文件**：参数可含 `--deck-data <path>`，工作流默认传 `specs/<lesson>/deck.json`；本命令只写这个文件，不得另起 deck 数据文件。
@@ -35,7 +37,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
 
-脚本批准必须由 `courseware-production` workflow 的 `self-review-script` → `check-self-review-script` → `review-script` 产生；`approve-script` 会核对同一 run 的这两步和 `review/self-review-script.json` 的哈希绑定。只有 gate 的最小审批 workflow 会被拒绝。
+脚本批准必须由 `courseware-production` workflow 的 `self-review-script` → `check-self-review-script` → `review-script` 产生；`approve-script` 会核对同一 run 的这两步和 `$COURSEWARE_REVIEW_DIR/self-review-script.json` 的哈希绑定。只有 gate 的最小审批 workflow 会被拒绝。
 
 ## Outline
 
@@ -43,7 +45,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
 2. 解析 `review-sections.yml`，确定本页与屏 ID；校验：
    ```bash
    node workflow/tools/check-review-sections.mjs review-sections.yml storyboard.yml --script courseware.md --require-approved
-   node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --approval review/script-approval.json --approvals review/page-approvals.json
+   node workflow/tools/check-section-freeze.mjs --sections review-sections.yml --storyboard storyboard.yml --script courseware.md --approval "$COURSEWARE_SCRIPT_APPROVAL" --approvals "$COURSEWARE_PAGE_APPROVALS"
    ```
    第二条保证已批准页的脚本没有被改动。失败时停止，不要覆盖已批准内容。
 3. **只实现本页的 `APPROVED` 屏**；不要改其他页、`DRAFT`/`SKIP` 屏。
@@ -95,10 +97,10 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 ## Self-review（强制，人工审核前）
 
-- 写 `review/self-review-page-<id>.json` 和 `.md`，模板按 `specify preset resolve self-review-template`。
+- 写 `$COURSEWARE_REVIEW_DIR/self-review-page-<id>.json` 和 `.md`，模板按 `specify preset resolve self-review-template`。
 - `stage` 写 `page-<id>`；`artifactPaths` 必须包含本页的 `courseware.md` 区块、`storyboard.yml`、`deck.json`、截图、闸门结果。
 - 逐屏核对：屏幕文字/代码/输出、交互反馈、完成条件、重置与脚本一致；无占位符；无未注册组件（本页暂存组件除外）；无个人信息。
-- 若本页有暂存组件：读取 `review/self-review-page-<id>-components.md` 与暂存包，确认渲染出来的行为符合简报、交互产生了声明的证据、没有静默退化为静态降级；把组件结论并入本页自审，不另开一次人工组件审核。
+- 若本页有暂存组件：读取 `$COURSEWARE_REVIEW_DIR/self-review-page-<id>-components.md` 与暂存包，确认渲染出来的行为符合简报、交互产生了声明的证据、没有静默退化为静态降级；把组件结论并入本页自审，不另开一次人工组件审核。
 - 互动尝试：逐页确认脚本写了 `contentDemand` / `learningAction` / `evidence`；`watch` 页的 `whyStatic` 是教学理由，不是“没组件/麻烦”；非 `watch` 页的渲染确实产生声明的证据。
 - 答案位置：记录 `check-quiz-keys` 的 A/B/C/D 分布与每题正确位置；不得用“加一条说明”代替调序。
 - 检查源码直拷约束：参考 CSS/JS 哈希未变、没有页面级样式覆盖、动画仍在、目录/语音来自参考外壳而非另写一套。
@@ -108,11 +110,11 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 ## Human Review（强制，每页一次）
 
-- 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为：可运行课件 URL、本页截图、`review/self-review-page-<id>.md`、闸门结果、baseline-report、source-fidelity 报告。
+- 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为：可运行课件 URL、本页截图、`$COURSEWARE_REVIEW_DIR/self-review-page-<id>.md`、闸门结果、baseline-report、source-fidelity 报告。
 - 主动提出审核请求：**先给课件链接**（例如 `http://127.0.0.1:8082/`），再给本页屏号与标题、脚本一致性、交互证据、截图、源码保真结果、自动检查、待人工项；不要另做审核网页。
 - 若本页新建了组件：明确说明组件名、承载的学习动作/证据、组件自审结论；**页面 `approve` 同时批准这些组件进入 core**，不另设组件审核。
 - 明确询问：`Approve rendered page <id>? (approve / reject)`。
 - 未获 `approve` 不得进入下一页；不得自行修改审核结论；暂存组件在页面通过前不得注册。
 - `reject` 时：只返工本页（及相关脚本屏），已批准页保持不变；重新渲染、自审、再请求本页审核；暂存组件保留待改。
-- `approve` 后由工作流运行 `register-staged-page-components` 注册本页暂存组件、从 registry 重建站点并重跑 deck-data gate，然后运行 `freeze-section.mjs` 记录本页脚本哈希；不要手动改 `review/page-approvals.json`。
+- `approve` 后由工作流运行 `register-staged-page-components` 注册本页暂存组件、从 registry 重建站点并重跑 deck-data gate，然后运行 `freeze-section.mjs` 记录本页脚本哈希；不要手动改 `$COURSEWARE_PAGE_APPROVALS`。
 - 全部页 approve 后，才进入整份 Alpha 回归审核。

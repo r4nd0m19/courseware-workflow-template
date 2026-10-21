@@ -49,7 +49,7 @@ $ARGUMENTS
 
 ## 产出
 
-### 1. `review/self-study-audit.json`
+### 1. `$COURSEWARE_REVIEW_DIR/self-study-audit.json`
 
 按 `workflow/schemas/self-study-audit.schema.json` 写。要点：
 
@@ -63,7 +63,7 @@ $ARGUMENTS
 - `supplements[]`：只列**允许补充**的类型（解释、先修复习、完整例题、检查题、反馈、转场），`label` 固定为 `自学补充`，并写 `basis`（依据来自哪条内容/哪条课标/哪个教学原则）。
 - `verdict`：有 blocking gap → `insufficient`，否则 `sufficient`。
 
-### 2. `review/self-study-audit.md`
+### 2. `$COURSEWARE_REVIEW_DIR/self-study-audit.md`
 
 按模板写人类可读报告，必须让老师在一屏内看懂：
 
@@ -92,7 +92,7 @@ $ARGUMENTS
 ## 强制校验
 
 ```bash
-node workflow/tools/check-self-study.mjs review/self-study-audit.json \
+node workflow/tools/check-self-study.mjs $COURSEWARE_REVIEW_DIR/self-study-audit.json \
   --script {{ inputs.courseware_script }}
 ```
 
@@ -100,6 +100,6 @@ node workflow/tools/check-self-study.mjs review/self-study-audit.json \
 
 ## 人工审核
 
-- 展示 `review/self-study-audit.md`，明确询问：`Approve the self-study supplement plan? (approve / reject)`。
+- 展示 `$COURSEWARE_REVIEW_DIR/self-study-audit.md`，明确询问：`Approve the self-study supplement plan? (approve / reject)`。
 - 不得自行批准，不得在批准前修改 `courseware.md`。
 - 老师若选择「先不加页」，把相应 gap 改为 `recommended`/`info` 并在 `evidence` 写明理由后重跑校验；不要静默删除缺口。

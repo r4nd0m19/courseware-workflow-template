@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData } from './lib.mjs'
+import { DEFAULT_SCREENSHOTS_DIR } from './approval-lib.mjs'
 import { requireProductionRun } from './review-guard.mjs'
 import {
   readSectionManifest,
@@ -21,7 +22,7 @@ function flag(name) {
 const sectionsPath = opt('--sections')
 const storyboardPath = opt('--storyboard')
 const sectionId = opt('--section')
-const screenshots = opt('--screenshots', 'screenshots')
+const screenshots = opt('--screenshots', DEFAULT_SCREENSHOTS_DIR)
 
 if (!sectionsPath || !storyboardPath || !sectionId) {
   console.error(

@@ -12,7 +12,13 @@ import path from 'node:path'
 import { parseScript } from './script-lib.mjs'
 import { slideScriptHash } from './section-lib.mjs'
 
-export const DEFAULT_SCRIPT_APPROVAL = 'review/script-approval.json'
+export const DEFAULT_REVIEW_DIR = process.env.COURSEWARE_REVIEW_DIR || 'review'
+export const DEFAULT_SCRIPT_APPROVAL =
+  process.env.COURSEWARE_SCRIPT_APPROVAL || 'review/script-approval.json'
+export const DEFAULT_PAGE_APPROVALS =
+  process.env.COURSEWARE_PAGE_APPROVALS || 'review/page-approvals.json'
+export const DEFAULT_SCREENSHOTS_DIR =
+  process.env.COURSEWARE_SCREENSHOTS_DIR || 'screenshots'
 export const REVIEW_SCRIPT_STEP_ID = 'review-script'
 export const WORKFLOW_RUNS_DIR = '.specify/workflows/runs'
 
@@ -93,7 +99,10 @@ export function reviewRunProblems(runId, options = {}) {
 // production workflow runs self-review-script and check-self-review-script
 // before review-script. Require those step results in the same run and a
 // passing self-review bound to the exact pre-approval courseware.md text.
-export const SELF_REVIEW_SCRIPT_PATH = 'review/self-review-script.json'
+export const SELF_REVIEW_SCRIPT_PATH = path.join(
+  DEFAULT_REVIEW_DIR,
+  'self-review-script.json',
+)
 
 export function scriptSelfReviewProblems(options = {}) {
   const {

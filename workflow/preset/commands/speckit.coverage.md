@@ -38,7 +38,7 @@ $ARGUMENTS
 
 ## Self-review（强制，人工审核前）
 
-- 按 `specify preset resolve self-review-template` 解析到的模板 写 `review/self-review-coverage.json` 和 `.md`。
+- 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-coverage.json` 和 `.md`。
 - 缺失项必须修好或取得书面 waiver；`verdict` 必须为 `pass`。
 - 只有自审 pass 后才进入下面的 Human Review；不得通过删除内容或降低 required 来“通过”。
 

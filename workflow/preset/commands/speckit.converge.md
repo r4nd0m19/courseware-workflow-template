@@ -8,11 +8,13 @@ description: Beta 收敛：把试课反馈与遗留问题变成有证据、有�
 $ARGUMENTS
 ```
 
+> 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`--approvals` 用 `$COURSEWARE_PAGE_APPROVALS`。workflow 会设置这些变量，并通过 `$ARGUMENTS` 传 `--lesson-slug <slug>`。
+
 ## Outline
 
 1. 前置条件：
    - Alpha 已获人工 `approve`。
-   - 已读取 `review/page-approvals.json`、`review/self-review-alpha.md`、逐屏截图、闸门结果和试课记录。
+   - 已读取 `$COURSEWARE_PAGE_APPROVALS`、`$COURSEWARE_REVIEW_DIR/self-review-alpha.md`、逐屏截图、闸门结果和试课记录。
    - 所有已批准页仍通过 `check-section-freeze`；若脚本已被改动，先停止并说明。
 2. 收集问题：试课/教师反馈、Alpha 截图与基线差异、未关闭的自动检查、旁白试听问题、组件缺陷。每条问题必须有证据（屏号、截图、日志或原话），不得凭印象新增。
 3. 分级与归属：
@@ -29,7 +31,7 @@ $ARGUMENTS
    - 组件缺口退回 `speckit.component-plan`（补简报）→ 在首次使用它的页面 `speckit.component-build` → 随页面人工审核 → 注册 → `sync-deck-components`；不得在页面里临时实现。
    - 不得删除 required 内容、不得降低闸门、不得手写音频或旁白占位。
 5. 修复后重跑受影响闸门（至少包含相关页的 deck-data、source-fidelity、overflow、baseline、script、parity、narration；整份再跑 script/parity）。失败项必须修复或记录为带理由的 waiver，不能静默忽略。
-6. 写 `review/converge-report.md`：
+6. 写 `$COURSEWARE_REVIEW_DIR/converge-report.md`：
    - 结论（是否建议进入 Beta）、修复摘要、重开的页。
    - 问题表：`ID / 严重级 / 页·屏 / 证据 / 决定 / 负责人 / 状态`。
    - 已修复与未修复清单（未修复必须有 waiver 或后续动作）。
@@ -38,7 +40,7 @@ $ARGUMENTS
 
 ## 输出
 
-- `review/converge-report.md`
+- `$COURSEWARE_REVIEW_DIR/converge-report.md`
 - 本轮修改的脚本/`deck data`/组件与重开的页
 - 闸门结果与仍需人工处理的问题
 

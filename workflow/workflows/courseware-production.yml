@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.15.1"
+  version: "0.16.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -133,6 +133,14 @@ inputs:
     prompt: "Optional waivers JSON path (required items only)"
 
 steps:
+  # ---------- inputs: per-lesson runtime paths ----------
+  # One project may hold several lessons; every runtime directory must carry
+  # the lesson segment so two runs cannot overwrite each other's ledgers,
+  # screenshots or site. The wrapper exports the COURSEWARE_* values.
+  - id: validate-lesson-paths
+    type: shell
+    run: "node workflow/tools/check-lesson-paths.mjs --lesson-slug {{ inputs.lesson_slug }} --site-dir \"{{ inputs.site_dir }}\" --narration \"{{ inputs.narration_manifest }}\" --audio-dir \"{{ inputs.audio_dir }}\" --art-dir \"{{ inputs.art_dir }}\" --baseline-dir \"{{ inputs.baseline_dir }}\""
+
   # ---------- inputs: content pack + style pack ----------
   - id: validate-content
     type: shell
@@ -154,7 +162,7 @@ steps:
   # so the next gate can hand the reviewer a live URL instead of a description.
   - id: validate-shell
     type: shell
-    run: "node workflow/tools/check-shell.mjs --shell {{ inputs.shell }} --shots review/shell-shots --review-out review/shell-preview.md --serve-preview --open-preview --json"
+    run: "node workflow/tools/check-shell.mjs --shell {{ inputs.shell }} --shots review/{{ inputs.lesson_slug }}/shell-shots --review-out review/{{ inputs.lesson_slug }}/shell-preview.md --serve-preview --open-preview --json"
     output_format: json
 
   # First human checkpoint: the shell itself. The reviewer must see the real
@@ -192,20 +200,20 @@ steps:
       - style pack components/layouts are unique and registered; no per-lesson style overrides
       - validate-style-pack-full passed: baselines exist and the freeze hash matches the full pack
       - the shell package validates, its preview deck covers every declared slide type, and the main interactions respond (validate-shell)
-      Run/read the relevant gates. Write review/self-review-inputs.json per
-      workflow/schemas/self-review.schema.json and review/self-review-inputs.md per
+      Run/read the relevant gates. Write review/{{ inputs.lesson_slug }}/self-review-inputs.json per
+      workflow/schemas/self-review.schema.json and review/{{ inputs.lesson_slug }}/self-review-inputs.md per
       workflow/preset/templates/self-review-template.md.
       Verdict pass only if no blocking issues; fix safe issues and re-check; otherwise stop and report.
       Do not request human review unless verdict is pass.
 
   - id: check-self-review-inputs
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-inputs.json"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-inputs.json"
 
   - id: review-inputs
     type: gui-gate
     message: "Review inputs: content pack (required items, answers/feedback, sensitivity) and style pack (components/layouts, frozen version)."
-    show_file: "review/self-review-inputs.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-inputs.md"
     artifacts:
       - "{{ inputs.content_pack }}"
       - "{{ inputs.style_pack }}"
@@ -218,7 +226,7 @@ steps:
     command: speckit.specify
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }}"
+      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
 
   # The concept ledger is authored with the brief. Validate its schema and
   # source refs here, before any page exists; the slide-level coverage gate
@@ -244,17 +252,17 @@ steps:
       explain the concept itself. Check that each concept's sourceRefs exist and that its
       introducedOn page is planned. A concept that appears only in narration, or only as a code
       declaration, is blocking.
-      Write review/self-review-brief.json and review/self-review-brief.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-brief.json and review/{{ inputs.lesson_slug }}/self-review-brief.md.
       Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
 
   - id: check-self-review-brief
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-brief.json"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-brief.json"
 
   - id: review-brief
     type: gui-gate
     message: "Review the teaching brief (spec.md): objectives, misconceptions, assessment evidence, and required-content coverage map."
-    show_file: "review/self-review-brief.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-brief.md"
     artifacts:
       - "specs/{{ inputs.lesson }}/spec.md"
       - "{{ inputs.concepts }}"
@@ -267,7 +275,7 @@ steps:
     command: speckit.script
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }}"
+      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
 
   - id: validate-script-draft
     type: shell
@@ -287,19 +295,19 @@ steps:
     command: speckit.self-study-audit
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }}"
+      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
 
   - id: check-self-study
     type: shell
-    run: "node workflow/tools/check-self-study.mjs review/self-study-audit.json --script {{ inputs.courseware_script }}"
+    run: "node workflow/tools/check-self-study.mjs review/{{ inputs.lesson_slug }}/self-study-audit.json --script {{ inputs.courseware_script }}"
 
   - id: review-self-study-audit
     type: gui-gate
-    message: "Review the self-study sufficiency audit (review/self-study-audit.md): gap evidence, page impact, and the proposed 自学补充 blocks. Approve the plan, or reject to revise manually."
-    show_file: "review/self-study-audit.md"
+    message: "Review the self-study sufficiency audit (review/{{ inputs.lesson_slug }}/self-study-audit.md): gap evidence, page impact, and the proposed 自学补充 blocks. Approve the plan, or reject to revise manually."
+    show_file: "review/{{ inputs.lesson_slug }}/self-study-audit.md"
     artifacts:
       - "{{ inputs.courseware_script }}"
-      - "review/self-study-audit.json"
+      - "review/{{ inputs.lesson_slug }}/self-study-audit.json"
     options: [approve, reject]
     on_reject: abort
 
@@ -307,7 +315,7 @@ steps:
   # re-run the mechanical script gate on the final text.
   - id: apply-self-study-audit
     type: shell
-    run: "node workflow/tools/apply-self-study-audit.mjs --audit review/self-study-audit.json --script {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --record review/self-study-apply.json"
+    run: "node workflow/tools/apply-self-study-audit.mjs --audit review/{{ inputs.lesson_slug }}/self-study-audit.json --script {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --record review/{{ inputs.lesson_slug }}/self-study-apply.json"
 
   - id: validate-script
     type: shell
@@ -349,8 +357,8 @@ steps:
       component that produces its evidence; no TODO/TBD/placeholder;
       example code/output and quiz question/options appear verbatim; required content refs covered;
       componentPlan entries are declared (existing/extend/new) but no ad-hoc component invented.
-      Also confirm the applied self-study audit (review/self-study-audit.json,
-      review/self-study-apply.json): every 自学补充 block is labelled, keeps its basis, and did not
+      Also confirm the applied self-study audit (review/{{ inputs.lesson_slug }}/self-study-audit.json,
+      review/{{ inputs.lesson_slug }}/self-study-apply.json): every 自学补充 block is labelled, keeps its basis, and did not
       change a core knowledge point; the final slide count matches pageBudget.proposed.
       Read the validate-script result.
       Answer-position gate: run
@@ -366,7 +374,7 @@ steps:
       (contentRefs come from each slide's machine fields at this stage) and copy its `signals`
       unchanged into the `density` array. For every screen declare its
       semanticUnits (label + evidence): one screen should carry one new semantic boundary.
-      Different forms of one rule, two sides of a side-by-side comparison, or review/self-check
+      Different forms of one rule, two sides of a side-by-side comparison, or review/{{ inputs.lesson_slug }}/self-check
       of already-taught content count as one unit; multiple independent teaching points
       (e.g. seat grid + declaration syntax + subscript range + element count on one screen)
       are a blocking issue and must be split, or marked `exception` with a written reason.
@@ -378,18 +386,18 @@ steps:
       "定义" that only shows declaration syntax does not satisfy the concept. Confirm reinforcedOn /
       assessedOn pages actually use the concept. Record a `concepts` entry for every concept
       (conceptId, verdict, evidence, slideIds); a missing or `gap` entry is blocking.
-      Write review/self-review-script.json and review/self-review-script.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-script.json and review/{{ inputs.lesson_slug }}/self-review-script.md.
       Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
       Do not mark the script APPROVED; only the teacher can.
 
   - id: check-self-review-script
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-script.json --script {{ inputs.courseware_script }} --concepts {{ inputs.concepts }}"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --script {{ inputs.courseware_script }} --concepts {{ inputs.concepts }}"
 
   - id: review-script
     type: gui-gate
     message: "Review the human-readable courseware script (courseware.md): per-screen content, interaction design, narration, misconception feedback, split pages."
-    show_file: "review/self-review-script.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-script.md"
     options: [approve, reject]
     on_reject: abort
 
@@ -398,7 +406,7 @@ steps:
   # stages may implement the script. It never decides the verdict itself.
   - id: approve-script
     type: shell
-    run: "node workflow/tools/approve-script.mjs {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --gate-choice \"{{ steps.review-script.output.choice }}\" --gate-step review-script --run-id \"{{ context.run_id }}\" --out review/script-approval.json"
+    run: "node workflow/tools/approve-script.mjs {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --gate-choice \"{{ steps.review-script.output.choice }}\" --gate-step review-script --run-id \"{{ context.run_id }}\" --out review/{{ inputs.lesson_slug }}/script-approval.json"
 
   # The ledger written above is the only proof downstream tools accept. This
   # step re-reads it and fails the run immediately if the gate choice, the
@@ -465,7 +473,7 @@ steps:
     command: speckit.component-plan
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }}"
+      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
 
   - id: validate-component-plan
     type: shell
@@ -482,17 +490,17 @@ steps:
       brief with reuse search, gap decision, learning objective/success criteria, interaction FSM,
       props API, visual/layout constraints, accessibility, static fallback, test plan, risks/non-goals;
       no private one-off components; no TODO/placeholders.
-      Write review/self-review-component-plan.json and review/self-review-component-plan.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-component-plan.json and review/{{ inputs.lesson_slug }}/self-review-component-plan.md.
       Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
 
   - id: check-self-review-component-plan
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-component-plan.json"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-component-plan.json"
 
   - id: review-component-plan
     type: gui-gate
     message: "Review component reuse decisions and briefs: what is reused, what is new, FSM/props/a11y/fallback/test plan for each new component."
-    show_file: "review/self-review-component-plan.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-component-plan.md"
     options: [approve, reject]
     on_reject: abort
 
@@ -508,7 +516,7 @@ steps:
     command: speckit.plan
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }}"
+      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
 
   - id: validate-storyboard
     type: shell
@@ -562,7 +570,7 @@ steps:
       `node workflow/tools/density-report.mjs {{ inputs.courseware_script }} {{ inputs.storyboard }} --json`
       and copy its `signals` unchanged into the `density` array. For every slide declare its
       semanticUnits (label + evidence): one slide should carry one new semantic boundary.
-      Different forms of one rule, side-by-side comparison, or review/self-check of already-taught
+      Different forms of one rule, side-by-side comparison, or review/{{ inputs.lesson_slug }}/self-check of already-taught
       content count as one unit; multiple independent teaching points on one slide are blocking —
       split the slide, or mark `exception` with a written reason. A page budget or a no-scroll
       check is not a density check.
@@ -572,18 +580,18 @@ steps:
       contains the term and every mustAppear phrase. Confirm reinforcedOn / assessedOn pages exist
       after the introduction. Record a `concepts` entry for every concept (conceptId, verdict,
       evidence, slideIds). A concept whose introduction was lost in projection is blocking.
-      Write review/self-review-storyboard.json and review/self-review-storyboard.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-storyboard.json and review/{{ inputs.lesson_slug }}/self-review-storyboard.md.
       Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
       Do not mark screens APPROVED; only the teacher can.
 
   - id: check-self-review-storyboard
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-storyboard.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-storyboard.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
 
   - id: review-storyboard
     type: gui-gate
     message: "Review the projected storyboard: per-screen status, contentRefs coverage, component sources/versions, teaching gates, no-scroll. Only APPROVED screens proceed."
-    show_file: "review/self-review-storyboard.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-storyboard.md"
     options: [approve, reject]
     on_reject: abort
 
@@ -600,7 +608,7 @@ steps:
     command: speckit.tasks
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }} --sections {{ inputs.review_sections }}"
+      args: "{{ inputs.lesson }} --sections {{ inputs.review_sections }} --lesson-slug {{ inputs.lesson_slug }}"
 
   - id: self-review-tasks
     type: prompt
@@ -612,17 +620,17 @@ steps:
       vocabulary+registry, teaching, overflow, shell/site and illustration provenance); component
       integration tasks reference registered versions and import from the registry; no
       unregistered/deprecated components; no scope beyond the storyboard.
-      Write review/self-review-tasks.json and review/self-review-tasks.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-tasks.json and review/{{ inputs.lesson_slug }}/self-review-tasks.md.
       Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
 
   - id: check-self-review-tasks
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-tasks.json"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-tasks.json"
 
   - id: review-tasks
     type: gui-gate
     message: "Review tasks.md: only APPROVED screens, Deps/DoD, gates, no unregistered components."
-    show_file: "review/self-review-tasks.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-tasks.md"
     options: [approve, reject]
     on_reject: abort
 
@@ -639,7 +647,7 @@ steps:
     steps:
       - id: advance_section
         type: shell
-        run: "node workflow/tools/next-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --approvals review/page-approvals.json"
+        run: "node workflow/tools/next-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --approvals review/{{ inputs.lesson_slug }}/page-approvals.json"
         output_format: json
 
       - id: section_body
@@ -648,7 +656,7 @@ steps:
         then:
           - id: section-freeze-check
             type: shell
-            run: "node workflow/tools/check-section-freeze.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --approvals review/page-approvals.json --screenshots screenshots"
+            run: "node workflow/tools/check-section-freeze.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --approvals review/{{ inputs.lesson_slug }}/page-approvals.json --screenshots screenshots/{{ inputs.lesson_slug }}"
 
           # Components are built on demand, one page at a time. Declared
           # new/extend components that this page needs are implemented into the
@@ -682,7 +690,7 @@ steps:
                     command: speckit.component-build
                     integration: "{{ inputs.integration }}"
                     input:
-                      args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --components {{ steps.load-page-components.output.data.missing | join(',') }} --staging {{ inputs.component_staging }}"
+                      args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --components {{ steps.load-page-components.output.data.missing | join(',') }} --staging {{ inputs.component_staging }} --lesson-slug {{ inputs.lesson_slug }}"
 
               - id: check-page-components
                 type: if
@@ -709,14 +717,14 @@ steps:
                       component uses style-pack tokens/reference CSS only; no scrollbars/clipping; extend keeps
                       backward compatibility; the component props in this page's deck data match the interaction
                       design and evidence. Do not review the whole page here; the page self-review does that.
-                      Write review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json
+                      Write review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json
                       and .md. reviewedArtifacts must list every file of each staged package plus its brief with
                       sha256. Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
                       Do not register anything; registration happens only after the page gate approves.
 
                   - id: check-self-review-page-components
                     type: shell
-                    run: "node workflow/tools/check-self-review.mjs review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json --root ."
+                    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.json --root ."
 
               # The site is rebuilt from the shell package after every section:
               # build-shell-site runs the art provenance gate, assembles the deck,
@@ -725,7 +733,7 @@ steps:
                 command: speckit.implement
                 integration: "{{ inputs.integration }}"
                 input:
-                  args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --deck-data {{ inputs.deck_data }} --staging {{ inputs.component_staging }}"
+                  args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --deck-data {{ inputs.deck_data }} --staging {{ inputs.component_staging }} --lesson-slug {{ inputs.lesson_slug }}"
 
               # Refresh narration after implementation in case the section script
               # changed. Existing MP3s are reused when their spoken text is unchanged.
@@ -753,7 +761,7 @@ steps:
                 step:
                   id: build-one-section-screen
                   type: shell
-                  run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots"
+                  run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots/{{ inputs.lesson_slug }}"
 
               - id: section-deck-data-gate
                 type: shell
@@ -773,11 +781,11 @@ steps:
 
               - id: section-rendered-check
                 type: shell
-                run: "node workflow/tools/check-rendered-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --section {{ steps.advance_section.output.data.section.id }} --screenshots screenshots"
+                run: "node workflow/tools/check-rendered-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --section {{ steps.advance_section.output.data.section.id }} --screenshots screenshots/{{ inputs.lesson_slug }}"
 
               - id: section-baseline-gate
                 type: shell
-                run: "node workflow/tools/check-baseline.mjs screenshots --baseline \"{{ inputs.baseline_dir }}\" --include \"{{ steps.advance_section.output.data.section.slides | join(',') }}\""
+                run: "node workflow/tools/check-baseline.mjs screenshots/{{ inputs.lesson_slug }} --baseline \"{{ inputs.baseline_dir }}\" --include \"{{ steps.advance_section.output.data.section.slides | join(',') }}\""
 
               - id: section-script-gate
                 type: shell
@@ -812,7 +820,7 @@ steps:
                   Page: {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }}
                   Slide: {{ steps.advance_section.output.data.section.slides | join(', ') }}
                   Read this page's block in courseware.md ({{ inputs.courseware_script }}), storyboard.yml,
-                  the content pack, component-plan.md, the registry, this page's screenshots under screenshots/,
+                  the content pack, component-plan.md, the registry, this page's screenshots under screenshots/{{ inputs.lesson_slug }}/,
                   narration.json, the audio files under {{ inputs.audio_dir }}, the assembled site under
                   {{ inputs.site_dir }} (build-manifest.json, shell-art-data.js), and the results of
                   section-shell-build, section-rendered-check, section-baseline-gate, section-script-gate,
@@ -838,7 +846,7 @@ steps:
                   page only shows static content, it is blocking.
                   Component review: this page's unregistered components are
                   {{ steps.load-page-components.output.data.unregistered | join(', ') }} (empty means none).
-                  If non-empty, read review/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.md and the staged packages
+                  If non-empty, read review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}-components.md and the staged packages
                   under {{ inputs.component_staging }}/<id>/, then confirm on the rendered page that each
                   component behaves as its brief says, that its interaction produces the declared evidence,
                   and that the page did not silently render the static fallback. Include the component
@@ -854,7 +862,7 @@ steps:
                   `node workflow/tools/density-report.mjs {{ inputs.courseware_script }} {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --json`
                   and copy its `signals` unchanged into the `density` array. For every slide declare its
                   semanticUnits (label + evidence): one slide should carry one new semantic boundary.
-                  Different forms of one rule, side-by-side comparison, or review/self-check of
+                  Different forms of one rule, side-by-side comparison, or review/{{ inputs.lesson_slug }}/self-check of
                   already-taught content count as one unit; multiple independent teaching points are
                   blocking — split the slide or mark `exception` with a written reason. Check the rendered
                   screen as well: a screen can be under the overflow limit and still be overcrowded.
@@ -872,17 +880,17 @@ steps:
                   Microsoft Edge TTS (an unofficial Edge endpoint, suitable for local/prototype use).
                   If a safe implementation fix is needed, make it and rerun the affected gates, then recheck
                   the screenshots. Do not edit slides outside this page.
-                  Write review/self-review-page-{{ steps.advance_section.output.data.section.id }}.json and .md.
+                  Write review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json and .md.
                   Verdict pass only if no blocking issues; otherwise stop.
 
               - id: check-self-review-page
                 type: shell
-                run: "node workflow/tools/check-self-review.mjs review/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }}"
+                run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }}"
 
           - id: review-page
             type: gui-gate
             message: "Review rendered page {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }} ({{ steps.advance_section.output.data.section.slides | join(', ') }}). Components: {{ steps.load-page-components.output.data.summary }}. Open the courseware at {{ inputs.deck_url }} and use the outline to jump to this page; per-page screenshots and the self-review are in the attached file. Check script fidelity, interaction evidence, no overflow, narration playback/voice selection, and the outline. Approving this page also approves its new components into core; reject to rework just this page (nothing is registered)."
-            show_file: "review/self-review-page-{{ steps.advance_section.output.data.section.id }}.md"
+            show_file: "review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.md"
             options: [approve, reject]
             on_reject: abort
 
@@ -911,12 +919,12 @@ steps:
 
           - id: freeze-section
             type: shell
-            run: "node workflow/tools/freeze-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --id {{ steps.advance_section.output.data.section.id }} --approved-by \"{{ inputs.approver }}\" --screenshots screenshots --approvals review/page-approvals.json"
+            run: "node workflow/tools/freeze-section.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --id {{ steps.advance_section.output.data.section.id }} --approved-by \"{{ inputs.approver }}\" --screenshots screenshots/{{ inputs.lesson_slug }} --approvals review/{{ inputs.lesson_slug }}/page-approvals.json"
 
   # ---------- whole-deck Alpha regression after every section is approved ----------
   - id: all-sections-frozen
     type: shell
-    run: "node workflow/tools/check-section-freeze.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --approvals review/page-approvals.json --screenshots screenshots --require-all"
+    run: "node workflow/tools/check-section-freeze.mjs --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --script {{ inputs.courseware_script }} --approvals review/{{ inputs.lesson_slug }}/page-approvals.json --screenshots screenshots/{{ inputs.lesson_slug }} --require-all"
 
   # Assemble the final whole-deck site once, from the frozen deck, narration,
   # generated art and registry bundle, before the Alpha screenshots.
@@ -936,11 +944,11 @@ steps:
     step:
       id: build-one-screen
       type: shell
-      run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots"
+      run: "node workflow/tools/build-screen.mjs {{ item.id }} --url \"{{ inputs.deck_url }}\" --storyboard \"{{ inputs.storyboard }}\" --script {{ inputs.courseware_script }} --out screenshots/{{ inputs.lesson_slug }}"
 
   - id: baseline-gate
     type: shell
-    run: "node workflow/tools/check-baseline.mjs screenshots --baseline \"{{ inputs.baseline_dir }}\""
+    run: "node workflow/tools/check-baseline.mjs screenshots/{{ inputs.lesson_slug }} --baseline \"{{ inputs.baseline_dir }}\""
 
   - id: alpha-deck-data-gate
     type: shell
@@ -994,7 +1002,7 @@ steps:
     integration: "{{ inputs.integration }}"
     prompt: |
       AI self-review before human review (stage: alpha).
-      Read screenshots/, baseline-report.json, review/page-approvals.md, courseware.md,
+      Read screenshots/{{ inputs.lesson_slug }}/, baseline-report.json, review/{{ inputs.lesson_slug }}/page-approvals.md, courseware.md,
       storyboard.yml, content pack, component-plan.md, the registry, the assembled site
       (build-manifest.json, shell-art-data.js), and the results of
       all-sections-frozen, alpha-shell-build, alpha-script-gates, alpha-concepts-gate, alpha-quiz-keys-gate,
@@ -1021,17 +1029,17 @@ steps:
       Answer-position gate: use the alpha-quiz-keys-gate result and record the whole-deck
       A/B/C/D distribution in the review. Check that every section's relettering survived the
       whole-deck build and that no quiz has all correct answers in one position.
-      Write review/self-review-alpha.json and review/self-review-alpha.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-alpha.json and review/{{ inputs.lesson_slug }}/self-review-alpha.md.
       Verdict pass only if no blocking issues; fix safe issues; otherwise stop.
 
   - id: check-self-review-alpha
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-alpha.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-alpha.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
 
   - id: review-alpha
     type: gui-gate
     message: "Review Alpha: whole-deck screenshots, baseline diffs, overflow, section approvals, and gate results."
-    show_file: "review/self-review-alpha.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-alpha.md"
     options: [approve, reject]
     on_reject: abort
 
@@ -1040,7 +1048,7 @@ steps:
     command: speckit.converge
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }}"
+      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
 
   - id: self-review-beta
     type: prompt
@@ -1050,17 +1058,17 @@ steps:
       Read the converge report, trial logs, and open issue list.
       Check: no unresolved hard gate failures; all issues triaged with severity/owner;
       teacher/student trial evidence present; waivers documented.
-      Write review/self-review-beta.json and review/self-review-beta.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-beta.json and review/{{ inputs.lesson_slug }}/self-review-beta.md.
       Verdict pass only if no blocking issues; otherwise stop.
 
   - id: check-self-review-beta
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-beta.json"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-beta.json"
 
   - id: review-beta
     type: gui-gate
     message: "Review Beta: converge report, trial evidence, issue triage."
-    show_file: "review/self-review-beta.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-beta.md"
     options: [approve, reject]
     on_reject: abort
 
@@ -1104,16 +1112,16 @@ steps:
       matches the Alpha self-review; a late content edit must not restore an all-A pattern.
       Confirm gold-concepts-gate still passes: no late edit removed a concept's definition or
       mustAppear phrases from its introducing page. Record a `concepts` entry for every concept.
-      Write review/self-review-gold.json and review/self-review-gold.md.
+      Write review/{{ inputs.lesson_slug }}/self-review-gold.json and review/{{ inputs.lesson_slug }}/self-review-gold.md.
       Verdict pass only if no blocking issues; otherwise stop.
 
   - id: check-self-review-gold
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/self-review-gold.json --concepts {{ inputs.concepts }}"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-gold.json --concepts {{ inputs.concepts }}"
 
   - id: gold
     type: gui-gate
     message: "Gold sign-off: regression, accessibility, waivers, final teacher approval."
-    show_file: "review/self-review-gold.md"
+    show_file: "review/{{ inputs.lesson_slug }}/self-review-gold.md"
     options: [approve, reject]
     on_reject: abort
