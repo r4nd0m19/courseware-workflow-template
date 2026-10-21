@@ -63,6 +63,19 @@ node workflow/tools/run-workflow.mjs courseware-production \
   -i page_count=16
 ```
 
+## 首次使用：从这里开始
+
+老师安装完工作流后，通常只会说“开始做课件”或“帮我做课件”。agent 必须按下面顺序处理，不要让老师运行命令、看技术文件或使用 `speckit-*`：
+
+1. 读项目根目录的 `START-HERE.md`，用通俗中文告诉老师接下来怎么做；不要向老师展示 `speckit-*`、workflow、gate、JSON、路径或命令。
+2. 问老师要课程资料：教案、讲义、网页、Word、PDF 或图片；让老师放进项目，或告诉文件名/位置。**不要问老师要 `content-pack.json`。**
+3. 在项目里查找已有内容包和壳：
+   - 有内容包就直接用；只有源资料就用 `speckit.extract-content` 整理（agent 自己做）。
+   - 只有一个壳就直接用；有多个壳时给老师看预览链接/截图让老师选。
+4. 根据课程名生成 `lesson` / `lesson_slug`，准备 `specs/<slug>/` 和工作流输入。技术参数由 agent 自己填，不要让老师选。
+5. 用 `node workflow/tools/run-workflow.mjs courseware-production ...` 启动；到 gate 时用原生中文选择框（“通过，继续”/“不通过，需要改”）。
+6. 如果老师只说“开始做课件”但还没给资料：先问资料，不要猜课程内容，也不要用别的课件的草稿内容代替。
+
 ## 人工审核闸门与审批账本
 
 - 脚本批准只由工作流的 `review-script` 人工 gate  + 紧随其后的 `approve-script` 机械步骤产生。`approve-script` 必须收到 gate 的 `approve` 结果，并核对本次 run 在 `.specify/workflows/runs/<run-id>/state.json` 里的 `review-script` 步骤确已 `completed` 且 choice 为 `approve`（`paused` 的 gate 不能铸造批准）。账本记录整份 `courseware.md` 的 SHA-256、屏数、每屏哈希与 gate run id。不要手动运行 `approve-script.mjs`，不要手改该账本或 run 状态，也不要把脚本/截图标成人工 APPROVED。

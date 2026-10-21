@@ -221,6 +221,12 @@ if (integration === 'zcode') {
 }
 
 const workflowDir = copyWorkflow()
+const startHereSource = path.join(workflowSource, 'START-HERE.md')
+const startHereTarget = path.join(projectRoot, 'START-HERE.md')
+if (fs.existsSync(startHereSource) && !fs.existsSync(startHereTarget)) {
+  if (!dryRun) fs.copyFileSync(startHereSource, startHereTarget)
+  console.log(`installed START-HERE.md -> ${startHereTarget}`)
+}
 const toolsDir = path.join(workflowDir, 'tools')
 const presetDir = path.join(workflowDir, 'preset')
 const workflowYaml = path.join(workflowDir, 'workflows/courseware-production.yml')
@@ -303,9 +309,8 @@ console.log(`Integration:${integration}`)
 console.log(`Preset:     ${presetDir}`)
 console.log(`Workflow:   ${workflowYaml}`)
 console.log(`Tools:      ${toolsDir}`)
-console.log('\nNext:')
-console.log('  1. Put the content reference through R0-C to produce content-pack.json')
-console.log('  2. Run: node workflow/tools/run-workflow.mjs courseware-production -i integration=' + integration + ' -i lesson=... -i content_pack=... -i courseware_script=... -i concepts=... -i review_sections=... -i component_registry=registry/index.json -i storyboard=... -i style_pack=... -i deck_url=... -i page_count=...')
-console.log('  3. At a gate the wrapper exits 3; show the review file/link to the teacher, ask for an explicit approve/reject, record it with gate-review.mjs, then resume via run-workflow.mjs.')
-console.log('  4. The workflow creates/validates registry/, writes courseware.md via speckit.script, and projects storyboard.yml from it.')
-console.log('  5. Keep workflow/tools/node_modules, review/gui-gates and chrome-path.txt out of git.')
+console.log('\nNext (teacher-facing):')
+console.log('  1. No restart is needed. Open START-HERE.md or tell the agent: "开始做课件".')
+console.log('  2. Put the lesson notes / webpage / Word / PDF / images in the project; the agent handles the rest.')
+console.log('  3. When the agent asks for a choice, click "通过，继续" or "不通过，需要改".')
+console.log('\nAgent-only details: see AGENTS.md and workflow/README.md (do not show them to the teacher).')

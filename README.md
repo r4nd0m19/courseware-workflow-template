@@ -6,7 +6,7 @@
 
 - 工作流版本：`0.16.0`（92 个顶层步骤）
 - preset：`courseware` `0.3.5`
-- 模板版本：`0.3.0`（2026-10-21）
+- 模板版本：`0.3.1`（2026-10-21）
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
 ## 在 Codex 图形界面里使用
@@ -52,6 +52,8 @@ specify integration use zcode
 一个项目可以放多个课件：每次运行传 `-i lesson_slug=<slug>`，运行时状态会隔离到 `review/<slug>/`、`screenshots/<slug>/`、`review/<slug>/gui-gates/`；`shells/`、`registry/`、`workflow/` 共享。
 
 审核时 agent 必须调用当前 harness 的原生提问 UI，选项只用中文 **“通过，继续”** / **“不通过，需要改”**。默认老师不懂英语和技术术语：不要出现 approve/reject/gate/verdict/content-pack/路径/命令，不要要求老师运行命令、改文件、装软件或提供 JSON。缺少资料时只问老师有没有教案、讲义、网页、Word、PDF 或图片。
+
+安装完成后**不需要重启 ZCode**：打开 `START-HERE.md`，或直接对 agent 说 **“开始做课件”**。老师不需要使用 `speckit-*` 技能，也不需要运行任何命令。
 
 ## 命令行安装
 
