@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { EdgeTTS } from 'node-edge-tts'
 import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 import {
@@ -15,7 +16,7 @@ import {
 function usage() {
   console.error(
     'usage: node build-narration.mjs <courseware.md> --voices <catalog.json> --out <narration.json> --audio-dir <dir> ' +
-      '[--url-prefix /audio] [--only S01,S02] [--force] [--dry-run] [--retries 2] [--approval review/script-approval.json]',
+      '[--url-prefix /audio] [--only S01,S02] [--force] [--dry-run] [--retries 2] [--cache <file>] [--approval review/script-approval.json]',
   )
 }
 
@@ -32,7 +33,7 @@ for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i]
   if (arg.startsWith('--')) {
     if (
-      ['--voices', '--out', '--audio-dir', '--url-prefix', '--only', '--retries', '--delay-ms', '--approval'].includes(
+      ['--voices', '--out', '--audio-dir', '--url-prefix', '--only', '--retries', '--delay-ms', '--cache', '--approval'].includes(
         arg,
       )
     ) {
@@ -53,6 +54,10 @@ const force = flag('--force')
 const dryRun = flag('--dry-run')
 const retries = Number(option('--retries', '2'))
 const delayMs = Number(option('--delay-ms', '150'))
+const cachePath = option(
+  '--cache',
+  audioDir ? path.join(audioDir, '.narration-cache.json') : '',
+)
 const approvalPath = option('--approval', DEFAULT_SCRIPT_APPROVAL)
 
 if (!scriptPath || !voicesPath || !outPath || (!audioDir && !dryRun)) {
@@ -91,6 +96,73 @@ if (missing.length) {
   process.exit(1)
 }
 
+function clipKey(slideId, voiceId) {
+  return `${slideId}/${voiceId}`
+}
+
+function voiceSettings(voice) {
+  return {
+    providerVoice: voice.providerVoice,
+    rate: catalog.defaults.rate,
+    pitch: catalog.defaults.pitch,
+    outputFormat: catalog.defaults.outputFormat,
+    locale: catalog.defaults.locale,
+    provider: catalog.provider,
+    generator: catalog.generator,
+  }
+}
+
+function narrationTextHash(text, voice) {
+  return crypto
+    .createHash('sha256')
+    .update(
+      JSON.stringify({
+        text,
+        ...voiceSettings(voice),
+      }),
+    )
+    .digest('hex')
+}
+
+function readCache() {
+  if (!cachePath) return { schemaVersion: '1.0', clips: {} }
+  try {
+    const parsedCache = JSON.parse(fs.readFileSync(cachePath, 'utf8'))
+    if (parsedCache && typeof parsedCache === 'object' && parsedCache.clips) {
+      return { schemaVersion: '1.0', clips: { ...parsedCache.clips } }
+    }
+  } catch {
+    // Missing or unreadable cache: regenerate what cannot be proven current.
+  }
+  return { schemaVersion: '1.0', clips: {} }
+}
+
+const cache = readCache()
+// Migrate from the previous manifest: if an existing clip was generated from
+// the same spoken text and voice settings, trust it without regenerating.
+try {
+  if (audioDir && outPath && fs.existsSync(outPath)) {
+    const previous = JSON.parse(fs.readFileSync(outPath, 'utf8'))
+    for (const slide of previous.slides || []) {
+      if (typeof slide.spokenText !== 'string') continue
+      for (const voice of catalog.voices) {
+        const key = clipKey(slide.id, voice.id)
+        if (cache.clips[key]) continue
+        const file = audioFilePath(audioDir, slide.id, voice.id)
+        if (!fs.existsSync(file) || fs.statSync(file).size <= 1024) continue
+        cache.clips[key] = {
+          textHash: narrationTextHash(slide.spokenText, voice),
+          ...voiceSettings(voice),
+          bytes: fs.statSync(file).size,
+          mtimeMs: fs.statSync(file).mtimeMs,
+        }
+      }
+    }
+  }
+} catch {
+  // A malformed previous manifest is not fatal; clips will be regenerated.
+}
+
 const manifest = {
   schemaVersion: '1.0',
   source: path.relative(process.cwd(), path.resolve(scriptPath)),
@@ -113,8 +185,27 @@ const manifest = {
 async function generateOne(slide, voice) {
   const file = audioFilePath(audioDir, slide.id, voice.id)
   fs.mkdirSync(path.dirname(file), { recursive: true })
+  const key = clipKey(slide.id, voice.id)
+  const textHash = narrationTextHash(slide.spokenText, voice)
+  const settings = voiceSettings(voice)
+  const cached = cache.clips[key]
 
-  if (!force && fs.existsSync(file) && fs.statSync(file).size > 1024) {
+  if (
+    !force &&
+    fs.existsSync(file) &&
+    fs.statSync(file).size > 1024 &&
+    cached &&
+    cached.textHash === textHash &&
+    cached.providerVoice === settings.providerVoice &&
+    cached.rate === settings.rate &&
+    cached.pitch === settings.pitch &&
+    cached.outputFormat === settings.outputFormat &&
+    cached.locale === settings.locale &&
+    cached.provider === settings.provider &&
+    cached.generator === settings.generator &&
+    cached.bytes === fs.statSync(file).size &&
+    cached.mtimeMs === fs.statSync(file).mtimeMs
+  ) {
     return { file, size: fs.statSync(file).size, reused: true }
   }
 
@@ -136,6 +227,12 @@ async function generateOne(slide, voice) {
       await tts.ttsPromise(slide.spokenText, file)
       const size = fs.statSync(file).size
       if (size < 1024) throw new Error(`output too small (${size} bytes)`)
+      cache.clips[key] = {
+        textHash,
+        ...settings,
+        bytes: size,
+        mtimeMs: fs.statSync(file).mtimeMs,
+      }
       return { file, size, reused: false }
     } catch (error) {
       lastError = error
@@ -188,6 +285,11 @@ for (const slide of slides) {
 
 fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true })
 fs.writeFileSync(outPath, `${JSON.stringify(manifest, null, 2)}\n`)
+if (cachePath && !dryRun) {
+  fs.mkdirSync(path.dirname(path.resolve(cachePath)), { recursive: true })
+  fs.writeFileSync(cachePath, `${JSON.stringify(cache, null, 2)}\n`)
+  console.log(`OK narration cache — ${cachePath}`)
+}
 console.log(
   `OK narration manifest — ${manifest.slides.length} slide(s), ${manifest.voices.length} voice(s), ${outPath}`,
 )

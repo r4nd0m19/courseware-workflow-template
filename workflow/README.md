@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.20.0 / 86 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.21.0 / 88 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
@@ -25,12 +25,13 @@
 |---|---|
 | `install.mjs` | 一键安装：复制 workflow、初始化 Spec Kit、装 preset/workflow/依赖、检测 Chromium、smoke tests |
 | `preset/` | courseware preset：模板 + 命令（`speckit.script`、`component-plan`、`component-build`、`implement` 等） |
-| `workflows/courseware-production.yml` | 86 步生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套） |
+| `workflows/courseware-production.yml` | 88 步生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套） |
 | `steps/gui-gate/` | Spec Kit 自定义 gate step：非 TTY 写 pending 并暂停；TTY 退化为终端提问；校验 `verdict_input` 禁用与证据哈希 |
 | `tools/gate-review.mjs` | 人工审核助手：`show` 打印审核文件/链接/证据；`decide` 在老师明确回答后写入一次性 verdict；`status` 查看 run/gate |
 | `tools/build-page-evidence.mjs` | 汇总本页 density/concepts/quiz/narration/overflow/overlap/rendered/截图，生成自审 JSON/MD 骨架 |
 | `tools/check-overlap.mjs` | Playwright 几何门禁：文字框不得与人物/插画相交 |
 | `tools/build-tasks.mjs` | 从 `storyboard.yml` / `review-sections.yml` 确定性生成 tasks.md |
+| `tools/list-missing-components.mjs` | 找出所有已声明但未注册/未暂存的 new/extend 组件，供页循环前预构建 |
 | `schemas/` | content-pack、courseware-script、storyboard、style-pack、component-package/registry、narration、self-review 等 schema |
 | `tools/build-style-pack-source.mjs` | 从参考课件目录逐字节复制 CSS/JS，写 `SOURCE.json` |
 | `tools/check-source-fidelity.mjs` | 源码哈希 + site 副本 + inline base CSS + DOM 几何/选择器 + 动画/APNG 门禁 |
@@ -58,7 +59,7 @@
 | `tools/approve-script.mjs` | 只接受 `review-script` gate 的 `approve` 结果，并核对 run state 中该 gate 已完成；记录整份脚本哈希、每屏哈希与 gate run id 并置为 APPROVED |
 | `tools/check-script-approval.mjs` / `approval-lib.mjs` | 校验批准账本：schema、人工批准人、gate 结果与 run 状态、整份/每屏哈希、APPROVED 状态 |
 | `tools/run-workflow.mjs` | fail-closed 运行 `specify workflow run/resume`；`paused` → 退出码 3；人工 gate 打印审核文件绝对路径、链接、`gate-review.mjs show/decide` 与 `resume` 命令，内置 gate 仍打印人工恢复命令 |
-| `tools/build-narration.mjs` / `check-narration.mjs` | Edge TTS 语音生成与校验 |
+| `tools/build-narration.mjs` / `check-narration.mjs` | Edge TTS 语音生成与校验；按旁白文本 + 音色 + rate/pitch/format/provider 哈希复用 MP3，文本变化才重生成 |
 | `tools/smoke-test.mjs` | 全量工具回归（含人工 gate 静态检查与端到端） |
 | `tools/test-gui-gate.mjs` | 人工 gate 端到端：暂停 → pending → `gate-review show/decide` → `run-workflow resume` → completed |
 | `examples/` | 脚本/组件计划/注册表/组件包/故事板的通过/失败 fixture |
@@ -267,7 +268,7 @@ node workflow/tools/check-review-sections.mjs specs/lesson-01/review-sections.ym
 
 1. `speckit.script` 在每屏 `componentPlan` 里声明 `reference-verbatim | existing | extend | new`。
 2. `speckit.component-plan` 先查参考源码与注册表，写 `component-plan.md` 和 `component-briefs/<id>.md`；每个 `new` 必须说明为什么不能直接复制参考源码。
-3. 组件实现按页进行：每个页面由 `list-section-components` 算出本页缺失的 `new`/`extend` 组件，`speckit.component-build` 只把这些组件实现到 `registry/staging/<id>/`：
+3. 页循环前先预构建：`list-missing-components` 找出所有已声明但未注册/未暂存的 `new`/`extend` 组件，`speckit.component-build --prebuild` 一次实现到 `registry/staging/<id>/`。页循环里的 `load-page-components` 只做本页校验/审核，不再为首次使用临时等一次长构建。包结构：
    ```text
    component.json      # propsSchema / FSM / a11y / fallback / sourceFidelity / provenance
    runtime.js          # window.CoursewareComponents.register('<id>', { render, bind })
@@ -276,7 +277,7 @@ node workflow/tools/check-review-sections.mjs specs/lesson-01/review-sections.ym
    baselines/…         # 1440×900 基线
    ```
    JSX/MDX 包会被 `sync-deck-components` 拒绝。
-4. 构建本页站点时用 `build-shell-site --staging` 把暂存组件一并打包；组件自审（`self-review-page-<section>-components`）并入页面自审，**不单独设组件人工审核**。
+4. 构建本页站点时用 `build-shell-site --staging` 把暂存组件一并打包；组件自审并入页面自审，**不单独设组件人工审核**。
 5. 页面 gate `approve` 同时批准本页新组件：工作流执行 `register-staged-components --only <本页组件> --clean` 注册为 `core`，然后从 registry 重建站点并重跑 deck-data，再冻结该页。
 6. `sync-deck-components.mjs` 生成 `components.bundle.js/.css`；页面只写 props。
 7. `record-component-usage` 写入 `usedBy`，供后续复用检索。
@@ -406,7 +407,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 5. `build-narration` → `check-narration`（四声线 manifest；壳路径不再有 `build-audio-adapter`）。
 6. `speckit.component-plan` → 复用/缺口/简报（全局纸面设计）；`review-component-plan` 人审。**不在这里预建组件**；实现由页面循环在首次需要它的页面完成。
 7. `script-to-storyboard` → `storyboard.yml`（确定性投影）；`validate-storyboard` / parity / concepts / coverage / vocabulary / teaching / `check-review-sections` 自动门禁。storyboard 不再人审，也不再跑 AI 自审。
-8. `build-tasks` → 逐页任务（确定性生成）。tasks.md 是内部拆分，不再人审，也不再跑 AI 自审。
+8. `build-tasks` → 逐页任务（确定性生成）。tasks.md 是内部拆分，不再人审，也不再跑 AI 自审。随后 `list-missing-components` → `speckit.component-build --prebuild` 在页循环前一次性建好所有缺组件。
 9. **逐页循环**：`section-freeze-check` → `load-page-components`（本页缺哪些组件）→ 缺则 `build-missing-page-components`（`speckit.component-build --section --slides --components`）→ 暂存组件校验 → `implement-section`（写 `--deck-data`，`--no-self-review`）→ 语音 → `section-shell-build --staging` → 语音闸门 → 截图（绑定 deck 哈希）→ deck-data/baseline/concepts/quiz-keys → `build-page-evidence`（density/concepts/quiz/narration/overflow/overlap/rendered/截图 + 自审骨架）→ `self-review-page`（只读证据包，填骨架；组件自审并入这里）→ `review-page` 人审（同时批准本页新组件）→ `register-staged-page-components --only … --clean` → `check-registry` → 从 registry 重建站点 → deck-data（不含 staging）→ `freeze-section`。
 10. 全部页面批准后：`all-sections-frozen` → `alpha-shell-build` → 整份截图/基线 → `alpha-deck-data-gate` / `alpha-source-fidelity-gate` / `alpha-bundle-gate` / `alpha-shell-gate` / `alpha-shell-art-gate` / `alpha-narration-gate` / script/parity/overflow → `review-alpha`。
 11. `speckit.converge` → `review-beta`；`gold-script-gates` / `gold-parity-gate` / `final-gates` / `gold-shell-gate` / `gold-shell-art-gate` → `gold` 签字。
