@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课件播放器</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #101412; color: #e8efe8; font: 14px/1.4 "Microsoft YaHei", "Noto Sans SC", sans-serif; }
+  body { display: grid; grid-template-rows: 38px minmax(0, 1fr); }
+  #bar { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1d2722; border-bottom: 1px solid #3a4a41; }
+  #bar strong { font-size: 13px; margin-right: auto; font-weight: 800; }
+  #bar button { height: 26px; padding: 0 10px; border: 1px solid #5a6a60; border-radius: 3px; background: #2a3831; color: #e8efe8; font: inherit; cursor: pointer; }
+  #bar button.active { background: #f5bf4f; color: #1d2722; border-color: #f5bf4f; }
+  #hint { color: #9fb0a5; font-size: 12px; }
+  @media (max-width: 900px) { #hint { display: none; } }
+  #stage { position: relative; overflow: hidden; background: #101412; }
+  #stage.actual { overflow: auto; }
+  #canvas { position: absolute; left: 50%; top: 50%; width: 1440px; height: 900px; transform-origin: center center; }
+  #stage.actual #canvas { position: relative; left: auto; top: auto; margin: 16px auto; transform: none !important; }
+  #frame { width: 1440px; height: 900px; border: 0; background: #fff; display: block; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>课件播放器</strong>
+  <button data-mode="fit" class="active">适应窗口</button>
+  <button data-mode="actual">100%</button>
+  <button id="fullscreenBtn">全屏</button>
+  <span id="hint">固定 1440×900 画布；缩放只改变整体大小</span>
+</div>
+<div id="stage">
+  <div id="canvas"><iframe id="frame" src="./index.html" allow="autoplay; fullscreen" title="课件"></iframe></div>
+</div>
+<script>
+  const stage = document.getElementById('stage')
+  const canvas = document.getElementById('canvas')
+  const frame = document.getElementById('frame')
+  let mode = 'fit'
+
+  function fit () {
+    if (mode === 'actual') {
+      stage.classList.add('actual')
+      canvas.style.transform = ''
+      return
+    }
+    stage.classList.remove('actual')
+    const pad = 16
+    const scale = Math.max(
+      0.1,
+      Math.min((stage.clientWidth - pad) / 1440, (stage.clientHeight - pad) / 900),
+    )
+    canvas.style.transform = `translate(-50%, -50%) scale(${scale})`
+  }
+
+  function setMode (next) {
+    mode = next
+    for (const button of document.querySelectorAll('[data-mode]')) {
+      button.classList.toggle('active', button.dataset.mode === mode)
+    }
+    fit()
+  }
+
+  function toggleFullscreen () {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    else stage.requestFullscreen().catch(() => {})
+  }
+
+  // The shell has its own fullscreen button and "f" shortcut. Route both to
+  // the wrapper's stage fullscreen so the 1440×900 canvas is scaled, not
+  // reflowed by the iframe viewport.
+  let hookedDoc = null
+  function hookFrame () {
+    try {
+      const doc = frame.contentDocument
+      if (!doc) return
+      const button = doc.getElementById('fullscreenBtn')
+      if (button) button.onclick = toggleFullscreen
+      if (hookedDoc !== doc) {
+        hookedDoc = doc
+        doc.addEventListener(
+          'keydown',
+          (event) => {
+            if (event.key.toLowerCase() !== 'f') return
+            if (event.target.closest('input,select,textarea,button')) return
+            event.preventDefault()
+            event.stopPropagation()
+            event.stopImmediatePropagation()
+            toggleFullscreen()
+          },
+          true,
+        )
+      }
+      frame.focus()
+    } catch {
+      // file:// or cross-origin: scaling still works; only the fullscreen
+      // shortcut override is unavailable.
+    }
+  }
+
+  for (const button of document.querySelectorAll('[data-mode]')) {
+    button.onclick = () => setMode(button.dataset.mode)
+  }
+  document.getElementById('fullscreenBtn').onclick = toggleFullscreen
+  frame.addEventListener('load', hookFrame)
+  addEventListener('resize', fit)
+  addEventListener('fullscreenchange', fit)
+  setMode('fit')
+  setTimeout(hookFrame, 500)
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { writePreviewData } from './shell-preview-lib.mjs'
+import { writePlayerPage } from './player-page-lib.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
@@ -54,6 +55,7 @@ if (previewOnly) {
   }
   try {
     const summary = writePreviewData({ profile, siteDir, profileDir: blockDir })
+    writePlayerPage(siteDir)
     console.log(
       `OK preview data — ${summary.slideCount} dummy slide(s), ${summary.voiceCount} voice(s), ` +
         `${summary.audioFiles.length} audio file(s) → ${siteDir}`,
@@ -223,6 +225,7 @@ fs.writeFileSync(path.join(siteDir, 'shell-art-data.js'), `// Intentionally empt
 // fills this with per-lesson variants; reference/ is never copied into site/.
 window.COURSEWARE_SHELL_ART = {};
 `)
+writePlayerPage(siteDir)
 console.log(
   `OK preview data — ${previewSummary.slideCount} dummy slide(s), ` +
     `${previewSummary.voiceCount} voice(s), ${previewSummary.audioFiles.length} audio file(s)`,

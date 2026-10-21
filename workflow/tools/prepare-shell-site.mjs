@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { readJson, resolveShellDir, validateShellPackage } from './shell-lib.mjs'
+import { writePlayerPage } from './player-page-lib.mjs'
 
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
@@ -79,6 +80,7 @@ for (const file of walk(check.siteDir)) {
   const rel = path.relative(check.siteDir, file)
   copyFile(file, path.join(outDir, rel))
 }
+writePlayerPage(outDir)
 for (const rel of ['preview-audio', 'preview-data.json']) {
   fs.rmSync(path.join(outDir, rel), { recursive: true, force: true })
 }
