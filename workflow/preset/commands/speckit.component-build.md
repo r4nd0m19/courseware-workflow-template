@@ -1,5 +1,5 @@
 ---
-description: 按已批准简报，只为当前页实现这一页需要的新组件；组件随页面一起人工审核，页面通过后才注册进 core。
+description: 按已批准简报实现新组件；默认只做当前页需要的组件，也可在页循环前一次性预构建全部缺组件。组件随首次使用它的页面一起人工审核，页面通过后才注册进 core。
 ---
 
 ## User Input
@@ -23,6 +23,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
    --section <review-section-id> --slides <S02A,S02B> --components <id,id> --staging <dir>
    ```
    - `--components` 是本页实际需要的 `new` / `extend` 组件（由工作流 `list-section-components.mjs` 从已批准 storyboard 与注册表算出）；**只实现这些组件**，不得顺手把整份 component-plan 里的其他组件全部建好。
+   - **预构建模式**：`--prebuild` 表示 `--components` 是 `list-missing-components.mjs` 算出的全部缺组件，页循环前一次性实现；此时不需要 `--section`/`--slides`，按 `component-plan.md` 与各自的 `component-briefs/<id>.md` 逐包实现。仍然只做这些列出的组件，不扩到未列出的组件。
    - 没有 `--components` 时停止并报错；不要从组件清单反推页面。
    - `--staging` 缺省为 `registry/staging`。
 2. 对每个范围内组件，在 `<staging>/<id>/` 建包（不得直接写 `registry/components/`）。实现形态是**浏览器原生 JS 模块**，不是 JSX/MDX：
@@ -51,6 +52,8 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 ## Self-review（强制，页面审核前）
 
+> 预构建模式（`--prebuild` / `--no-self-review`）跳过本节：组件先暂存，首次使用它的页面在页面自审里统一审组件行为；不要在预构建阶段生成 `self-review-page-*-components.json`。
+
 - 按 `specify preset resolve self-review-template` 解析到的模板 写
   `$COURSEWARE_REVIEW_DIR/self-review-page-<section>-components.json` 和 `.md`。
 - `reviewedArtifacts` 必须逐个列出本页每个暂存包的全部文件与其简报的 `sha256`；组件实现一改，这份自审即过期。
@@ -59,6 +62,8 @@ node workflow/tools/check-script-approval.mjs courseware.md
 - 这份自审是页面自审的输入；不要单独请求一次“组件审核”。
 
 ## Human Review
+
+> 预构建模式跳过本节：组件不单独人审，等首次使用它的页面 gate 一起批准。
 
 - **没有独立的组件人工审核环节**。组件与页面一起审核：工作流把暂存组件打进本页站点，页面 gate 的通过即同时批准这些组件进入 core。
 - 页面审核时向老师说明本页新建/暂存了哪些组件，以及它们承载的学习动作与证据；组件未获页面 `approve` 前不得注册、不得在其他页面引用。

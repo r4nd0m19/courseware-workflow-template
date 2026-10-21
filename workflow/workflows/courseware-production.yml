@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.20.0"
+  version: "0.21.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -561,6 +561,25 @@ steps:
   - id: tasks
     type: shell
     run: "node workflow/tools/build-tasks.mjs --lesson {{ inputs.lesson }} --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --out specs/{{ inputs.lesson_slug }}/tasks.md"
+
+  # ---------- component prebuild ----------
+  # Build all declared new/extend components that are neither registered nor
+  # staged, once before the page loop. The page loop then only reviews/registers
+  # them with their first-use page; it does not stall that page for a long build.
+  - id: list-missing-components
+    type: shell
+    run: "node workflow/tools/list-missing-components.mjs --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }}"
+    output_format: json
+
+  - id: prebuild-missing-components
+    type: if
+    condition: "{{ steps.list-missing-components.output.data.needsPrebuild }}"
+    then:
+      - id: build-all-missing-components
+        command: speckit.component-build
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "--prebuild --components {{ steps.list-missing-components.output.data.ids | join(',') }} --staging {{ inputs.component_staging }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
 
   # ---------- page-by-page implementation + rendered review ----------
   # One whole-script gate above; from here each page is implemented, rendered,
