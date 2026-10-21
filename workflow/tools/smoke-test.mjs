@@ -232,6 +232,27 @@ try {
   run('teaching fail (I3)', 'check-teaching.mjs', [storyboardMissing, content], 1)
   run('teaching fail (draft)', 'check-teaching.mjs', [storyboard, contentDraft], 1)
   run('self-review pass', 'check-self-review.mjs', [selfPass], 0)
+  const reviewReference = path.join(tmpRoot, 'review-reference.json')
+  const referenceReview = JSON.parse(fs.readFileSync(selfPass, 'utf8'))
+  referenceReview.referenceAdaptation =
+    'Reference cover used the branch lesson brand/code; replaced with the lesson brand, English file name and lesson sample.'
+  fs.writeFileSync(reviewReference, JSON.stringify(referenceReview, null, 2))
+  run(
+    'self-review reference adaptation pass',
+    'check-self-review.mjs',
+    [reviewReference, '--root', root, '--require-reference-adaptation'],
+    0,
+  )
+  delete referenceReview.referenceAdaptation
+  const reviewNoReference = path.join(tmpRoot, 'review-no-reference.json')
+  fs.writeFileSync(reviewNoReference, JSON.stringify(referenceReview, null, 2))
+  run(
+    'self-review reference adaptation required fails',
+    'check-self-review.mjs',
+    [reviewNoReference, '--root', root, '--require-reference-adaptation'],
+    1,
+    'referenceAdaptation is required',
+  )
   run('self-review fail', 'check-self-review.mjs', [selfFail], 1)
   run('self-review concept pass', 'check-self-review.mjs', [reviewConceptPass, '--concepts', conceptsExample, '--root', root], 0)
   run('self-review concept missing', 'check-self-review.mjs', [selfPass, '--concepts', conceptsExample], 1, 'concept review is missing C01')

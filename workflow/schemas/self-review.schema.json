@@ -98,6 +98,10 @@
         }
       }
     },
+    "referenceAdaptation": {
+      "type": "string",
+      "description": "Free-form AI reasoning: which visible items belong to the reference lesson and what this lesson's equivalent is. No fixed element list. Required by check-self-review for page reviews when --require-reference-adaptation is set."
+    },
     "concepts": {
       "type": "array",
       "description": "Per-concept coverage review. Required by check-self-review when --concepts is supplied.",

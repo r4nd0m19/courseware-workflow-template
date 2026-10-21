@@ -7,7 +7,14 @@ import { readData, validateWithSchema, fail, ok } from './lib.mjs'
 import { buildDensityReport, compareSignals, readSlideIds } from './density-lib.mjs'
 
 const args = process.argv.slice(2)
-const options = { script: '', storyboard: '', slides: null, root: process.cwd(), concepts: '' }
+const options = {
+  script: '',
+  storyboard: '',
+  slides: null,
+  root: process.cwd(),
+  concepts: '',
+  requireReferenceAdaptation: false,
+}
 const positionals = []
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i]
@@ -26,6 +33,8 @@ for (let i = 0; i < args.length; i += 1) {
   } else if (arg === '--concepts') {
     options.concepts = args[i + 1] || ''
     i += 1
+  } else if (arg === '--require-reference-adaptation') {
+    options.requireReferenceAdaptation = true
   } else if (arg.startsWith('--')) {
     console.error(`unknown option ${arg}`)
     process.exit(2)
@@ -44,6 +53,8 @@ Options:
   --slides S04,S05,S06        require density entries only for these slides (default: all)
   --root <dir>                project root for reviewedArtifacts paths (default: cwd)
   --concepts <file>           require a per-concept verdict for the concept ledger
+  --require-reference-adaptation
+                              require a non-empty referenceAdaptation string (page reviews)
 `)
   process.exit(2)
 }
@@ -77,6 +88,14 @@ for (const issue of data.issues) {
   if (issue.severity === 'blocking' && issue.fixed !== true) {
     problems.push(`unfixed blocking issue: ${issue.description}`)
   }
+}
+if (
+  options.requireReferenceAdaptation &&
+  (typeof data.referenceAdaptation !== 'string' || !data.referenceAdaptation.trim())
+) {
+  problems.push(
+    'referenceAdaptation is required for page reviews: read the reference lesson source and this lesson content, identify reference-lesson-specific visible content yourself (no fixed list), record what you replaced, or explain why there is none',
+  )
 }
 
 // ---- freshness: the review vouches for exact bytes, not "some version" ----
