@@ -38,6 +38,9 @@ if (!scriptPath || !contentPath || !stylePath) {
 
 const errors = []
 const warnings = []
+// Production labels belong in the review process, not in student-facing
+// titles. A cover is expressed by layout/type, never by a "封面：" prefix.
+const PRODUCTION_TITLE_RE = /^(封面|标题|本页|第\s*\d+\s*页|S\d+[A-Z]?)\s*[：:·\-—\s]/
 
 let parsed
 try {
@@ -176,6 +179,14 @@ for (const slide of parsed.slides) {
   if (m.id !== slide.id) errors.push(`${where}: 制作字段 id=${m.id}, heading id=${slide.id}`)
   if (normalizeComparable(m.title) !== normalizeComparable(slide.headingTitle)) {
     errors.push(`${where}: 制作字段 title 与标题不一致 ("${m.title}" vs "${slide.headingTitle}")`)
+  }
+  for (const title of [slide.headingTitle, m.title]) {
+    if (typeof title === 'string' && PRODUCTION_TITLE_RE.test(title.trim())) {
+      errors.push(
+        `${where}: title ${JSON.stringify(title)} starts with a production label; use a student-facing title (the cover is expressed by layout/type, not "封面：")`,
+      )
+      break
+    }
   }
 
   if (slide.objectiveLine) {

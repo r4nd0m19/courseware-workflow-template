@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
 import { readData } from './lib.mjs'
@@ -27,6 +28,7 @@ Options:
   --url <deck-url>        deck dev/preview URL (omit for stub mode)
   --storyboard <path>     storyboard.yml for slide order
   --script <path>         courseware.md; when set, its approval ledger must match
+  --deck <path>           deck.json; when set, bind the screenshot to its SHA-256
   --approval <path>       whole-script approval ledger (default: review/script-approval.json)
   --out <dir>             screenshot output (default: $COURSEWARE_SCREENSHOTS_DIR or screenshots)
   --wait <ms>             wait after navigation (default: 500)
@@ -42,6 +44,7 @@ Options:
 const url = opt('--url', '')
 const storyboardPath = opt('--storyboard', '')
 const scriptPath = opt('--script', '')
+const deckPath = opt('--deck', '')
 const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const outDir = path.resolve(opt('--out', DEFAULT_SCREENSHOTS_DIR))
 const waitMs = Number(opt('--wait', '500'))
@@ -64,6 +67,15 @@ if (scriptPath) {
     assertScriptApproved(scriptPath, { approvalPath })
   } catch (error) {
     console.error(`FAIL screen ${slideId} — ${error.message}`)
+    process.exit(1)
+  }
+}
+let deckSha256 = null
+if (deckPath) {
+  try {
+    deckSha256 = crypto.createHash('sha256').update(fs.readFileSync(deckPath)).digest('hex')
+  } catch (error) {
+    console.error(`FAIL screen ${slideId} — cannot read --deck ${deckPath}: ${error.message}`)
     process.exit(1)
   }
 }
@@ -148,6 +160,7 @@ const record = {
   url: page.url(),
   screenshot,
   elementShot: shot,
+  deckSha256,
   capturedAt: new Date().toISOString(),
 }
 fs.writeFileSync(path.join(outDir, `${slideId}.json`), JSON.stringify(record, null, 2))
