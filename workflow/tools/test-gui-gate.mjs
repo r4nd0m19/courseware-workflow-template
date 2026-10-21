@@ -119,7 +119,9 @@ const paused = spawnSync(process.execPath, [wrapper, toy], {
 })
 const pauseOut = `${paused.stdout || ''}\n${paused.stderr || ''}`
 if (paused.status !== 3) fail(`expected exit 3 from the wrapper, got ${paused.status}\n${pauseOut}`)
-if (!pauseOut.includes('human review gate')) fail('wrapper did not describe a human review gate')
+if (!pauseOut.includes('REVIEW REQUIRED')) fail('wrapper did not mark the review')
+if (!pauseOut.includes('AskUserQuestion')) fail('wrapper did not require the native question UI')
+if (!pauseOut.includes('Do not ask in plain chat')) fail('wrapper did not forbid prose-only questions')
 if (!pauseOut.includes(`gate-review.mjs show`)) fail('wrapper did not name gate-review.mjs show')
 if (!pauseOut.includes(`gate-review.mjs decide`)) fail('wrapper did not name gate-review.mjs decide')
 if (!pauseOut.includes(`run-workflow.mjs resume`)) fail('wrapper did not name the resume command')

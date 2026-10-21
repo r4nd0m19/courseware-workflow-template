@@ -242,8 +242,9 @@ if (status === 'paused') {
         ? ` --state-dir ${guiGate.stateDir}`
         : ''
     const lines = [
-      `PAUSED workflow ${outcome.workflow_id || ''} at step ${step} (run ${runId})`,
-      'This is a human review gate. Show the review file/link to the teacher and wait for their explicit choice; the agent must not answer it.',
+      `REVIEW REQUIRED (run ${runId}, step ${step})`,
+      'Do not paste this block to the teacher. Explain the review in plain Chinese: what it is, what "通过" does next, and what "不通过" changes. Avoid workflow jargon (gate, verdict, digest, content-pack, run id).',
+      'Ask now with the native question UI: ZCode and Claude Code call AskUserQuestion with Chinese options such as "通过，继续" / "不通过，返工"; Codex uses its native user-input/approval prompt. Do not ask in plain chat. If the native UI fails, stop and report the failure.',
       `Get the gate details: node workflow/tools/gate-review.mjs show ${runId}${stateDir}`,
       `Record the teacher's answer: node workflow/tools/gate-review.mjs decide ${runId} --step ${gateStep} --choice <approve|reject>${stateDir}`,
       `Then resume the workflow: node workflow/tools/run-workflow.mjs resume ${runId}`,

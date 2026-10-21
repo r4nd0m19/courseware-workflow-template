@@ -13,11 +13,18 @@
 - 每次人工 gate 都按同一顺序处理：
   1. 运行 `node workflow/tools/gate-review.mjs show <run_id>`（或直接读包装器输出）拿到待审 gate 与审核文件。
   2. 把审核文件/链接发给老师：脚本审核给 `courseware.md` 的绝对路径；页面审核给可运行的课件 URL + 本页自审文件。
-  3. 用当前 harness 的原生提问/选择 UI 让老师明确选择 approve / reject：ZCode、Claude Code 用 `AskUserQuestion`，Codex 用其原生 user-input / approval 提示。不要用普通聊天消息代替原生选择；只有 harness 确实没有原生提问 UI 时才退回聊天提问。
+  3. 用当前 harness 的原生提问/选择 UI 让老师明确选择 approve / reject：ZCode、Claude Code 用 `AskUserQuestion`，Codex 用其原生 user-input / approval 提示。不要用普通聊天消息代替原生选择；如果原生 UI 不可用或报错，停下并报告，不要退回文字提问。
   4. **只有老师明确回答后**，才运行 `node workflow/tools/gate-review.mjs decide <run_id> --step <step> --choice <approve|reject> --by teacher`。不要在老师回答前调用 `decide`，不要替老师选择。
   5. 运行 `node workflow/tools/run-workflow.mjs resume <run_id>`，把输出继续处理到下一个 gate 或完成。不要直接调用 `specify workflow resume`，不要传 `-i`。
 - 内置 gate（输出里没有 `Review file:` / `Gate options:`）或老师显式在交互式终端运行时，才走终端回答；`node workflow/tools/run-workflow.mjs resume <run_id>` 仍是统一恢复入口。
 - 非交互运行不需要额外加 `</dev/null`；包装器已把 stdin 置空。交互式恢复时保留 TTY，gate 才会显示选项。
+
+### 对老师说话
+
+- 每个 gate 必须调用当前 harness 的原生提问 UI：ZCode / Claude Code 用 `AskUserQuestion`，Codex 用其原生 user-input / approval 提示。选项用老师能直接点的中文，例如“通过，继续” / “不通过，返工”；不要用普通聊天让老师输入 `approve` / `reject`。原生提问 UI 失败就停下并报告，不要退回文字提问。
+- 不要把 wrapper 的英文技术块、`gate` / `verdict` / `digest` / `nonce` / `run id` 原样贴给老师。用通俗中文说明：这次审什么、点“通过”后会发生什么、点“不通过”会怎样。
+- 缺少内容包时，不要问老师要 `content-pack.json`。问老师手里有没有这门课的教案、讲义、网页、Word、PDF 或 Markdown；把源文件放进项目或给出路径，agent 用 `speckit.extract-content` 整理成工作流需要的内容包。
+- 壳审核与具体课程内容无关：可以先审壳；内容不对时再换 `lesson` / `content_pack` 重跑，不要用错误课件的草稿内容继续。
 
 ### 人工审核闸门（文件地址 + 原生选择）
 

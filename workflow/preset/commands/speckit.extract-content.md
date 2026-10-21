@@ -8,6 +8,8 @@ description: 从参考课件 URL/本地 HTML 抽取内容包草稿，供人工/�
 $ARGUMENTS
 ```
 
+> 如果老师手里只有教案、讲义、网页、Word、PDF 或 Markdown，**不要问老师要 `content-pack.json`**。请老师把源文件放进项目或给出路径；本命令负责整理成内容包草稿，再和老师逐项确认。
+
 ## Outline
 
 1. 确认参考来源：

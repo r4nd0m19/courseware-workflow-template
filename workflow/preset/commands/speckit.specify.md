@@ -8,6 +8,8 @@ description: 生成信奥互动课件的教学简报（UbD），并建立内容�
 $ARGUMENTS
 ```
 
+> 如果内容包还不存在，先不要向老师要 `content-pack.json`；问老师要这门课的教案/讲义/网页/Word/PDF/Markdown，并用 `speckit.extract-content` 生成内容包。
+
 ## Outline
 
 1. 读取 `.specify/memory/constitution.md`、内容包（content pack）和风格包（style pack manifest）。
