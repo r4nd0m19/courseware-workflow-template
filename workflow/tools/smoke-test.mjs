@@ -830,6 +830,11 @@ try {
     pageIds.indexOf('implement-section') < gatePosition &&
     pageIds.indexOf('check-self-review-page') >= 0 &&
     pageIds.indexOf('check-self-review-page') < gatePosition &&
+    // One page self-review, fed by one evidence bundle; no separate component
+    // self-review AI call.
+    pageIds.indexOf('build-page-evidence') >= 0 &&
+    pageIds.indexOf('build-page-evidence') < pageIds.indexOf('self-review-page') &&
+    !pageIds.includes('self-review-page-components') &&
     // Spec Kit re-runs the enclosing body on resume; the guard must see the
     // pending/decided gate before implement/self-review can rewrite evidence.
     guardPosition >= 0 &&

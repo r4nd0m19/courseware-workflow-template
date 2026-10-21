@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.18.0 / 90 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.19.0 / 90 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
@@ -438,6 +438,7 @@ prompt self-review → check-self-review → human gate
 
 - self-review 写 `review/self-review-<stage>.json/.md`（schema：`workflow/schemas/self-review.schema.json`；模板：`preset/templates/self-review-template.md`）。
 - `check-self-review` 要求：`verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。
+- **每页只跑一次页面自审**：`speckit.implement` 在工作流中带 `--no-self-review`，只实现页面；组件自审并入页面自审。页循环先运行 `build-page-evidence`，把 density、concepts、quiz、narration、overflow、overlap、rendered-check 和截图元数据汇总成一个 JSON；`self-review-page` 只读证据包、本页脚本块和截图，不重跑命令、不读全量文件。
 - **自审绑定确切字节**：每份自审的 `reviewedArtifacts` 记录被审文件的 SHA-256；`check-self-review` 重算并比对，文件一变即 `stale review` 失败。改稿后必须重新自审，不能只改哈希。
 - **参考适配（页自审必填）**：读参考课件源码（如 `<shell>/source/lesson.js`）和本课内容，自己判断参考课里哪些可见内容属于参考课、本课对应是什么；不套固定清单，把识别和替换写进 self-review 的 `referenceAdaptation`。`check-self-review --require-reference-adaptation` 要求该字段非空，渲染页面不得残留参考课内容。
 - **标题前缀 / 重叠 / 截图新鲜度**：`check-script` 拒绝制作前缀标题；页循环的 `check-overlap` 拒绝文字与人物/插画相交；`build-screen --deck` + `check-rendered-section --deck` 保证截图来自当前 deck。

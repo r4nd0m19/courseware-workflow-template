@@ -97,6 +97,8 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 ## Self-review（强制，人工审核前）
 
+> 工作流会在 `$ARGUMENTS` 里传 `--no-self-review`：此时只实现本页，**跳过本节以及下面的 Human Review 节**；页面自审和人工审核分别由 workflow 的 `self-review-page` / `review-page` 步骤统一完成（自审读取本页 evidence bundle）。手动运行没有该参数时才执行这两节。
+
 - 写 `$COURSEWARE_REVIEW_DIR/self-review-page-<id>.json` 和 `.md`，模板按 `specify preset resolve self-review-template`。
 - 参考适配：读参考课件源码（如 `<shell>/source/lesson.js`）和本课内容，自己判断参考课里哪些可见内容属于参考课（文字、代码、文件名、标签、图片、人物道具、例子等，由你识别，不套固定清单），本课对应应该是什么；把识别项和替换写进自审的 `referenceAdaptation`。渲染页面不能残留参考课内容；壳/品牌/风格/布局保持不变。
 - `stage` 写 `page-<id>`；`artifactPaths` 必须包含本页的 `courseware.md` 区块、`storyboard.yml`、`deck.json`、截图、闸门结果。
@@ -110,6 +112,8 @@ node workflow/tools/check-script-approval.mjs courseware.md
 - 只有自审 pass 后才进入下面的 Human Review。
 
 ## Human Review（强制，每页一次）
+
+> 工作流传 `--no-self-review` 时跳过本节；页面审核由 workflow 的 `review-page` gate 完成，命令内不要再用 AskUserQuestion 拦一次页面审核。
 
 - 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为：可运行课件 URL、本页截图、`$COURSEWARE_REVIEW_DIR/self-review-page-<id>.md`、闸门结果、baseline-report、source-fidelity 报告。
 - 主动提出审核请求：**先给课件链接**（例如 `http://127.0.0.1:8082/`），再给本页屏号与标题、脚本一致性、交互证据、截图、源码保真结果、自动检查、待人工项；不要另做审核网页。
