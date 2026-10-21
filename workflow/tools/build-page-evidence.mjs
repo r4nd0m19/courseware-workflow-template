@@ -5,6 +5,7 @@
 // not have to re-run commands or read the whole script/storyboard/deck.
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readData } from './lib.mjs'
@@ -38,6 +39,14 @@ const outPath = opt(
   '--out',
   path.join('review', lessonSlug || 'lesson', `page-evidence-${sectionId || 'page'}.json`),
 )
+const reviewJson = opt(
+  '--review-json',
+  path.join('review', lessonSlug, `self-review-page-${sectionId}.json`),
+)
+const reviewMd = opt(
+  '--review-md',
+  path.join('review', lessonSlug, `self-review-page-${sectionId}.md`),
+)
 
 if (
   !lessonSlug ||
@@ -51,7 +60,7 @@ if (
   !url
 ) {
   console.error(
-    'usage: node build-page-evidence.mjs --lesson-slug <slug> --script <courseware.md> --content <content-pack.json> --storyboard <storyboard.yml> --sections <review-sections.yml> --section <id> --deck <deck.json> --screenshots <dir> --url <deck-url> [--concepts <file>] [--narration <file>] [--audio-root <dir>] [--out <file>] [--manual]',
+    'usage: node build-page-evidence.mjs --lesson-slug <slug> --script <courseware.md> --content <content-pack.json> --storyboard <storyboard.yml> --sections <review-sections.yml> --section <id> --deck <deck.json> --screenshots <dir> --url <deck-url> [--concepts <file>] [--narration <file>] [--audio-root <dir>] [--out <file>] [--review-json <file>] [--review-md <file>] [--manual]',
   )
   process.exit(2)
 }
@@ -72,18 +81,28 @@ if (start < 0) {
 const slideIds = section.slides.join(',')
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 
+function summarize(stdout, stderr) {
+  const lines = `${stdout || ''}\n${stderr || ''}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  return lines.length ? lines[lines.length - 1].slice(0, 300) : ''
+}
+
 function run(tool, toolArgs) {
   const result = spawnSync(process.execPath, [path.join(toolsDir, tool), ...toolArgs], {
     cwd: process.cwd(),
     encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
   })
+  const ok = result.status === 0
   return {
     name: tool.replace(/\.mjs$/, ''),
-    status: result.status === 0 ? 'pass' : 'fail',
+    status: ok ? 'pass' : 'fail',
     exitCode: result.status,
-    stdout: String(result.stdout || '').slice(0, 20000).trim(),
-    stderr: String(result.stderr || '').slice(0, 8000).trim(),
+    summary: summarize(result.stdout, result.stderr),
+    error: ok ? '' : String(result.stderr || result.stdout || '').slice(0, 2000).trim(),
+    stdout: String(result.stdout || ''),
   }
 }
 
@@ -176,6 +195,7 @@ const screenshots = section.slides.map((id) => {
 })
 
 const failed = checks.filter((check) => check.status !== 'pass')
+const publicChecks = checks.map(({ stdout, ...rest }) => rest)
 const evidence = {
   schemaVersion: '1.0',
   lessonSlug,
@@ -190,16 +210,106 @@ const evidence = {
   storyboard: storyboardPath,
   deck: deckPath,
   screenshotsDir,
+  reviewJson,
+  reviewMd,
   density: densityJson,
   quizKeys: quizJson,
   overlap: overlapJson,
   screenshots,
-  checks,
+  checks: publicChecks,
   verdict: failed.length ? 'fail' : 'pass',
   generatedAt: new Date().toISOString(),
 }
 fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true })
 fs.writeFileSync(outPath, JSON.stringify(evidence, null, 2) + '\n')
+
+function relative(file) {
+  return path.relative(process.cwd(), path.resolve(file)).split(path.sep).join('/')
+}
+function hashFile(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')
+}
+const reviewedArtifacts = []
+for (const file of [scriptPath, storyboardPath, deckPath, outPath]) {
+  if (fs.existsSync(path.resolve(file))) {
+    reviewedArtifacts.push({ path: relative(file), sha256: hashFile(file) })
+  }
+}
+for (const screenshot of screenshots) {
+  if (screenshot.pngExists) {
+    reviewedArtifacts.push({ path: relative(screenshot.png), sha256: hashFile(screenshot.png) })
+  }
+}
+const densityEntries = (Array.isArray(densityJson?.slides) ? densityJson.slides : []).map(
+  (entry) => ({
+    slideId: entry.slideId || section.slides[0],
+    semanticUnits: [],
+    signals: entry.signals || {},
+    verdict: 'fail',
+    notes: '',
+  }),
+)
+const skeleton = {
+  stage: `page-${sectionId}`,
+  artifactPaths: reviewedArtifacts.map((artifact) => artifact.path),
+  reviewedArtifacts,
+  density: densityEntries,
+  concepts: [],
+  automatedChecks: publicChecks.map((check) => ({
+    name: check.name,
+    status: check.status,
+    notes: check.summary,
+  })),
+  checklist: [
+    { item: 'rendered text matches script', status: 'n/a' },
+    { item: 'interaction evidence', status: 'n/a' },
+    { item: 'no overflow/overlap', status: 'n/a' },
+    { item: 'reference adaptation', status: 'n/a' },
+    { item: 'component behavior', status: 'n/a' },
+    { item: 'narration', status: 'n/a' },
+    { item: 'no personal data', status: 'n/a' },
+  ],
+  issues: [],
+  referenceAdaptation: '',
+  verdict: 'fail',
+  reviewedAt: new Date().toISOString(),
+}
+fs.mkdirSync(path.dirname(path.resolve(reviewJson)), { recursive: true })
+fs.writeFileSync(reviewJson, JSON.stringify(skeleton, null, 2) + '\n')
+
+const md = [
+  `# AI 自审：page-${sectionId}`,
+  '',
+  `- 页面：${sectionId} · ${section.title}`,
+  `- 屏：${section.slides.join(', ')}`,
+  `- 证据包：\`${relative(outPath)}\``,
+  `- 本文件由 build-page-evidence 生成骨架；AI 只需填写“需要判断”的字段，不要重算哈希或自动检查。`,
+  '',
+  '## 自动检查',
+  '',
+  '| 检查 | 结果 | 摘要 |',
+  '|---|---|---|',
+  ...publicChecks.map((check) => `| ${check.name} | ${check.status} | ${check.summary.replace(/\|/g, '\\|')} |`),
+  '',
+  '## 逐屏信号',
+  '',
+  '| 屏 | 语义单元（待填） | 结论（待填） |',
+  '|---|---|---|',
+  ...densityEntries.map((entry) => `| ${entry.slideId} |  |  |`),
+  '',
+  '## 需要 AI 判断并填写',
+  '',
+  '- `density[].semanticUnits` / `density[].verdict` / `density[].notes`',
+  '- `concepts[]`（本页涉及的概念；verdict + evidence + slideIds）',
+  '- `checklist` 中适用的项与 `issues`',
+  '- `referenceAdaptation`（参考课件专属内容与本课替换；自由判断，不套固定清单）',
+  '- `verdict`: pass / fail',
+  '',
+  '不要重跑 density/concepts/quiz/narration/overflow/overlap/rendered 命令；这些结果已在证据包里。',
+  '',
+]
+fs.mkdirSync(path.dirname(path.resolve(reviewMd)), { recursive: true })
+fs.writeFileSync(reviewMd, md.join('\n'))
 
 if (failed.length) {
   console.error(`FAIL page evidence — ${failed.map((check) => check.name).join(', ')}`)
