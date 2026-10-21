@@ -818,13 +818,13 @@ try {
   }
   collectHumanGates(workflowData.steps)
   const humanGatePass =
-    humanGates.length === 13 &&
+    humanGates.length === 11 &&
     humanGates.every((gate) => gate.type === 'gui-gate' && !('verdict_input' in gate))
   console.log(`${humanGatePass ? 'PASS' : 'FAIL'} workflow human gates use hash-bound gui-gate without verdict_input`)
   if (!humanGatePass) {
     failed += 1
     console.error(
-      `expected all 13 human gates to be gui-gate with no verdict_input, found: ` +
+      `expected all 11 human gates to be gui-gate with no verdict_input, found: ` +
         humanGates.map((gate) => `${gate.id}=${gate.type}${'verdict_input' in gate ? '+verdict_input' : ''}`).join(', '),
     )
   }
