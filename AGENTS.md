@@ -125,6 +125,10 @@ node workflow/tools/smoke-test.mjs
 ```
 
 - 自审（self-review）可以修安全的小问题，但不得把脚本/截图标成人工 APPROVED；人工审核点必须留给人。
+- 0.22.0 起 `self-review-inputs` / `self-review-alpha` / `self-review-beta` / `self-review-gold` 是确定性 shell 步骤（从门禁结果与逐页自审汇总），不要当成 AI 自审去手写或改判；`self-review-script` / `self-review-component-plan` / `self-review-page` 仍是 AI 判断步骤，证据包与骨架由工具生成。
+- 0.23.0 起 density/segmenting 以页面自审为唯一权威：脚本自审不填 `density`，`check-self-review-script` 不传 `--script`；页面证据包提供密度信号，`check-self-review-page` 与 Alpha/Gold 仍强制 density。不要为了“早发现”在脚本自审里重复判断 density。
+- 0.24.0 起参考适配每课生成一次 `review/<lesson>/reference-adaptation.json`（`residue: replace|allow`），页自审只读映射做增量确认；`check-reference-residue` 会从渲染后的 `#slide` 文本扫描 `replace` 字符串。不要每页重读 `shells/<id>/source/lesson.js`，也不要把通用 C++ 语法标成 `replace`。
+- 0.25.0 起页自审不再判断“渲染文本逐字一致”：`check-rendered-text` 对初始可见的高信号字面量做确定性阻断，长散文只做非阻断覆盖率提示。动态隐藏的后续题目/面板/检查点留给页交互审核；不要为了通过检查把隐藏内容塞进初始 DOM。新增 `blank` 组件时，要在 `check-rendered-text.mjs` 的 `collectBlocking` 里登记它初始可见的高信号 props（标题之外），否则只会做标题级检查。
 - 概念、内容覆盖、答案位置分布、无滚动条、组件注册、页面冻结都是阻断项。新增规则或特判前，先查业界做法并走决策咨询。
 - 修改组件后要重跑该组件的 core/interaction 测试、相关页面溢出检查，并刷新受影响的审核哈希。
 

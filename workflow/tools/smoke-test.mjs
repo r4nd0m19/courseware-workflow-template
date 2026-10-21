@@ -92,6 +92,7 @@ const style = path.join(examples, 'style-pack.example.json')
 const styleGenerated = path.join(examples, 'style-pack.generated.json')
 const selfPass = path.join(examples, 'self-review.pass.json')
 const selfFail = path.join(examples, 'self-review.fail.json')
+const referenceAdaptationExample = path.join(examples, 'reference-adaptation.example.json')
 const selfStudy = path.join(examples, 'self-study-audit.example.json')
 const selfStudyFail = path.join(examples, 'self-study-audit.fail.json')
 const selfStudyProposal = path.join(examples, 'courseware.self-study.example.md')
@@ -254,6 +255,38 @@ try {
     'referenceAdaptation is required',
   )
   run('self-review fail', 'check-self-review.mjs', [selfFail], 1)
+  run(
+    'reference adaptation pass',
+    'check-reference-adaptation.mjs',
+    [
+      referenceAdaptationExample,
+      '--storyboard',
+      storyboard,
+      '--script',
+      script,
+      '--shell',
+      'shells/branch-choice',
+      '--lesson-slug',
+      'smoke-lesson',
+    ],
+    0,
+  )
+  run(
+    'reference adaptation lesson mismatch',
+    'check-reference-adaptation.mjs',
+    [
+      referenceAdaptationExample,
+      '--storyboard',
+      storyboard,
+      '--script',
+      script,
+      '--shell',
+      'shells/branch-choice',
+      '--lesson-slug',
+      'other-lesson',
+    ],
+    1,
+  )
   run('self-review concept pass', 'check-self-review.mjs', [reviewConceptPass, '--concepts', conceptsExample, '--root', root], 0)
   run('self-review concept missing', 'check-self-review.mjs', [selfPass, '--concepts', conceptsExample], 1, 'concept review is missing C01')
   run(
@@ -752,21 +785,31 @@ try {
     path.join(root, 'workflows/courseware-production.yml'),
     'utf8',
   )
-  const integrationExpressions = (
-    workflowYaml.match(/integration: "\{\{ inputs\.integration \}\}"/g) || []
-  ).length
+  const workflowForIntegration = readData(path.join(root, 'workflows/courseware-production.yml'))
+  function collectDispatchSteps(steps, out = []) {
+    for (const step of steps || []) {
+      if (step && (step.type === 'command' || step.type === 'prompt')) out.push(step)
+      for (const key of ['steps', 'then', 'else']) collectDispatchSteps(step[key], out)
+    }
+    return out
+  }
+  const dispatchSteps = collectDispatchSteps(workflowForIntegration.steps)
+  const missingIntegration = dispatchSteps.filter(
+    (step) => step.integration !== '{{ inputs.integration }}',
+  )
+  const integrationExpressions = dispatchSteps.length - missingIntegration.length
   const hasIntegrationInput =
     /^  integration:\n    type: string\n    default: "auto"/m.test(workflowYaml)
   const hasHardcodedIntegration = /integration:\s*"(?:claude|codex|zcode)"/.test(workflowYaml)
   const harnessPass =
-    hasIntegrationInput && integrationExpressions >= 16 && !hasHardcodedIntegration
+    hasIntegrationInput && missingIntegration.length === 0 && !hasHardcodedIntegration
   console.log(
-    `${harnessPass ? 'PASS' : 'FAIL'} workflow integration input (${integrationExpressions} steps)`,
+    `${harnessPass ? 'PASS' : 'FAIL'} workflow integration input (${integrationExpressions}/${dispatchSteps.length} dispatch steps)`,
   )
   if (!harnessPass) {
     failed += 1
     console.error(
-      'workflow must declare an integration input defaulting to auto and use it for every command/prompt step',
+      `workflow must declare an integration input defaulting to auto and use it for every command/prompt step (missing: ${missingIntegration.map((step) => step.id).join(', ') || 'none'})`,
     )
   }
 
@@ -834,6 +877,9 @@ try {
     // self-review AI call.
     pageIds.indexOf('build-page-evidence') >= 0 &&
     pageIds.indexOf('build-page-evidence') < pageIds.indexOf('self-review-page') &&
+    // The human-readable review is rendered from the JSON after the AI fills it.
+    pageIds.indexOf('render-page-review') > pageIds.indexOf('self-review-page') &&
+    pageIds.indexOf('render-page-review') < pageIds.indexOf('check-self-review-page') &&
     !pageIds.includes('self-review-page-components') &&
     // Spec Kit re-runs the enclosing body on resume; the guard must see the
     // pending/decided gate before implement/self-review can rewrite evidence.
@@ -844,6 +890,84 @@ try {
     failed += 1
     console.error(
       'workflow must gate every page inside section_review_loop with the deck URL + page self-review, after implementation and self-review pass',
+    )
+  }
+
+  // ---- deterministic self-reviews ----
+  total += 1
+  const deterministicSelfReviews = [
+    ['self-review-inputs', 'build-self-review-inputs.mjs'],
+    ['self-review-alpha', 'build-self-review-alpha.mjs'],
+    ['self-review-beta', 'build-self-review-beta.mjs'],
+    ['self-review-gold', 'build-self-review-gold.mjs'],
+  ]
+  const deterministicProblems = deterministicSelfReviews.filter(([id, tool]) => {
+    const step = findStep(workflowData.steps, id)
+    return !step || step.type !== 'shell' || !String(step.run || '').includes(tool)
+  })
+  const deterministicSelfReviewPass = deterministicProblems.length === 0
+  console.log(
+    `${deterministicSelfReviewPass ? 'PASS' : 'FAIL'} deterministic self-reviews (inputs/alpha/beta/gold)`,
+  )
+  if (!deterministicSelfReviewPass) {
+    failed += 1
+    console.error(
+      `self-reviews must be deterministic shell steps, not AI prompts: ${deterministicProblems
+        .map(([id]) => id)
+        .join(', ')}`,
+    )
+  }
+
+  // ---- reference adaptation is per-lesson ----
+  total += 1
+  const referenceMapStep = findStep(workflowData.steps, 'build-reference-adaptation')
+  const referenceCheckStep = findStep(workflowData.steps, 'check-reference-adaptation')
+  const referenceAdaptationPass =
+    referenceMapStep?.type === 'prompt' &&
+    referenceCheckStep?.type === 'shell' &&
+    String(referenceCheckStep.run || '').includes('check-reference-adaptation.mjs')
+  console.log(
+    `${referenceAdaptationPass ? 'PASS' : 'FAIL'} per-lesson reference adaptation map`,
+  )
+  if (!referenceAdaptationPass) {
+    failed += 1
+    console.error(
+      'workflow must generate the reference adaptation map once and validate it before the page loop',
+    )
+  }
+
+  // ---- deterministic rendered-text check ----
+  total += 1
+  const pageEvidenceSource = fs.readFileSync(
+    path.join(root, 'tools/build-page-evidence.mjs'),
+    'utf8',
+  )
+  const renderedTextPass =
+    pageEvidenceSource.includes('check-rendered-text.mjs') &&
+    fs.existsSync(path.join(root, 'tools/check-rendered-text.mjs')) &&
+    fs.existsSync(path.join(root, 'tools/rendered-text-lib.mjs')) &&
+    !pageEvidenceSource.includes('rendered screen text/code/output matches the script verbatim')
+  console.log(`${renderedTextPass ? 'PASS' : 'FAIL'} deterministic rendered-text check`)
+  if (!renderedTextPass) {
+    failed += 1
+    console.error(
+      'page evidence must run check-rendered-text and must not leave the old verbatim-text AI checklist item',
+    )
+  }
+
+  // ---- density is page-primary ----
+  total += 1
+  const scriptReviewCheckStep = findStep(workflowData.steps, 'check-self-review-script')
+  const scriptReviewNoDensity =
+    scriptReviewCheckStep &&
+    !String(scriptReviewCheckStep.run || '').includes('--script')
+  console.log(
+    `${scriptReviewNoDensity ? 'PASS' : 'FAIL'} script review does not gate density`,
+  )
+  if (!scriptReviewNoDensity) {
+    failed += 1
+    console.error(
+      'check-self-review-script must not pass --script; density is judged in the page self-review',
     )
   }
 

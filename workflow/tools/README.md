@@ -160,12 +160,59 @@ node workflow/tools/check-teaching.mjs storyboard.yml content-pack.json
 
 ## 9. AI 自审检查
 
+确定性自审（0.22.0；不再启动 AI）：
+
+```bash
+# inputs：content pack 的 reviewed/quiz 反馈 + input 门禁
+node workflow/tools/build-self-review-inputs.mjs --lesson-slug <slug> \
+  --content <content-pack.json> --style <style-pack.manifest.json> \
+  --style-full <style-pack.full.json> --style-freeze <style-pack.freeze.json> \
+  --source <SOURCE.json> --fidelity <fidelity.json> --registry registry/index.json \
+  --shell-ok true --shell-review review/<slug>/shell-preview.md \
+  --out review/<slug>/self-review-inputs.json --md review/<slug>/self-review-inputs.md
+
+# script：紧凑逐屏证据包 + 自审骨架（AI 只填判断字段）
+node workflow/tools/build-script-review-evidence.mjs --lesson-slug <slug> \
+  --script specs/<slug>/courseware.md --storyboard specs/<slug>/storyboard.yml \
+  --content <content-pack.json> --style <style-pack.manifest.json> \
+  --concepts specs/<slug>/concepts.yml --registry registry/index.json \
+  --review-sections specs/<slug>/review-sections.yml --review-dir review/<slug>
+
+# alpha / beta / gold：聚合或扫描，不调用模型
+node workflow/tools/build-self-review-alpha.mjs ...
+node workflow/tools/build-self-review-beta.mjs ...
+node workflow/tools/build-self-review-gold.mjs ...
+
+# 任意自审 JSON → Markdown（页自审在 AI 填完后自动渲染）
+node workflow/tools/render-self-review-md.mjs review/<slug>/self-review-page-S02B.json \
+  --out review/<slug>/self-review-page-S02B.md --screenshots screenshots/<slug>
+
+# 参考适配（0.24.0）：每课一次映射 + 每页确定性残留扫描
+node workflow/tools/check-reference-adaptation.mjs \
+  review/<slug>/reference-adaptation.json \
+  --storyboard specs/<slug>/storyboard.yml --script specs/<slug>/courseware.md \
+  --shell shells/<id> --lesson-slug <slug>
+node workflow/tools/check-reference-residue.mjs \
+  review/<slug>/reference-adaptation.json --url http://127.0.0.1:8082/ \
+  --storyboard specs/<slug>/storyboard.yml --slides S02B --json
+
+# 渲染文本（0.25.0）：高信号字面量阻断 + 散文覆盖率提示
+node workflow/tools/check-rendered-text.mjs \
+  --url http://127.0.0.1:8082/ --deck specs/<slug>/deck.json \
+  --storyboard specs/<slug>/storyboard.yml --slides S02B \
+  --concepts specs/<slug>/concepts.yml --json
+# 同一次浏览器会话里也扫描参考残留：
+#   --reference-adaptation review/<slug>/reference-adaptation.json
+```
+
 ```bash
 node workflow/tools/check-self-review.mjs review/self-review-brief.json
 node workflow/tools/check-self-review.mjs review/self-review-script.json \
-  --script path/to/courseware.md \
   --concepts path/to/concepts.yml
 ```
+
+> 0.23.0 起 density 以页面自审为唯一权威：脚本自审不带 `--script`，也不填 `density`；
+> 页面/Alpha 自审继续用 `--script --storyboard --slides` 强制 density 对照。
 
 - 校验 `self-review.schema.json`。
 - 要求 `verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。

@@ -4,9 +4,10 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`0.21.0`（88 个顶层步骤）
+- 工作流版本：`0.25.0`（91 个顶层步骤）
 - preset：`courseware` `0.3.5`
-- 模板版本：`0.8.0`（2026-10-21）
+- 模板版本：`0.9.0`（2026-10-21）
+- 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；density 以页面自审为唯一权威；参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
 ## 在 Codex 图形界面里使用
@@ -104,9 +105,9 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 ## 安装后验证
 
 ```bash
-specify workflow info courseware-production   # 应显示 0.21.0、88 steps
+specify workflow info courseware-production   # 应显示 0.25.0、91 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 完整仓库 92/92；模板仓库安装后 88/88（1 项壳检查 SKIP）
+node workflow/tools/smoke-test.mjs            # 完整仓库 113/113；模板仓库安装后 109/109（1 项壳检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
 

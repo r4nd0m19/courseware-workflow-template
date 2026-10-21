@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0",
+  "lesson": "smoke-lesson",
+  "shell": "branch-choice",
+  "referenceSource": "workflow/examples/reference-lesson.example.js",
+  "referenceLesson": "分支选择结构的简单应用",
+  "entries": [
+    {
+      "id": "RA01",
+      "kind": "text",
+      "reference": "分支选择结构的简单应用",
+      "where": "hero.title",
+      "lesson": "程序设计入门",
+      "lessonText": "程序设计入门",
+      "evidence": "S01 title",
+      "pages": ["S01"],
+      "residue": "replace"
+    },
+    {
+      "id": "RA02",
+      "kind": "text",
+      "reference": "关系表达式",
+      "where": "cards",
+      "lesson": "程序的基本结构",
+      "lessonText": "程序的基本结构",
+      "evidence": "S02 title",
+      "pages": ["S02"],
+      "residue": "replace"
+    }
+  ],
+  "unmapped": [
+    {
+      "reference": "if / else",
+      "reason": "generic C++ syntax; allowed to remain",
+      "residue": "allow"
+    }
+  ]
+}
