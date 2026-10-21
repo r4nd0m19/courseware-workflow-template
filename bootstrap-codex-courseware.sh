@@ -230,13 +230,11 @@ log "完成"
 cat <<EOF
 项目:     $TARGET
 集成:     $INTEGRATION
-工作流:   workflow/workflows/courseware-production.yml
-技能:     $SKILLS_DIR（$HARNESS 中用 $INVOKE 调用）
-说明:     AGENTS.md
+说明:     START-HERE.md
 
 下一步:
-  1. 在 $HARNESS 中重新打开该项目，或执行 Force Reload Skills，确认能看到 speckit-* 技能。
-  2. 本模板只含工作流，不含具体课件的壳、注册表、研究资料和插画；把本项目的 shell/style pack 放到 shells/ 后再跑完整流程。
-  3. 完整流程示例见 AGENTS.md；运行 workflow 时加 -i integration=$INTEGRATION，并使用 node workflow/tools/run-workflow.mjs（退出码 3 = 停在人工 gate）。agent 把审核文件/链接发给老师，用原生提问拿到 approve/reject 后运行 gate-review.mjs decide，再用 run-workflow.mjs resume 继续。
+  1. 不需要重启 ZCode。打开 START-HERE.md，或直接对 agent 说：“开始做课件”。
+  2. 把课程资料（教案、讲义、网页、Word、PDF 或图片）放进项目；agent 会自己整理并启动流程。
+  3. 需要您确认时，会弹出“通过，继续” / “不通过，需要改”，您点一下即可。
   4. 更新工作流: bash bootstrap-codex-courseware.sh --integration $INTEGRATION --force
 EOF
