@@ -10,7 +10,10 @@ function opt(name, fallback = '') {
 }
 
 const sectionsPath = opt('--sections')
-const approvalsPath = opt('--approvals', 'review/page-approvals.json')
+const approvalsPath = opt(
+  '--approvals',
+  process.env.COURSEWARE_PAGE_APPROVALS || 'review/page-approvals.json',
+)
 const sectionId = opt('--id')
 const reason = opt('--reason')
 
@@ -18,7 +21,7 @@ if (!sectionsPath || !sectionId || !reason) {
   console.error(`usage: node reopen-section.mjs --sections <file> --id <section> --reason "<why>" [options]
 
 Options:
-  --approvals <path>   approval ledger (default: review/page-approvals.json)
+  --approvals <path>   approval ledger (default: $COURSEWARE_PAGE_APPROVALS or review/page-approvals.json)
 
 Reopens the named page and every later page, because later pages may depend on it.
 Earlier approved pages stay frozen. Rerun the page review loop; it resumes at the

@@ -2,7 +2,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData } from './lib.mjs'
-import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
+import {
+  assertScriptApproved,
+  DEFAULT_PAGE_APPROVALS,
+  DEFAULT_SCREENSHOTS_DIR,
+  DEFAULT_SCRIPT_APPROVAL,
+} from './approval-lib.mjs'
 import { requirePageGateApproval } from './review-guard.mjs'
 import { parseScript } from './script-lib.mjs'
 import {
@@ -28,8 +33,8 @@ function flag(name) {
 const sectionsPath = opt('--sections')
 const storyboardPath = opt('--storyboard')
 const scriptPath = opt('--script')
-const screenshots = opt('--screenshots', 'screenshots')
-const approvalsPath = opt('--approvals', 'review/page-approvals.json')
+const screenshots = opt('--screenshots', DEFAULT_SCREENSHOTS_DIR)
+const approvalsPath = opt('--approvals', DEFAULT_PAGE_APPROVALS)
 const approvalPath = opt('--approval', DEFAULT_SCRIPT_APPROVAL)
 const sectionId = opt('--id')
 const approvedBy = opt('--approved-by')

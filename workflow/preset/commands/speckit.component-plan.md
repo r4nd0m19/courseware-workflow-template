@@ -47,13 +47,13 @@ node workflow/tools/check-script-approval.mjs courseware.md
    ```bash
    node workflow/tools/check-component-plan.mjs courseware.md <style-pack-manifest.json> \
      [registry/index.json] --plan component-plan.md --briefs component-briefs \
-     --approval review/script-approval.json
+     --approval $COURSEWARE_SCRIPT_APPROVAL
    ```
 8. 输出：`component-plan.md`、简报清单、复用/新建统计、检查结果。
 
 ## Self-review（强制，人工审核前）
 
-- 按 `specify preset resolve self-review-template` 解析到的模板 写 `review/self-review-component-plan.json` 和 `.md`。
+- 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-component-plan.json` 和 `.md`。
 - 检查每个交互需求都有检索记录、每个缺口都有简报、状态机/props/无障碍/降级/测试计划完整；`verdict` 必须为 `pass`。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。
 

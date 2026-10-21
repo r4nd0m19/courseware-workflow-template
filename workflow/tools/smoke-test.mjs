@@ -764,7 +764,7 @@ try {
     gateMessage.includes('steps.advance_section.output.data.section.id') &&
     gateMessage.includes('inputs.deck_url') &&
     pageGate.show_file ===
-      'review/self-review-page-{{ steps.advance_section.output.data.section.id }}.md' &&
+      'review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.md' &&
     Array.isArray(pageGate.options) &&
     pageGate.options.includes('approve') &&
     pageGate.options.includes('reject') &&
@@ -919,6 +919,13 @@ try {
       [],
       0,
       'OK review guard',
+    )
+    run(
+      'per-lesson runtime paths are isolated',
+      'test-lesson-paths.mjs',
+      [],
+      0,
+      'OK lesson paths',
     )
   } else {
     skip('workflow wrapper fail-closed', 'specify CLI not on PATH')

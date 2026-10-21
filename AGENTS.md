@@ -7,6 +7,7 @@
 - 工作流引擎是 Spec Kit，不绑定单一 harness。按项目 integration 安装：Claude Code（`.claude/skills`）、Codex（`.agents/skills`）或 ZCode（`.zcode/skills`）。
 - Claude Code 调用命令用 `/speckit-*`；Codex 用 `$speckit-*`；ZCode 用 `$speckit-*` 或 `/skill <name>`。不要手动编辑这些技能目录里的 `SKILL.md`，它们由 `specify preset add` / `specify integration use` 生成。
 - 工作流的 `integration` 输入默认 `auto`（跟随 `.specify/integration.json` 的项目默认）。运行完整流程时显式传 `-i integration=codex` 或 `-i integration=zcode`，不要修改默认集成。ZCode 的 AI 步骤由 `zcode -p` 执行，Codex 由 `codex exec` 执行。
+- 一个项目可放多个课件：运行时状态按 `lesson_slug` 隔离到 `review/<slug>/`、`screenshots/<slug>/`、`review/<slug>/gui-gates/`；每次 workflow 运行必须传 `-i lesson_slug=<slug>`。`specs/<lesson>/`、`shells/`、`registry/`、`workflow/` 共享。
 - 非交互/脚本化运行必须通过 `node workflow/tools/run-workflow.mjs`，不要直接调用 `specify workflow run`。包装器会忽略非 TTY stdin，把 Spec Kit 的 `paused` 变成退出码 3，并打印 gate 的审核请求（逐页 gate 含课件 URL）与审核文件路径；直接调用 `specify workflow run` 在 gate 处会以退出码 0 返回 `paused`，容易被误判为成功。
 - 看到退出码 3 表示工作流停在人工审核闸门。包装器会打印 `Review file:`（绝对路径）、`Review links:`（课件/预览 URL）、gate options，以及 `gate-review.mjs show/decide` 与 `run-workflow.mjs resume` 命令。
 - 每次人工 gate 都按同一顺序处理：
@@ -20,10 +21,10 @@
 
 ### 人工审核闸门（文件地址 + 原生选择）
 
-- 工作流里 13 个人工 gate 都是 `gui-gate`（类型名保留，定义在 `workflow/steps/gui-gate/`）。非 TTY 运行时它把审核请求写到 `review/gui-gates/`，并停在 `paused`。
+- 工作流里 13 个人工 gate 都是 `gui-gate`（类型名保留，定义在 `workflow/steps/gui-gate/`）。非 TTY 运行时它把审核请求写到 `review/<lesson>/gui-gates/`，并停在 `paused`。
 - 安装 `workflow/install.mjs` 会把 step 包复制到 `.specify/workflows/steps/gui-gate/`。旧版本安装的 `courseware-approval` MCP server 条目会被移除；审核不再依赖 MCP 面板。
-- verdict 绑定 `runId` / `stepId` / `gateKey` / `digest` / `nonce`，一次性消费。`review/gui-gates/` 是运行时状态，不要提交。
-- agent 不得手写 `review/gui-gates/verdicts/*.json`、不得篡改 pending 记录、不得用 `-i` 预填 gate 答案。verdict 只能由 `gate-review.mjs decide` 在老师明确回答后记录。
+- verdict 绑定 `runId` / `stepId` / `gateKey` / `digest` / `nonce`，一次性消费。`review/<lesson>/gui-gates/` 是运行时状态，不要提交。
+- agent 不得手写 `review/<lesson>/gui-gates/verdicts/*.json`、不得篡改 pending 记录、不得用 `-i` 预填 gate 答案。verdict 只能由 `gate-review.mjs decide` 在老师明确回答后记录。
 - 页级工具 fail closed：`build-screen` / `check-rendered-section` / `freeze-section` 只在 `SPECKIT_WORKFLOW_RUN_ID` 指向 `courseware-production` 的 run 内运行；`freeze-section` 还要求同一 run 里最近一个 `review-page` gate 已 `approve` 且消息包含本页 section id。手工调试/测试必须显式加 `--manual`（`build-screen` 也可 `--alpha`）；不要把 `--manual` 当成正常流程。
 
 完整工作流示例（参数按当前 lesson 替换）：
@@ -53,7 +54,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 - 批准与**当时的文本**绑定。任何对 `courseware.md` 的编辑（包括只改旁白、制作字段或 frontmatter）都会使账本失效；必须重新走 `review-script` 人工 gate。
 - 所有下游工具（component-plan、narration、storyboard 修订、组件、deck、截图、冻结）都会重新校验账本及其 gate run 状态。`node workflow/tools/check-script-approval.mjs <courseware.md>` 失败就是阻断项；不要通过传别的账本、改判据或删除检查绕过。
 - 工作流在 `approve-script` 之后立刻运行 `verify-script-approval`，并用 `--expect-run` 要求账本来自当前 run；不匹配会让整次运行失败，而不是等到几阶段之后。
-- `approve-script` 现在要求 production run 证据：同一 run 的 `self-review-script` 与 `check-self-review-script` 都已完成，且 `review/self-review-script.json` 的 `verdict` 为 `pass`、`reviewedArtifacts` 绑定当前 `courseware.md` 哈希。只有 gate 的最小 workflow 不能铸造账本；测试/调试才加 `--manual`。
+- `approve-script` 现在要求 production run 证据：同一 run 的 `self-review-script` 与 `check-self-review-script` 都已完成，且 `review/<lesson>/self-review-script.json` 的 `verdict` 为 `pass`、`reviewedArtifacts` 绑定当前 `courseware.md` 哈希。只有 gate 的最小 workflow 不能铸造账本；测试/调试才加 `--manual`。
 - `register-staged-components` 也只允许在 production run 内、且当前 run 的 `review-page` gate 已 `approve` 时注册；手工注册必须显式 `--manual`。
 - `script-to-storyboard --out` 只允许从已批准脚本投影；`--check` / `--print` 不受影响。测试/调试用 `--manual`。
 - 本地文件无法证明“某个真人按了键”：能改文件的人也能改账本。上面的检查保证正常路径不会误放行、暂停的 gate 不能被当成批准。`gate-review.mjs decide` 只在老师明确回答后由 agent 调用，verdict 记录 `source: chat` / `decidedBy: teacher` 并绑定 run/step/digest/nonce；真正的信任边界是老师在自己面前的 harness 里做出的选择，agent 不代答、不伪造 verdict。
@@ -67,10 +68,12 @@ node workflow/tools/run-workflow.mjs courseware-production \
 - `specs/<lesson>/courseware.md`：人类可读课件脚本，整份一次人工审核。
 - `specs/<lesson>/storyboard.yml`：从 `courseware.md` 投影出的分镜，不应手工改。
 - `specs/<lesson>/deck.json`：声明式 deck；只允许 `type` / `component` / `props` 等数据字段，禁止 `style`、`className`、`html`、`innerHTML`、`on*`。
-- `review/shell-preview.md` / `review/shell-shots/`：壳审核证据，由 `validate-shell` 生成；`review/shell-preview.json` 记录预览服务的 URL/PID。壳预览自带 30 页占位内容与 4 音色占位语音（`shells/<id>/site/preview-audio/`、`preview-data.json`）。不要手改。
+- `review/<lesson>/shell-preview.md` / `review/<lesson>/shell-shots/`：壳审核证据，由 `validate-shell` 生成；`review/<lesson>/shell-preview.json` 记录预览服务的 URL/PID。壳预览自带 30 页占位内容与 4 音色占位语音（`shells/<id>/site/preview-audio/`、`preview-data.json`）。不要手改。
 - `registry/`：组件库；页面需要的组件先暂存，页面审核通过后才注册进 core。
-- `review/page-approvals.json`：逐页审核账本，按 section/slide 记录脚本与截图哈希。不要绕过或手改冻结状态。
-- `review/gui-gates/`：人工审核闸门的 pending/verdict 运行时状态；由 `gui-gate` 与 `gate-review.mjs` 读写，不要手改或提交。
+- `review/<lesson>/script-approval.json`：整份脚本批准账本，绑定 `courseware.md` 的 SHA-256、每屏哈希和 gate run id。不要手改。
+- `review/<lesson>/page-approvals.json`：逐页审核账本，按 section/slide 记录脚本与截图哈希。不要绕过或手改冻结状态。
+- `screenshots/<lesson>/`：逐页截图与渲染元数据；页面审核和 Alpha 使用。
+- `review/<lesson>/gui-gates/`：人工审核闸门的 pending/verdict 运行时状态；由 `gui-gate` 与 `gate-review.mjs` 读写，不要手改或提交。
 
 ## 门禁
 

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { parseScript } from './script-lib.mjs'
 import { slideScriptHash } from './section-lib.mjs'
 import {
+  DEFAULT_SCRIPT_APPROVAL,
   reviewRunProblems,
   scriptSelfReviewProblems,
   sha256Text,
@@ -20,7 +21,8 @@ const gateChoice = opt('--gate-choice').trim()
 const gateStep = opt('--gate-step', 'review-script')
 const runId = opt('--run-id').trim()
 const runStatePath = opt('--run-state')
-const out = opt('--out', 'review/script-approval.json')
+const out = opt('--out', DEFAULT_SCRIPT_APPROVAL)
+const selfReviewPath = opt('--self-review')
 const manual = args.includes('--manual')
 
 if (!scriptPath || !approvedBy || !runId) {
@@ -31,7 +33,8 @@ Options:
   --gate-step <id>       gate step id (default: review-script)
   --run-id <id>          workflow run that contains the completed review-script gate
   --run-state <path>     run state.json (default: .specify/workflows/runs/<id>/state.json)
-  --out <path>           approval ledger (default: review/script-approval.json)
+  --out <path>           approval ledger (default: review/<lesson>/script-approval.json)
+  --self-review <path>   self-review record (default: review/<lesson>/self-review-script.json)
   --manual               test/debug only: skip the self-review evidence check
 
 Run only from the workflow step immediately after the human review-script
@@ -75,6 +78,7 @@ if (!manual) {
     ...(runStatePath ? { runStatePath } : {}),
     scriptPath: absolute,
     scriptText: text,
+    ...(selfReviewPath ? { selfReviewPath } : {}),
   })
   if (selfReviewProblems.length) {
     console.error(

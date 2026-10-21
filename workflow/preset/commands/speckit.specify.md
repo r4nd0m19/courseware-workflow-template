@@ -26,7 +26,7 @@ $ARGUMENTS
 
 ## Self-review（强制，人工审核前）
 
-- 按 `specify preset resolve self-review-template` 解析到的模板 写 `review/self-review-brief.json` 和 `.md`。
+- 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-brief.json` 和 `.md`。
 - 运行/读取本阶段自动检查；`verdict` 必须为 `pass`。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。
 - 只有自审 pass 后才进入下面的 Human Review；不得自行把产物标成 APPROVED/reviewed。

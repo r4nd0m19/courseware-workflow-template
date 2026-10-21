@@ -76,6 +76,61 @@ const childEnv = { ...process.env }
 if (effectiveRunId) childEnv.SPECKIT_WORKFLOW_RUN_ID = effectiveRunId
 else delete childEnv.SPECKIT_WORKFLOW_RUN_ID
 
+// One project may hold multiple lessons. The runtime state (review ledgers,
+// screenshots, gui-gate state) is scoped by lesson_slug so two runs cannot
+// overwrite each other. Tool defaults read these variables; explicit
+// --approval/--approvals/--screenshots/--state-dir flags still win.
+function inputValue(values, key) {
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i]
+    if (value !== '-i' && value !== '--input') continue
+    const assignment = values[i + 1]
+    if (typeof assignment !== 'string') continue
+    const eq = assignment.indexOf('=')
+    if (eq < 0) continue
+    if (assignment.slice(0, eq) === key) return assignment.slice(eq + 1)
+    i += 1
+  }
+  return ''
+}
+
+function lessonFromRunInputs(runId) {
+  if (!runId || !/^[A-Za-z0-9._-]+$/.test(runId) || runId.includes('..')) return ''
+  try {
+    const state = JSON.parse(
+      fs.readFileSync(
+        path.join(process.cwd(), '.specify', 'workflows', 'runs', runId, 'inputs.json'),
+        'utf8',
+      ),
+    )
+    const inputs = state.inputs && typeof state.inputs === 'object' ? state.inputs : state
+    return String(inputs.lesson_slug || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+const rawLesson = command === 'resume'
+  ? lessonFromRunInputs(effectiveRunId)
+  : inputValue(args, 'lesson_slug')
+const lessonSlug =
+  rawLesson &&
+  /^[A-Za-z0-9._-]+$/.test(rawLesson) &&
+  !rawLesson.includes('..')
+    ? rawLesson
+    : ''
+if (lessonSlug) {
+  const reviewDir = `review/${lessonSlug}`
+  childEnv.COURSEWARE_LESSON_SLUG = lessonSlug
+  childEnv.COURSEWARE_REVIEW_DIR = reviewDir
+  childEnv.COURSEWARE_SCREENSHOTS_DIR = `screenshots/${lessonSlug}`
+  childEnv.COURSEWARE_SCRIPT_APPROVAL = `${reviewDir}/script-approval.json`
+  childEnv.COURSEWARE_PAGE_APPROVALS = `${reviewDir}/page-approvals.json`
+  childEnv.COURSEWARE_GATE_STATE_DIR = `${reviewDir}/gui-gates`
+}
+// No lesson_slug: leave any caller-provided COURSEWARE_* state-dir overrides
+// intact (tests and explicit manual runs set them deliberately).
+
 // Interactive runs must see the gate prompt on the terminal. The wrapper's
 // fail-closed guarantee is for non-interactive (agent/CI) runs, where Spec Kit
 // would otherwise return exit 0 with status "paused".
@@ -182,11 +237,15 @@ if (status === 'paused') {
       : ''
     const gateStep =
       typeof guiGate.stepId === 'string' && guiGate.stepId ? guiGate.stepId : step
+    const stateDir =
+      typeof guiGate.stateDir === 'string' && guiGate.stateDir
+        ? ` --state-dir ${guiGate.stateDir}`
+        : ''
     const lines = [
       `PAUSED workflow ${outcome.workflow_id || ''} at step ${step} (run ${runId})`,
       'This is a human review gate. Show the review file/link to the teacher and wait for their explicit choice; the agent must not answer it.',
-      `Get the gate details: node workflow/tools/gate-review.mjs show ${runId}`,
-      `Record the teacher's answer: node workflow/tools/gate-review.mjs decide ${runId} --step ${gateStep} --choice <approve|reject>`,
+      `Get the gate details: node workflow/tools/gate-review.mjs show ${runId}${stateDir}`,
+      `Record the teacher's answer: node workflow/tools/gate-review.mjs decide ${runId} --step ${gateStep} --choice <approve|reject>${stateDir}`,
       `Then resume the workflow: node workflow/tools/run-workflow.mjs resume ${runId}`,
       'Do not call `specify workflow resume` directly, do not pass -i, and do not edit pending/verdict files by hand.',
       Array.isArray(guiGate.options) ? `Gate options: ${guiGate.options.join(' / ')}` : '',

@@ -52,7 +52,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
 ## Self-review（强制，页面审核前）
 
 - 按 `specify preset resolve self-review-template` 解析到的模板 写
-  `review/self-review-page-<section>-components.json` 和 `.md`。
+  `$COURSEWARE_REVIEW_DIR/self-review-page-<section>-components.json` 和 `.md`。
 - `reviewedArtifacts` 必须逐个列出本页每个暂存包的全部文件与其简报的 `sha256`；组件实现一改，这份自审即过期。
 - 检查简报逐条落地（FSM、props、a11y、fallback、测试、基线）、无占位文本、无未测试 transition、本页 deck 里的 props 与交互设计一致；`verdict` 必须为 `pass`。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。

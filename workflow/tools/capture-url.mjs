@@ -13,7 +13,9 @@ if (!url) {
   console.error('usage: node capture-url.mjs <url> [--out dir] [--width 1440] [--height 900] [--wait 1000] [--selector #slide]')
   process.exit(2)
 }
-const outDir = path.resolve(opt('--out', 'screenshots'))
+const outDir = path.resolve(
+  opt('--out', process.env.COURSEWARE_SCREENSHOTS_DIR || 'screenshots'),
+)
 const width = Number(opt('--width', '1440'))
 const height = Number(opt('--height', '900'))
 const waitMs = Number(opt('--wait', '1000'))

@@ -24,7 +24,7 @@ $ARGUMENTS
 
 ## Self-review（强制，人工审核前）
 
-- 按 `specify preset resolve self-review-template` 解析到的模板 写 `review/self-review-checklist.json` 和 `.md`。
+- 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-checklist.json` 和 `.md`。
 - 汇总自动检查结果；有 blocking issue 时先修复并重跑；`verdict` 必须为 `pass`。
 - 只有自审 pass 后才进入下面的 Human Review。
 
