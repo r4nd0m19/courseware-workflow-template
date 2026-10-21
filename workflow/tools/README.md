@@ -203,6 +203,10 @@ node workflow/tools/check-rendered-text.mjs \
   --concepts specs/<slug>/concepts.yml --json
 # 同一次浏览器会话里也扫描参考残留：
 #   --reference-adaptation review/<slug>/reference-adaptation.json
+
+# 固定 1440×900 播放器（0.26.0）
+node workflow/tools/write-player-page.mjs --site shells/<id>/site
+# extract-shell / prepare-shell-site / check-shell --serve-preview 会自动写入
 ```
 
 ```bash

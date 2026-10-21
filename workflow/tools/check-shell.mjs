@@ -10,6 +10,7 @@ import path from 'node:path'
 import { chromium } from 'playwright-core'
 import { resolveChrome } from './chrome.mjs'
 import { ensurePreviewServer, fileUrl, openUrl, writeShellPreview } from './preview-lib.mjs'
+import { playerUrlFor, writePlayerPage } from './player-page-lib.mjs'
 import { readJson, resolveShellDir, serveDir, validateShellPackage } from './shell-lib.mjs'
 
 const args = process.argv.slice(2)
@@ -54,6 +55,7 @@ const report = {
   preview: {},
   narration: {},
   previewUrl: '',
+  playerUrl: '',
   reviewFile: '',
   shotsDir: '',
 }
@@ -306,6 +308,7 @@ if (urlArg) {
   report.previewUrl = urlArg
 } else if (servePreview) {
   try {
+    writePlayerPage(siteDir)
     const preview = await ensurePreviewServer({
       root: siteDir,
       stateFile: path.resolve(previewState),
@@ -323,6 +326,7 @@ if (urlArg) {
     report.warnings.push(`preview server unavailable (${error.message}); using file URL`)
   }
 }
+report.playerUrl = report.previewUrl ? playerUrlFor(report.previewUrl) : ''
 if (reviewOut) {
   try {
     writeShellPreview({
@@ -331,6 +335,7 @@ if (reviewOut) {
       shellDir,
       report,
       previewUrl: report.previewUrl || report.url,
+      playerUrl: report.playerUrl,
       shotsDir,
     })
     report.reviewFile = path.resolve(reviewOut)

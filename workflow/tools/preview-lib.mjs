@@ -120,7 +120,7 @@ function escapeCell(value) {
 // The gate can display one text file, so this sheet is the decision surface:
 // the live URL first, then what to check, then the evidence. It stays well
 // under the gate's 200-line display cap for the standard 30-slide preview.
-export function writeShellPreview({ file, shell, shellDir, report, previewUrl, shotsDir }) {
+export function writeShellPreview({ file, shell, shellDir, report, previewUrl, playerUrl, shotsDir }) {
   const shotFiles = shotsDir && fs.existsSync(shotsDir)
     ? fs.readdirSync(shotsDir).filter((name) => name.endsWith('.png')).sort()
     : []
@@ -136,7 +136,8 @@ export function writeShellPreview({ file, shell, shellDir, report, previewUrl, s
   const lines = [
     `# 壳预览审核：${shell.name || shell.id}`,
     '',
-    `- 预览地址：${previewUrl}`,
+    `- 预览地址（固定 1440×900 播放器）：${playerUrl || previewUrl}`,
+    `- 直接地址（调试用，缩放会重排）：${previewUrl}`,
     `- 壳包：\`${relativeShell}\`（${shell.id}@${shell.version}）`,
     `- 预览 deck：${slides.length} 页占位内容；覆盖 ${nativeTypes.length} 种原生类型`,
     `- 占位标记：${preview.markedSlides ?? 0}/${preview.totalSlides ?? slides.length} 页标题含“占位”`,

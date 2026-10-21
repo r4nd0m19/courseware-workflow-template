@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.25.0"
+  version: "0.26.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -170,7 +170,7 @@ steps:
   # before teaching content is authored on top of it.
   - id: review-shell
     type: gui-gate
-    message: "先看壳预览：{{ steps.validate-shell.output.data.previewUrl }} 。这是 {{ steps.validate-shell.output.data.slideCount }} 页占位 deck，所有文字均为占位内容，覆盖 {{ steps.validate-shell.output.data.typeCount }} 种原生类型；带 {{ steps.validate-shell.output.data.narration.voiceCount }} 个占位音色、{{ steps.validate-shell.output.data.narration.pageCount }} 页占位语音。请打开链接逐页翻、点主要互动、切换音色、试一次自动播放；审核清单和逐页截图见下方文件。这里审的是壳，不是本课内容。"
+    message: "先看壳预览：{{ steps.validate-shell.output.data.playerUrl }} 。这是固定 1440×900 的播放器，缩放只改变整体大小、不会重排；这是 {{ steps.validate-shell.output.data.slideCount }} 页占位 deck，所有文字均为占位内容，覆盖 {{ steps.validate-shell.output.data.typeCount }} 种原生类型；带 {{ steps.validate-shell.output.data.narration.voiceCount }} 个占位音色、{{ steps.validate-shell.output.data.narration.pageCount }} 页占位语音。请打开链接逐页翻、点主要互动、切换音色、试一次自动播放；审核清单和逐页截图见下方文件。这里审的是壳，不是本课内容。"
     show_file: "{{ steps.validate-shell.output.data.reviewFile }}"
     artifacts:
       - "{{ inputs.shell }}"
@@ -785,7 +785,7 @@ steps:
 
           - id: review-page
             type: gui-gate
-            message: "Review rendered page {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }} ({{ steps.advance_section.output.data.section.slides | join(', ') }}). Components: {{ steps.load-page-components.output.data.summary }}. Open the courseware at {{ inputs.deck_url }} and use the outline to jump to this page; per-page screenshots and the self-review are in the attached file. Check script fidelity, interaction evidence, no overflow, narration playback/voice selection, and the outline. Approving this page also approves its new components into core; reject to rework just this page (nothing is registered)."
+            message: "Review rendered page {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }} ({{ steps.advance_section.output.data.section.slides | join(', ') }}). Components: {{ steps.load-page-components.output.data.summary }}. Open the fixed 1440×900 player at {{ inputs.deck_url }}player.html (zoom only scales the whole canvas; it does not reflow) and use the outline to jump to this page; per-page screenshots and the self-review are in the attached file. Check script fidelity, interaction evidence, no overflow, narration playback/voice selection, and the outline. Approving this page also approves its new components into core; reject to rework just this page (nothing is registered)."
             show_file: "review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.md"
             artifacts:
               - "review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"

@@ -863,6 +863,7 @@ try {
     pageGate.type === 'gui-gate' &&
     gateMessage.includes('steps.advance_section.output.data.section.id') &&
     gateMessage.includes('inputs.deck_url') &&
+    gateMessage.includes('player.html') &&
     pageGate.show_file ===
       'review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.md' &&
     Array.isArray(pageGate.options) &&
@@ -977,7 +978,7 @@ try {
     /- id: validate-shell\n    type: shell\n    run: "node workflow\/tools\/check-shell\.mjs[^"\n]*--serve-preview[^"\n]*--json"\n    output_format: json/.test(workflowYaml)
   const hasShellReviewGate =
     /- id: review-shell\n    type: gui-gate\n/.test(workflowYaml) &&
-    /message: "[^"\n]*steps\.validate-shell\.output\.data\.previewUrl/.test(workflowYaml) &&
+    /message: "[^"\n]*steps\.validate-shell\.output\.data\.playerUrl/.test(workflowYaml) &&
     /message: "[^"\n]*narration\.voiceCount/.test(workflowYaml) &&
     /message: "[^"\n]*narration\.pageCount/.test(workflowYaml) &&
     /show_file: "\{\{ steps\.validate-shell\.output\.data\.reviewFile \}\}"/.test(workflowYaml)
@@ -1170,6 +1171,28 @@ try {
     console.error(
       'preview deck must be marked dummy, every slide title must contain 占位, and every voice must have hashed, non-empty audio fixtures',
     )
+  }
+
+  // ---- fixed-canvas player ----
+  total += 1
+  const playerSite = path.join(tmpRoot, 'player-site')
+  const playerRes = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'write-player-page.mjs'), '--site', playerSite],
+    { encoding: 'utf8' },
+  )
+  const playerFile = path.join(playerSite, 'player.html')
+  const playerSource = fs.existsSync(playerFile) ? fs.readFileSync(playerFile, 'utf8') : ''
+  const playerPass =
+    playerRes.status === 0 &&
+    playerSource.includes('<iframe') &&
+    playerSource.includes('width: 1440px') &&
+    playerSource.includes('src="./index.html"') &&
+    playerSource.includes('scale(')
+  console.log(`${playerPass ? 'PASS' : 'FAIL'} fixed 1440×900 player page`)
+  if (!playerPass) {
+    failed += 1
+    console.error('write-player-page.mjs must emit a 1440×900 iframe player with whole-canvas scaling')
   }
 } finally {
   fs.rmSync(tmpRoot, { recursive: true, force: true })
