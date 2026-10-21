@@ -23,7 +23,8 @@
 
 - **默认老师不懂英语、不懂工作流/编程术语。** 老师看到的每一句话都必须是通俗中文。
 - 禁止对老师使用：`approve`、`reject`、`gate`、`verdict`、`digest`、`nonce`、`hash`、`run id`、`content-pack`、`lesson_slug`、`site_dir`、`storyboard`、`deck`、`self-review`、`JSON`、`Markdown`、`pipeline`、`workflow`、`repository`、`branch`、`commit`、`配置`、`部署`、`命令`、`终端`、`路径`。
-- 需要老师选择时，必须调用原生选择框，选项只用中文：**“通过，继续”** / **“不通过，需要改”**。不要出现 `approve` / `reject`；不要在聊天里让老师打字选择。原生 UI 失败就停下报告，不要退回文字提问。
+- 需要老师选择时，必须调用原生选择框，选项只用中文：**“通过，继续”** / **“不通过，需要改”**。不要出现 `approve` / `reject`；不要在聊天里让老师打字选择。
+- **只有主聊天会话可以调用 `AskUserQuestion`。** 不要把 gate 问题交给子 agent，也不要在 `zcode -p` 子会话里调用；这些会话没有 UI 权限，会返回 `No permission client configured for AskUserQuestion`。遇到这个错误就停下，明确告诉老师“原生选择框不可用”，不要退回文字提问，也不要继续往下走。
 - **不要要求老师做任何技术动作**：不要运行命令、不要改文件、不要打开仓库里的路径、不要提供 JSON、不要安装软件、不要配置环境。技术动作 agent 自己做；做不到就说明“我需要先处理一个技术问题”，不要让老师代做。
 - 需要课程资料时，只问：**“您有没有这门课的教案、讲义、网页、Word、PDF 或图片？放到项目文件夹里，或者告诉我文件叫什么、在哪里就行。”** 不要提 `content-pack.json`、路径格式、JSON。
 - 审核时用老师能理解的说法：
@@ -36,7 +37,7 @@
 
 ### 人工审核闸门（文件地址 + 原生选择）
 
-- 工作流里 13 个人工 gate 都是 `gui-gate`（类型名保留，定义在 `workflow/steps/gui-gate/`）。非 TTY 运行时它把审核请求写到 `review/<lesson>/gui-gates/`，并停在 `paused`。
+- 工作流里 11 个人工 gate 都是 `gui-gate`（类型名保留，定义在 `workflow/steps/gui-gate/`）。非 TTY 运行时它把审核请求写到 `review/<lesson>/gui-gates/`，并停在 `paused`。
 - 安装 `workflow/install.mjs` 会把 step 包复制到 `.specify/workflows/steps/gui-gate/`。旧版本安装的 `courseware-approval` MCP server 条目会被移除；审核不再依赖 MCP 面板。
 - verdict 绑定 `runId` / `stepId` / `gateKey` / `digest` / `nonce`，一次性消费。`review/<lesson>/gui-gates/` 是运行时状态，不要提交。
 - agent 不得手写 `review/<lesson>/gui-gates/verdicts/*.json`、不得篡改 pending 记录、不得用 `-i` 预填 gate 答案。verdict 只能由 `gate-review.mjs decide` 在老师明确回答后记录。

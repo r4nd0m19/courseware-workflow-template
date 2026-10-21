@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.16.0"
+  version: "0.17.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -588,12 +588,9 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-storyboard.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
 
-  - id: review-storyboard
-    type: gui-gate
-    message: "Review the projected storyboard: per-screen status, contentRefs coverage, component sources/versions, teaching gates, no-scroll. Only APPROVED screens proceed."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-storyboard.md"
-    options: [approve, reject]
-    on_reject: abort
+  # The storyboard is a mechanical projection of the approved script. Its
+  # self-review and check-review-sections gate above are authoritative; do not
+  # ask the teacher to re-approve a derived page arrangement.
 
   - id: check-review-sections
     type: shell
@@ -627,12 +624,9 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-tasks.json"
 
-  - id: review-tasks
-    type: gui-gate
-    message: "Review tasks.md: only APPROVED screens, Deps/DoD, gates, no unregistered components."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-tasks.md"
-    options: [approve, reject]
-    on_reject: abort
+  # tasks.md is an internal implementation breakdown derived from the approved
+  # storyboard. The AI self-review above is the gate; the teacher reviews the
+  # script, not the task list.
 
   # ---------- page-by-page implementation + rendered review ----------
   # One whole-script gate above; from here each page is implemented, rendered,

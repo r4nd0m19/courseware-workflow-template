@@ -245,7 +245,7 @@ if (status === 'paused') {
       `REVIEW REQUIRED (run ${runId}, step ${step})`,
       'FOR THE AGENT ONLY — never paste this block to the teacher. The teacher may not read English or technical terms.',
       'Explain in plain Chinese only: what is being reviewed, what happens if the teacher chooses "通过，继续", and what changes if they choose "不通过，需要改". Do not show approve/reject/gate/verdict/digest/run id/content-pack, repository paths, or commands.',
-      'Call AskUserQuestion now with exactly two Chinese labels: "通过，继续" and "不通过，需要改". Do not ask the teacher to type a choice. If the native UI fails, stop and report the failure.',
+      'Call AskUserQuestion in the MAIN chat session only, with exactly two Chinese labels: "通过，继续" and "不通过，需要改". Do not delegate this to a subagent or a zcode -p child session; they have no UI permission and return "No permission client configured for AskUserQuestion". Do not ask the teacher to type a choice. If denied, stop and tell the teacher the native choice UI is unavailable; do not proceed in plain chat.',
       'Do not ask the teacher to run commands, edit files, install tools, configure anything, or provide JSON. Do the technical work yourself. If you need source material, ask in plain Chinese for lesson notes, a webpage, Word/PDF, or Markdown and offer to handle the rest.',
       'Show a clickable preview URL or file link, not a repository path.',
       `Agent commands (never show): node workflow/tools/gate-review.mjs show ${runId}${stateDir}`,
