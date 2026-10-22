@@ -35,6 +35,8 @@ Options:
   --index <n>             zero-based index in the current deck (for section-filtered decks)
   --next-selector <css>   optional next control
   --debug-go              navigate with COURSEWARE_DEBUG.go(index) instead of keys
+  --ai-format <jpeg|webp> AI review image format (default jpeg; webp depends on the vision API)
+  --ai-width <px>         AI review image width (default 1280; 0 disables)
   --manual                allow a manual/test render outside the production workflow
   --alpha                 alias of --manual for whole-deck Alpha screenshots
 `)
@@ -51,6 +53,9 @@ const waitMs = Number(opt('--wait', '500'))
 const explicitIndex = opt('--index', '')
 const nextSelector = opt('--next-selector', '')
 const debugGo = flag('--debug-go')
+const aiFormatArg = opt('--ai-format', 'jpeg').toLowerCase()
+const aiFormat = aiFormatArg === 'webp' ? 'webp' : 'jpeg'
+const aiWidth = Number(opt('--ai-width', '1280'))
 const manual = flag('--manual') || flag('--alpha')
 
 if (!url) {
@@ -148,6 +153,47 @@ try {
   shot = false
   await page.screenshot({ path: screenshot, fullPage: true }).catch(() => {})
 }
+// AI review image: a smaller copy of the same element, used only by the page
+// self-review. The full-resolution PNG remains the evidence/human artifact.
+let aiImage = ''
+let aiImageSha256 = ''
+let aiImageWidth = 0
+let aiImageHeight = 0
+let aiImageError = ''
+if (aiWidth > 0) {
+  try {
+    const box = await target.boundingBox()
+    if (box && box.width > 0 && box.height > 0) {
+      const scale = Math.min(1, aiWidth / box.width)
+      const client = await context.newCDPSession(page)
+      let format = aiFormat
+      let data
+      try {
+        data = await client.send('Page.captureScreenshot', {
+          format,
+          quality: 80,
+          clip: { x: box.x, y: box.y, width: box.width, height: box.height, scale },
+        })
+      } catch (error) {
+        if (format !== 'webp') throw error
+        format = 'jpeg'
+        data = await client.send('Page.captureScreenshot', {
+          format,
+          quality: 80,
+          clip: { x: box.x, y: box.y, width: box.width, height: box.height, scale },
+        })
+      }
+      const bytes = Buffer.from(data.data, 'base64')
+      aiImage = path.join(outDir, `${slideId}.ai.${format === 'webp' ? 'webp' : 'jpg'}`)
+      fs.writeFileSync(aiImage, bytes)
+      aiImageSha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+      aiImageWidth = Math.round(box.width * scale)
+      aiImageHeight = Math.round(box.height * scale)
+    }
+  } catch (error) {
+    aiImageError = error.message
+  }
+}
 const title = await page
   .locator('h1,h2')
   .first()
@@ -160,6 +206,11 @@ const record = {
   url: page.url(),
   screenshot,
   elementShot: shot,
+  aiImage,
+  aiImageSha256,
+  aiImageWidth,
+  aiImageHeight,
+  aiImageError,
   deckSha256,
   capturedAt: new Date().toISOString(),
 }

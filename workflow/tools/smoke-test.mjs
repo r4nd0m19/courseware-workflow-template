@@ -956,6 +956,23 @@ try {
     )
   }
 
+  // ---- AI review image downscale ----
+  total += 1
+  const buildScreenSource = fs.readFileSync(path.join(root, 'tools/build-screen.mjs'), 'utf8')
+  const aiImagePrompt = String(findStep(workflowData.steps, 'self-review-page')?.prompt || '')
+  const aiImagePass =
+    buildScreenSource.includes('Page.captureScreenshot') &&
+    buildScreenSource.includes('aiImage') &&
+    pageEvidenceSource.includes('aiImage') &&
+    aiImagePrompt.includes('aiImage')
+  console.log(`${aiImagePass ? 'PASS' : 'FAIL'} AI review image downscale`)
+  if (!aiImagePass) {
+    failed += 1
+    console.error(
+      'build-screen must emit a smaller aiImage and the page evidence/prompt must point at it',
+    )
+  }
+
   // ---- page review cache ----
   total += 1
   const cacheCheckStep = findStep(workflowData.steps, 'page-review-cache')

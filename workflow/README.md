@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.30.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.31.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
@@ -10,6 +10,7 @@
 
 - **自审分层（0.22.0 / 0.23.0）**：`inputs` / `alpha` / `beta` / `gold` 改为由门禁结果与逐页自审确定性汇总，不再启动 AI 复述；`script` 自审改读一份紧凑证据包（逐屏脚本字段 + 闸门结果），不再读整份 `courseware.md`、content pack、style pack 和 registry；页自审只读证据包 + 截图，MD 由 JSON 自动渲染。**density/segmenting 自 0.23.0 起以页面自审为唯一权威**：脚本自审不再填 `density`、不再跑 `density-report`，`check-self-review-script` 也不再带 `--script`；页面证据包提供密度信号，页自审做最终判断。AI 自审只保留 `brief` / `script` / `component-plan` / 每页一次判断；参考适配映射每课生成一次。
 - **固定 1440×900 播放器（0.26.0 / 0.26.1 / 0.27.1）**：`workflow/runtime/player.html` 用 1440×900 iframe 渲染课件，再整体等比缩放到窗口；内部布局固定，浏览器缩放只改变整体大小。**0.26.1 起没有外层工具栏**，页面上只看到课件本身；**0.27.1 起读取 `#slide` 的背景色/背景图并 `cover` 到外层**，宽屏两侧显示课件自身背景，不再留天空色空白。壳内全屏按钮和 `F` 快捷键路由到播放器全屏，放大用全屏，不再提供 100% 滚动模式。`extract-shell`、`prepare-shell-site`、`check-shell --serve-preview` 都会写入 `player.html`；审核 gate 用播放器链接。直接 deck URL 留给工具和调试。
+- **AI 截图降规格（0.31.0）**：`build-screen` 在 1440×900 PNG 之外，用 CDP 从同一状态生成 **1280 宽** AI 审核图（默认 JPEG 80，`--ai-format webp` 可选），记录尺寸/哈希；证据包和页自审 prompt 读 `aiImage`，缺失才回退 PNG。16:10 舞台实际约 1280×675；S02B 视觉像素约 -17%。PNG 继续给证据/老师。
 - **页自审风险校准（0.30.0）**：`page-review-risk.mjs` 用页面类型、组件、交互层级、density、概念和参考映射算 low/medium/high，并对照历史问题报告“跳过低风险 AI 会漏什么”。001 结果只有 S01 为 low，且 S01 有非阻断断行、medium 页有 S05/S06/S07 blocking，所以**暂不启用页级跳过 AI**。
 - **页自审并行 + 缓存（0.29.0）**：`build-page-evidence` 的快速检查并发执行，overflow/overlap/rendered-text 三个浏览器检查并发上限 2；每个检查记录 `durationMs`。001 全 16 页确定性管线 **9.86 s/页 → 5.57 s/页**。`page-review-cache.mjs` 按页面脚本/density/映射/检查摘要/截图/deck/registry 哈希缓存 AI 判断；内容不变时跳过 `self-review-page`，只刷新 `reviewedArtifacts`。缓存目录是运行时状态，不提交。
 - **页自审瘦身（0.28.0）**：页面 AI 只判断 density 语义单元、交互证据、视觉版面、新组件行为和占位/个人信息；concepts 与 referenceAdaptation 由确定性检查预填，AI 只处理未映射参考内容的增量。证据包去掉 relatedConcepts/quizKeys/overlap/screenshot metadata/script machine 全量字段，S02B 证据 9.2KB → 5.9KB，prompt 2888B → 2569B。
