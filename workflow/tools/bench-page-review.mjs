@@ -195,6 +195,10 @@ try {
         (sum, shot) => sum + fileSize(shot.png),
         0,
       )
+      const aiImageBytes = (evidenceJson?.screenshots || []).reduce(
+        (sum, shot) => sum + fileSize(shot.aiImage || ''),
+        0,
+      )
       const evidenceBytes = fileSize(evidencePath)
       const skeletonBytes = fileSize(reviewJson)
       results.push({
@@ -207,6 +211,7 @@ try {
         evidenceBytes,
         skeletonBytes,
         screenshotBytes,
+        aiImageBytes,
         renderMs: Number(render.durationMs.toFixed(1)),
         renderStatus: render.status === 0 ? 'pass' : 'fail',
         checks: (evidenceJson?.checks || []).map((check) => ({
@@ -241,6 +246,7 @@ const summary = [...bySection.entries()].map(([section, runs]) => {
     evidenceBytesAvg: Math.round(avg('evidenceBytes')),
     skeletonBytesAvg: Math.round(avg('skeletonBytes')),
     screenshotBytesAvg: Math.round(avg('screenshotBytes')),
+    aiImageBytesAvg: Math.round(avg('aiImageBytes')),
     renderMsAvg: Number(avg('renderMs').toFixed(1)),
     passRate: runs.filter((run) => run.evidenceStatus === 'pass').length / runs.length,
   }
@@ -295,8 +301,11 @@ if (jsonOut) {
     )
   }
   console.log('')
+  const aiImageAvg =
+    summary.reduce((sum, row) => sum + row.aiImageBytesAvg, 0) / Math.max(1, summary.length)
   console.log(
     `Average evidence: ${overall.evidenceSecondsAvg.toFixed(2)} s/page; ` +
+      `AI image: ${(aiImageAvg / 1024).toFixed(1)} KB/page; ` +
       `estimated text tokens: ${Math.round(overall.estimatedTextTokensAvg)}/page`,
   )
   console.log('')

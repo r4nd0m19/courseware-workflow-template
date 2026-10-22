@@ -108,9 +108,10 @@ node workflow/tools/build-screen.mjs S01 \
   --storyboard path/to/storyboard.yml \
   --out screenshots
 # 按 storyboard 中非 SKIP 屏的顺序翻页，截图 <out>/S01.png + S01.json
+# 同时生成 AI 审核图 <out>/S01.ai.jpg（默认 1280 宽；--ai-format webp / --ai-width 0）
 ```
 
-`build-screen` 依赖 Playwright Chromium；没有 `--url` 时退回 stub 模式。`--index` 可显式指定 deck 中的序号（deck 只包含部分页时使用）；截图基线对比见 §7。
+`build-screen` 依赖 Playwright Chromium；没有 `--url` 时退回 stub 模式。`--index` 可显式指定 deck 中的序号（deck 只包含部分页时使用）；截图基线对比见 §7。PNG 是证据/人工审核用；`aiImage` 是页自审用的 1280 宽降规格图，默认 JPEG，视觉接口支持 WebP 时可加 `--ai-format webp`。
 
 ## 6. R0-C 内容包抽取
 

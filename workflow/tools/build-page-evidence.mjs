@@ -339,10 +339,18 @@ const checks = [
 const densityJson = parseJson(checksByKey.density?.stdout || '')
 const concepts = checksByKey.concepts
 
-const screenshots = section.slides.map((id) => ({
-  slideId: id,
-  png: path.join(screenshotsDir, `${id}.png`),
-}))
+const screenshots = section.slides.map((id) => {
+  const candidates = [`${id}.ai.jpg`, `${id}.ai.webp`]
+  const aiImage =
+    candidates
+      .map((name) => path.join(screenshotsDir, name))
+      .find((file) => fs.existsSync(path.resolve(file))) || ''
+  return {
+    slideId: id,
+    png: path.join(screenshotsDir, `${id}.png`),
+    aiImage,
+  }
+})
 
 const failed = checks.filter((check) => check.status !== 'pass')
 const publicChecks = checks.map(({ name, status, summary, durationMs }) => ({
@@ -457,6 +465,9 @@ for (const file of [
 for (const screenshot of screenshots) {
   if (fs.existsSync(path.resolve(screenshot.png))) {
     reviewedArtifacts.push({ path: relative(screenshot.png), sha256: hashFile(screenshot.png) })
+  }
+  if (screenshot.aiImage && fs.existsSync(path.resolve(screenshot.aiImage))) {
+    reviewedArtifacts.push({ path: relative(screenshot.aiImage), sha256: hashFile(screenshot.aiImage) })
   }
 }
 const densityEntries = (Array.isArray(densityJson?.slides) ? densityJson.slides : []).map(
