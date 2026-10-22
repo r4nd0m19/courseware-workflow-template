@@ -6,6 +6,7 @@ workflow/tools/chrome-path.txt
 .zcode/
 .specify/workflows/steps/
 review/gui-gates/
+review/shells/
 review/*/page-review-cache/
 review/*/page-review-raw-*.json
 review/*/page-review-request-*.json

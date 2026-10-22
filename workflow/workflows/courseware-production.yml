@@ -3,9 +3,9 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.32.0"
+  version: "0.33.0"
   author: "courseware"
-  description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
+  description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 教学简报 → 人类可读脚本（整份一次审）→ 概念/自学/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
 
 requires:
   speckit_version: ">=1.0.0"
@@ -75,6 +75,10 @@ inputs:
     type: string
     default: "shells/branch-choice"
     prompt: "Shell package id or directory (production deck chrome/renderer)"
+  shell_slug:
+    type: string
+    default: "branch-choice"
+    prompt: "Shell review slug used for review/shells/<slug>/ (must match the courseware-shell run)"
   shell_source:
     type: string
     default: "shells/branch-choice/SOURCE.json"
@@ -141,6 +145,13 @@ steps:
     type: shell
     run: "node workflow/tools/check-lesson-paths.mjs --lesson-slug {{ inputs.lesson_slug }} --site-dir \"{{ inputs.site_dir }}\" --narration \"{{ inputs.narration_manifest }}\" --audio-dir \"{{ inputs.audio_dir }}\" --art-dir \"{{ inputs.art_dir }}\" --baseline-dir \"{{ inputs.baseline_dir }}\""
 
+  # The shell is generated and reviewed once in courseware-shell, before any
+  # content pack exists. Production only verifies the hash-bound approval; it
+  # must not ask the teacher to review the same shell again.
+  - id: check-shell-approval
+    type: shell
+    run: "node workflow/tools/check-shell-approval.mjs --shell {{ inputs.shell }} --shell-slug {{ inputs.shell_slug }} --approval review/shells/{{ inputs.shell_slug }}/shell-approval.json"
+
   # ---------- inputs: content pack + style pack ----------
   - id: validate-content
     type: shell
@@ -156,27 +167,8 @@ steps:
     type: shell
     run: "node workflow/tools/check-source-fidelity.mjs --source {{ inputs.style_pack_source }} --fidelity {{ inputs.source_fidelity }} --source-only"
 
-  # The lesson deck is built on a shell package, not on reconstructed chrome.
-  # Validate the package and its full-type preview deck before any content work starts.
-  # The check also starts a detached preview server and writes the review sheet,
-  # so the next gate can hand the reviewer a live URL instead of a description.
-  - id: validate-shell
-    type: shell
-    run: "node workflow/tools/check-shell.mjs --shell {{ inputs.shell }} --shots review/{{ inputs.lesson_slug }}/shell-shots --review-out review/{{ inputs.lesson_slug }}/shell-preview.md --serve-preview --open-preview --json"
-    output_format: json
-
-  # First human checkpoint: the shell itself. The reviewer must see the real
-  # rendered shell (all native types, chrome, interactions, auto-play hold)
-  # before teaching content is authored on top of it.
-  - id: review-shell
-    type: gui-gate
-    message: "先看壳预览：{{ steps.validate-shell.output.data.playerUrl }} 。这是固定 1440×900 的播放器，缩放只改变整体大小、不会重排；这是 {{ steps.validate-shell.output.data.slideCount }} 页占位 deck，所有文字均为占位内容，覆盖 {{ steps.validate-shell.output.data.typeCount }} 种原生类型；带 {{ steps.validate-shell.output.data.narration.voiceCount }} 个占位音色、{{ steps.validate-shell.output.data.narration.pageCount }} 页占位语音。请打开链接逐页翻、点主要互动、切换音色、试一次自动播放；审核清单和逐页截图见下方文件。这里审的是壳，不是本课内容。"
-    show_file: "{{ steps.validate-shell.output.data.reviewFile }}"
-    artifacts:
-      - "{{ inputs.shell }}"
-    options: [approve, reject]
-    on_reject: abort
-
+  # The shell package itself was validated and human-reviewed in the
+  # courseware-shell workflow before this run. Do not duplicate that gate here.
   - id: ensure-registry
     type: shell
     run: "node workflow/tools/ensure-registry.mjs {{ inputs.component_registry }} {{ inputs.style_pack }}"
@@ -190,22 +182,11 @@ steps:
   # rules into the review artifact without another model call.
   - id: self-review-inputs
     type: shell
-    run: "node workflow/tools/build-self-review-inputs.mjs --lesson-slug {{ inputs.lesson_slug }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --style-full {{ inputs.style_pack_full }} --style-freeze {{ inputs.style_pack_freeze }} --source {{ inputs.style_pack_source }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }} --shell-ok \"{{ steps.validate-shell.output.data.ok }}\" --shell-review \"{{ steps.validate-shell.output.data.reviewFile }}\" --out review/{{ inputs.lesson_slug }}/self-review-inputs.json --md review/{{ inputs.lesson_slug }}/self-review-inputs.md"
+    run: "node workflow/tools/build-self-review-inputs.mjs --lesson-slug {{ inputs.lesson_slug }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --style-full {{ inputs.style_pack_full }} --style-freeze {{ inputs.style_pack_freeze }} --source {{ inputs.style_pack_source }} --fidelity {{ inputs.source_fidelity }} --registry {{ inputs.component_registry }} --shell-ok true --shell-review review/shells/{{ inputs.shell_slug }}/shell-preview.md --out review/{{ inputs.lesson_slug }}/self-review-inputs.json --md review/{{ inputs.lesson_slug }}/self-review-inputs.md"
 
   - id: check-self-review-inputs
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-inputs.json"
-
-  - id: review-inputs
-    type: gui-gate
-    message: "Review inputs: content pack (required items, answers/feedback, sensitivity) and style pack (components/layouts, frozen version)."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-inputs.md"
-    artifacts:
-      - "{{ inputs.content_pack }}"
-      - "{{ inputs.style_pack }}"
-      - "{{ inputs.style_pack_full }}"
-    options: [approve, reject]
-    on_reject: abort
 
   # ---------- teaching brief ----------
   - id: brief
@@ -245,16 +226,8 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-brief.json"
 
-  - id: review-brief
-    type: gui-gate
-    message: "Review the teaching brief (spec.md): objectives, misconceptions, assessment evidence, and required-content coverage map."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-brief.md"
-    artifacts:
-      - "specs/{{ inputs.lesson }}/spec.md"
-      - "{{ inputs.concepts }}"
-      - "{{ inputs.content_pack }}"
-    options: [approve, reject]
-    on_reject: abort
+  # The brief is an internal teaching-design artifact. The first human content
+  # review is the whole courseware script below; do not add a separate gate.
 
   # ---------- courseware script (human-readable source of truth) ----------
   - id: script
@@ -287,18 +260,8 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-study.mjs review/{{ inputs.lesson_slug }}/self-study-audit.json --script {{ inputs.courseware_script }}"
 
-  - id: review-self-study-audit
-    type: gui-gate
-    message: "Review the self-study sufficiency audit (review/{{ inputs.lesson_slug }}/self-study-audit.md): gap evidence, page impact, and the proposed 自学补充 blocks. Approve the plan, or reject to revise manually."
-    show_file: "review/{{ inputs.lesson_slug }}/self-study-audit.md"
-    artifacts:
-      - "{{ inputs.courseware_script }}"
-      - "review/{{ inputs.lesson_slug }}/self-study-audit.json"
-    options: [approve, reject]
-    on_reject: abort
-
-  # Only after the audit gate: apply the approved supplement proposal, then
-  # re-run the mechanical script gate on the final text.
+  # The self-study audit is applied automatically. The whole-script review
+  # below is the teacher's first content review and sees the final text.
   - id: apply-self-study-audit
     type: shell
     run: "node workflow/tools/apply-self-study-audit.mjs --audit review/{{ inputs.lesson_slug }}/self-study-audit.json --script {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --record review/{{ inputs.lesson_slug }}/self-study-apply.json"
@@ -417,14 +380,9 @@ steps:
     type: shell
     run: "node workflow/tools/check-shell-art.mjs --shell {{ inputs.shell }} --art {{ inputs.art_dir }}/art-manifest.json --require-all"
 
-  - id: review-shell-art
-    type: gui-gate
-    message: "Review this lesson's generated illustrations ({{ inputs.art_dir }}): every slot must show a distinct character, not the shell's reference mascot. The manifest records prompt, seed, model and reference/output hashes. Approve to freeze these images for the lesson."
-    show_file: "{{ inputs.art_dir }}/art-manifest.json"
-    artifacts:
-      - "{{ inputs.art_dir }}"
-    options: [approve, reject]
-    on_reject: abort
+  # The generated illustrations are checked deterministically here and shown
+  # on every rendered page; the page review is the teacher's art review. Do not
+  # add a separate illustration gate.
 
   # ---------- narration (Edge TTS, derived from the approved script) ----------
   # The script remains the source of truth: each slide's narration block is
@@ -469,19 +427,14 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-component-plan.json"
 
-  - id: review-component-plan
-    type: gui-gate
-    message: "Review component reuse decisions and briefs: what is reused, what is new, FSM/props/a11y/fallback/test plan for each new component."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-component-plan.md"
-    options: [approve, reject]
-    on_reject: abort
-
-  # Component briefs are approved here, on paper. Implementation is not global:
-  # each page builds only the components it needs into the staging area, the
-  # page site bundles them for rendered review, and registration into core
-  # happens only after that page is approved. This keeps the teacher's review
-  # focused on a page (its content, interaction and any new components) instead
-  # of a separate component gallery built before any page exists.
+  # Component briefs are checked here on paper. The teacher reviews each new
+  # component with the first page that uses it; there is no separate component
+  # gallery gate.
+  # Implementation is not global: each page builds only the components it
+  # needs into the staging area, the page site bundles them for rendered
+  # review, and registration into core happens only after that page is
+  # approved. This keeps the teacher's review focused on a page (its content,
+  # interaction and any new components).
 
   # ---------- storyboard projection ----------
   # The storyboard is a deterministic projection of the approved script; no AI
@@ -895,12 +848,8 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-alpha.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --concepts {{ inputs.concepts }}"
 
-  - id: review-alpha
-    type: gui-gate
-    message: "Review Alpha: whole-deck screenshots, baseline diffs, overflow, section approvals, and gate results."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-alpha.md"
-    options: [approve, reject]
-    on_reject: abort
+  # Alpha is deterministic aggregation of per-page reviews plus the gates
+  # above. There is no separate whole-deck human gate.
 
   # ---------- beta / gold ----------
   - id: converge
@@ -917,12 +866,7 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-beta.json"
 
-  - id: review-beta
-    type: gui-gate
-    message: "Review Beta: converge report, trial evidence, issue triage."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-beta.md"
-    options: [approve, reject]
-    on_reject: abort
+  # Beta is a deterministic converge report + checks; no separate human gate.
 
   - id: gold-script-gates
     type: shell
@@ -960,9 +904,6 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-gold.json --concepts {{ inputs.concepts }}"
 
-  - id: gold
-    type: gui-gate
-    message: "Gold sign-off: regression, accessibility, waivers, final teacher approval."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-gold.md"
-    options: [approve, reject]
-    on_reject: abort
+  # Gold is the final deterministic regression aggregation. The teacher has
+  # already reviewed the shell, the whole script, and every page; there is no
+  # separate whole-course sign-off gate.

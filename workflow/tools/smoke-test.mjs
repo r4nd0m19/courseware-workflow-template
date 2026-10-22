@@ -786,6 +786,11 @@ try {
     'utf8',
   )
   const workflowForIntegration = readData(path.join(root, 'workflows/courseware-production.yml'))
+  const shellWorkflowYaml = fs.readFileSync(
+    path.join(root, 'workflows/courseware-shell.yml'),
+    'utf8',
+  )
+  const shellWorkflowData = readData(path.join(root, 'workflows/courseware-shell.yml'))
   function collectDispatchSteps(steps, out = []) {
     for (const step of steps || []) {
       if (step && (step.type === 'command' || step.type === 'prompt')) out.push(step)
@@ -1056,19 +1061,25 @@ try {
   // ---- shell review gate ----
   total += 1
   const hasShellPreviewStep =
-    /- id: validate-shell\n    type: shell\n    run: "node workflow\/tools\/check-shell\.mjs[^"\n]*--serve-preview[^"\n]*--json"\n    output_format: json/.test(workflowYaml)
+    /- id: validate-shell\n    type: shell\n    run: "node workflow\/tools\/check-shell\.mjs[^"\n]*--serve-preview[^"\n]*--json"\n    output_format: json/.test(shellWorkflowYaml)
   const hasShellReviewGate =
-    /- id: review-shell\n    type: gui-gate\n/.test(workflowYaml) &&
-    /message: "[^"\n]*steps\.validate-shell\.output\.data\.playerUrl/.test(workflowYaml) &&
-    /message: "[^"\n]*narration\.voiceCount/.test(workflowYaml) &&
-    /message: "[^"\n]*narration\.pageCount/.test(workflowYaml) &&
-    /show_file: "\{\{ steps\.validate-shell\.output\.data\.reviewFile \}\}"/.test(workflowYaml)
-  const shellReviewPass = hasShellPreviewStep && hasShellReviewGate
+    /- id: review-shell\n    type: gui-gate\n/.test(shellWorkflowYaml) &&
+    /message: "[^"\n]*steps\.validate-shell\.output\.data\.playerUrl/.test(shellWorkflowYaml) &&
+    /message: "[^"\n]*narration\.voiceCount/.test(shellWorkflowYaml) &&
+    /message: "[^"\n]*narration\.pageCount/.test(shellWorkflowYaml) &&
+    /show_file: "\{\{ steps\.validate-shell\.output\.data\.reviewFile \}\}"/.test(shellWorkflowYaml)
+  const shellApprovalPass =
+    /- id: approve-shell\n    type: shell\n/.test(shellWorkflowYaml) &&
+    shellWorkflowYaml.includes('approve-shell.mjs') &&
+    shellWorkflowYaml.includes('shell-approval.json') &&
+    !/^  content_pack:/m.test(shellWorkflowYaml) &&
+    !/^  lesson_slug:/m.test(shellWorkflowYaml)
+  const shellReviewPass = hasShellPreviewStep && hasShellReviewGate && shellApprovalPass
   console.log(`${shellReviewPass ? 'PASS' : 'FAIL'} workflow shell review gate`)
   if (!shellReviewPass) {
     failed += 1
     console.error(
-      'workflow must render a shell preview, expose its URL/review file/dummy narration counts as JSON, and gate on it',
+      'courseware-shell must render a shell preview, expose its URL/review file/dummy narration counts as JSON, gate on it, and write a shell approval without content inputs',
     )
   }
 
@@ -1085,16 +1096,138 @@ try {
     }
   }
   collectHumanGates(workflowData.steps)
+  collectHumanGates(shellWorkflowData.steps)
+  const humanGateIds = humanGates.map((gate) => gate.id).sort()
   const humanGatePass =
-    humanGates.length === 11 &&
+    humanGates.length === 3 &&
+    humanGateIds.join(',') === 'review-page,review-script,review-shell' &&
     humanGates.every((gate) => gate.type === 'gui-gate' && !('verdict_input' in gate))
   console.log(`${humanGatePass ? 'PASS' : 'FAIL'} workflow human gates use hash-bound gui-gate without verdict_input`)
   if (!humanGatePass) {
     failed += 1
     console.error(
-      `expected all 11 human gates to be gui-gate with no verdict_input, found: ` +
+      `expected exactly review-shell + review-script + review-page as gui-gate without verdict_input, found: ` +
         humanGates.map((gate) => `${gate.id}=${gate.type}${'verdict_input' in gate ? '+verdict_input' : ''}`).join(', '),
     )
+  }
+
+  // ---- content workflow checks the shell approval ----
+  total += 1
+  const shellApprovalCheck = findStep(workflowData.steps, 'check-shell-approval')
+  const contentShellApprovalPass =
+    shellApprovalCheck?.type === 'shell' &&
+    String(shellApprovalCheck.run || '').includes('check-shell-approval.mjs') &&
+    !findStep(workflowData.steps, 'review-shell') &&
+    !findStep(workflowData.steps, 'validate-shell')
+  console.log(`${contentShellApprovalPass ? 'PASS' : 'FAIL'} content workflow checks shell approval`)
+  if (!contentShellApprovalPass) {
+    failed += 1
+    console.error(
+      'courseware-production must check the courseware-shell approval and must not re-run validate-shell/review-shell',
+    )
+  }
+
+  // ---- shell approval ledger ----
+  if (!hasBranchChoiceShell) {
+    skip('shell approval ledger', 'no shells/branch-choice in this project')
+  } else {
+    total += 1
+    const shellRuns = path.join(tmpRoot, 'shell-runs')
+    const shellRunId = 'shell-gate-smoke'
+    fs.mkdirSync(path.join(shellRuns, shellRunId), { recursive: true })
+    fs.writeFileSync(
+      path.join(shellRuns, shellRunId, 'state.json'),
+      JSON.stringify({
+        run_id: shellRunId,
+        workflow_id: 'courseware-shell',
+        status: 'completed',
+        step_results: {
+          'review-shell': { status: 'completed', output: { choice: 'approve' } },
+        },
+      }),
+    )
+    const shellEnv = { ...process.env, COURSEWARE_WORKFLOW_RUNS_DIR: shellRuns }
+    const realLedger = path.join(tmpRoot, 'shell-approval.json')
+    const approveReal = spawnSync(
+      process.execPath,
+      [
+        path.join(toolsDir, 'approve-shell.mjs'),
+        '--shell', 'shells/branch-choice',
+        '--shell-slug', 'branch-choice',
+        '--approved-by', 'teacher',
+        '--gate-choice', 'approve',
+        '--run-id', shellRunId,
+        '--out', realLedger,
+      ],
+      { encoding: 'utf8', env: shellEnv },
+    )
+    const checkReal = spawnSync(
+      process.execPath,
+      [
+        path.join(toolsDir, 'check-shell-approval.mjs'),
+        '--shell', 'shells/branch-choice',
+        '--approval', realLedger,
+      ],
+      { encoding: 'utf8', env: shellEnv },
+    )
+
+    const fakeShell = path.join(tmpRoot, 'fake-shell')
+    fs.mkdirSync(path.join(fakeShell, 'site'), { recursive: true })
+    fs.writeFileSync(
+      path.join(fakeShell, 'shell.json'),
+      JSON.stringify({ id: 'fake', name: 'Fake', version: '1.0.0' }),
+    )
+    fs.writeFileSync(path.join(fakeShell, 'site/app.js'), 'console.log(1)\n')
+    const fakeLedger = path.join(tmpRoot, 'fake-shell-approval.json')
+    const approveFake = spawnSync(
+      process.execPath,
+      [
+        path.join(toolsDir, 'approve-shell.mjs'),
+        '--shell', fakeShell,
+        '--shell-slug', 'fake',
+        '--approved-by', 'teacher',
+        '--gate-choice', 'approve',
+        '--run-id', 'manual',
+        '--manual',
+        '--out', fakeLedger,
+      ],
+      { encoding: 'utf8', env: shellEnv },
+    )
+    const checkFake = spawnSync(
+      process.execPath,
+      [
+        path.join(toolsDir, 'check-shell-approval.mjs'),
+        '--shell', fakeShell,
+        '--approval', fakeLedger,
+        '--manual',
+      ],
+      { encoding: 'utf8', env: shellEnv },
+    )
+    fs.writeFileSync(path.join(fakeShell, 'site/app.js'), 'console.log(2)\n')
+    const staleFake = spawnSync(
+      process.execPath,
+      [
+        path.join(toolsDir, 'check-shell-approval.mjs'),
+        '--shell', fakeShell,
+        '--approval', fakeLedger,
+        '--manual',
+      ],
+      { encoding: 'utf8', env: shellEnv },
+    )
+    const shellApprovalLedgerPass =
+      approveReal.status === 0 &&
+      checkReal.status === 0 &&
+      approveFake.status === 0 &&
+      checkFake.status === 0 &&
+      staleFake.status === 1
+    console.log(`${shellApprovalLedgerPass ? 'PASS' : 'FAIL'} shell approval ledger`)
+    if (!shellApprovalLedgerPass) {
+      failed += 1
+      console.error(
+        `approve=${approveReal.status}/${approveFake.status} check=${checkReal.status}/${checkFake.status} stale=${staleFake.status}`,
+      )
+      console.error(approveReal.stderr || checkReal.stderr || approveFake.stderr || checkFake.stderr)
+    }
   }
 
   // ---- fail-closed workflow runner ----

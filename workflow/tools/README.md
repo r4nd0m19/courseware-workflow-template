@@ -10,6 +10,25 @@ node workflow/tools/smoke-test.mjs
 
 覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
 
+## 0B. 壳批准（先于内容包）
+
+壳审核独立于内容包，壳生成后立即运行：
+
+```bash
+# 1) 壳工作流：validate-shell -> review-shell(人审) -> approve-shell
+node workflow/tools/run-workflow.mjs courseware-shell \
+  -i shell=shells/branch-choice -i shell_slug=branch-choice
+
+# 2) 内容工作流开头自动校验壳批准；手工检查：
+node workflow/tools/check-shell-approval.mjs --shell shells/branch-choice \
+  --approval review/shells/branch-choice/shell-approval.json
+```
+
+- `approve-shell` 只接受 `review-shell` gate 的 `approve`，并核对 `.specify/workflows/runs/<run-id>/state.json` 中该 gate 已完成；`review/shells/<shell_slug>/shell-approval.json` 记录壳包**全文哈希**、文件数和 gate run id。
+- `check-shell-approval` 重新哈希壳包；改任何一个 CSS/JS/资源文件都会让它失效，必须重跑壳工作流。
+- `courseware-shell` 不需要 `content_pack`/`lesson_slug`；人工审核只有 `review-shell` 一个 gate。
+- 不要把壳审核放回内容工作流，也不要在生产工作流里重复 `validate-shell`/`review-shell`。
+
 ## 0A. 脚本批准与 fail-closed 运行
 
 ```bash
@@ -169,7 +188,7 @@ node workflow/tools/build-self-review-inputs.mjs --lesson-slug <slug> \
   --content <content-pack.json> --style <style-pack.manifest.json> \
   --style-full <style-pack.full.json> --style-freeze <style-pack.freeze.json> \
   --source <SOURCE.json> --fidelity <fidelity.json> --registry registry/index.json \
-  --shell-ok true --shell-review review/<slug>/shell-preview.md \
+  --shell-ok true --shell-review review/shells/<slug>/shell-preview.md \
   --out review/<slug>/self-review-inputs.json --md review/<slug>/self-review-inputs.md
 
 # script：紧凑逐屏证据包 + 自审骨架（AI 只填判断字段）

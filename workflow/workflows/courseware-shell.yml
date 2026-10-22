@@ -1,0 +1,51 @@
+schema_version: "1.0"
+
+workflow:
+  id: "courseware-shell"
+  name: "Courseware Shell Review"
+  version: "0.1.0"
+  author: "courseware"
+  description: "壳生成后立即校验并审核：固定 1440×900 播放器、30 页占位内容、4 音色占位语音、逐页截图；通过后写壳批准账本。不依赖内容包，内容生产在壳批准后进行。"
+
+requires:
+  speckit_version: ">=1.0.0"
+
+inputs:
+  shell:
+    type: string
+    default: "shells/branch-choice"
+    prompt: "Shell package id or directory (e.g. shells/branch-choice)"
+  shell_slug:
+    type: string
+    default: "branch-choice"
+    prompt: "Shell review slug used for review/shells/<slug>/"
+  approver:
+    type: string
+    default: "teacher"
+    prompt: "Name recorded as the human approver"
+
+steps:
+  # Shell review is independent of the content pack. Run this workflow as soon
+  # as the shell package is generated/extracted; the teacher sees the real
+  # shell with placeholder content and placeholder narration, not lesson
+  # content.
+  - id: validate-shell
+    type: shell
+    run: "node workflow/tools/check-shell.mjs --shell {{ inputs.shell }} --shots review/shells/{{ inputs.shell_slug }}/shell-shots --review-out review/shells/{{ inputs.shell_slug }}/shell-preview.md --preview-state review/shells/{{ inputs.shell_slug }}/shell-preview.json --report-out review/shells/{{ inputs.shell_slug }}/shell-report.json --serve-preview --open-preview --json"
+    output_format: json
+
+  - id: review-shell
+    type: gui-gate
+    message: "先看壳预览：{{ steps.validate-shell.output.data.playerUrl }} 。这是固定 1440×900 的播放器，缩放只改变整体大小、不会重排；这是 {{ steps.validate-shell.output.data.slideCount }} 页占位 deck，所有文字均为占位内容，覆盖 {{ steps.validate-shell.output.data.typeCount }} 种原生类型；带 {{ steps.validate-shell.output.data.narration.voiceCount }} 个占位音色、{{ steps.validate-shell.output.data.narration.pageCount }} 页占位语音。请打开链接逐页翻、点主要互动、切换音色、试一次自动播放；审核清单和逐页截图见下方文件。这里审的是壳，不是本课内容。"
+    show_file: "{{ steps.validate-shell.output.data.reviewFile }}"
+    artifacts:
+      - "{{ inputs.shell }}"
+    options: [approve, reject]
+    on_reject: abort
+
+  # Mechanical step: never decides the verdict. It records the shell package
+  # hash and the completed review-shell gate so the content workflow can start
+  # without asking the teacher to review the same shell again.
+  - id: approve-shell
+    type: shell
+    run: "node workflow/tools/approve-shell.mjs --shell {{ inputs.shell }} --shell-slug {{ inputs.shell_slug }} --approved-by \"{{ inputs.approver }}\" --gate-choice \"{{ steps.review-shell.output.choice }}\" --gate-step review-shell --run-id \"{{ context.run_id }}\" --preview review/shells/{{ inputs.shell_slug }}/shell-report.json --out review/shells/{{ inputs.shell_slug }}/shell-approval.json"
