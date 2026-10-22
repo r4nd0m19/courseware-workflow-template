@@ -33,6 +33,7 @@ const shotsDir = opt('--shots')
 const jsonOut = flag('--json')
 const requireArt = flag('--require-art')
 const reviewOut = opt('--review-out')
+const reportOut = opt('--report-out')
 const servePreview = flag('--serve-preview')
 const openPreview = flag('--open-preview')
 const previewPort = Number(opt('--preview-port', '8083')) || 8083
@@ -750,6 +751,15 @@ async function exercisePreviewInteractions(page, slides) {
 
 function finish() {
   report.ok = report.errors.length === 0
+  if (reportOut) {
+    try {
+      fs.mkdirSync(path.dirname(path.resolve(reportOut)), { recursive: true })
+      fs.writeFileSync(path.resolve(reportOut), `${JSON.stringify(report, null, 2)}\n`)
+    } catch (error) {
+      report.errors.push(`report file: ${error.message}`)
+      report.ok = false
+    }
+  }
   if (jsonOut) console.log(JSON.stringify(report, null, 2))
   else {
     if (report.ok) console.log(`OK ${shellDir}`)

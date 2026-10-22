@@ -223,6 +223,7 @@ log "验证安装"
 node "$TARGET/workflow/tools/smoke-test.mjs"
 (
   cd "$TARGET"
+  specify workflow info courseware-shell
   specify workflow info courseware-production
 )
 

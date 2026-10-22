@@ -18,7 +18,8 @@ function option(name, fallback) {
 function help() {
   console.log(`Usage: node workflow/install.mjs [options]
 
-One-click install for the courseware workflow (harness-agnostic).
+One-click install for the courseware workflows (harness-agnostic):
+courseware-shell (shell review) + courseware-production (content).
 
 Options:
   --integration <claude|codex|zcode>  Spec Kit integration (default: claude)
@@ -230,6 +231,7 @@ if (fs.existsSync(startHereSource) && !fs.existsSync(startHereTarget)) {
 const toolsDir = path.join(workflowDir, 'tools')
 const presetDir = path.join(workflowDir, 'preset')
 const workflowYaml = path.join(workflowDir, 'workflows/courseware-production.yml')
+const shellWorkflowYaml = path.join(workflowDir, 'workflows/courseware-shell.yml')
 const specifyEnv = { SPECIFY_INIT_DIR: projectRoot }
 
 log('Spec Kit project')
@@ -257,6 +259,7 @@ run(specifyBin, presetArgs, { env: specifyEnv })
 
 log('Install workflow')
 run(specifyBin, ['workflow', 'add', '--dev', workflowYaml], { env: specifyEnv })
+run(specifyBin, ['workflow', 'add', '--dev', shellWorkflowYaml], { env: specifyEnv })
 
 if (!skipDeps) {
   log('Install workflow tool dependencies')
@@ -298,6 +301,7 @@ cleanupZcodeConfig()
 if (!noSmoke) {
   log('Smoke tests')
   run(process.execPath, [path.join(toolsDir, 'smoke-test.mjs')])
+  run(specifyBin, ['workflow', 'info', 'courseware-shell'], { env: specifyEnv })
   run(specifyBin, ['workflow', 'info', 'courseware-production'], { env: specifyEnv })
 } else {
   console.log('skipped smoke tests (--no-smoke)')
@@ -308,6 +312,7 @@ console.log(`Project:    ${projectRoot}`)
 console.log(`Integration:${integration}`)
 console.log(`Preset:     ${presetDir}`)
 console.log(`Workflow:   ${workflowYaml}`)
+console.log(`Shell flow: ${shellWorkflowYaml}`)
 console.log(`Tools:      ${toolsDir}`)
 console.log('\nNext (teacher-facing):')
 console.log('  1. No restart is needed. Open START-HERE.md or tell the agent: "开始做课件".')

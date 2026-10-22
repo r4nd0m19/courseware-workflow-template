@@ -31,7 +31,7 @@ const mdPath = parseFlagValue(args, '--md', `review/${lessonSlug}/self-review-in
 
 if (!lessonSlug || !contentPath) {
   console.error(
-    'usage: node build-self-review-inputs.mjs --lesson-slug <slug> --content <content-pack.json> --style <style-pack.manifest.json> --style-full <style-pack.full.json> --style-freeze <style-pack.freeze.json> --source <SOURCE.json> --fidelity <fidelity.json> --registry <registry/index.json> --shell-ok true|false [--shell-review <review/shell-preview.md>] --out <review.json> --md <review.md>',
+    'usage: node build-self-review-inputs.mjs --lesson-slug <slug> --content <content-pack.json> --style <style-pack.manifest.json> --style-full <style-pack.full.json> --style-freeze <style-pack.freeze.json> --source <SOURCE.json> --fidelity <fidelity.json> --registry <registry/index.json> --shell-ok true|false [--shell-review <review/shells/<slug>/shell-preview.md>] --out <review.json> --md <review.md>',
   )
   process.exit(2)
 }
