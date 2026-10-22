@@ -6,7 +6,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import { readData } from './lib.mjs'
 import { parseScript } from './script-lib.mjs'
@@ -116,20 +117,62 @@ function summarize(stdout, stderr) {
 }
 
 function run(tool, toolArgs) {
-  const result = spawnSync(process.execPath, [path.join(toolsDir, tool), ...toolArgs], {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024,
+  return new Promise((resolve) => {
+    const started = performance.now()
+    const child = spawn(process.execPath, [path.join(toolsDir, tool), ...toolArgs], {
+      cwd: process.cwd(),
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      if (stdout.length < 32 * 1024 * 1024) stdout += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < 32 * 1024 * 1024) stderr += chunk
+    })
+    child.on('error', (error) => {
+      resolve({
+        name: tool.replace(/\.mjs$/, ''),
+        status: 'fail',
+        exitCode: -1,
+        summary: `spawn failed: ${error.message}`,
+        error: String(error.message || error),
+        stdout,
+        stderr,
+        durationMs: performance.now() - started,
+      })
+    })
+    child.on('close', (status) => {
+      const ok = status === 0
+      resolve({
+        name: tool.replace(/\.mjs$/, ''),
+        status: ok ? 'pass' : 'fail',
+        exitCode: status,
+        summary: summarize(stdout, stderr),
+        error: ok ? '' : String(stderr || stdout || '').slice(0, 2000).trim(),
+        stdout,
+        stderr,
+        durationMs: performance.now() - started,
+      })
+    })
   })
-  const ok = result.status === 0
-  return {
-    name: tool.replace(/\.mjs$/, ''),
-    status: ok ? 'pass' : 'fail',
-    exitCode: result.status,
-    summary: summarize(result.stdout, result.stderr),
-    error: ok ? '' : String(result.stderr || result.stdout || '').slice(0, 2000).trim(),
-    stdout: String(result.stdout || ''),
+}
+
+async function mapLimit(tasks, limit, worker) {
+  const results = new Array(tasks.length)
+  let next = 0
+  async function loop() {
+    while (true) {
+      const index = next
+      next += 1
+      if (index >= tasks.length) return
+      results[index] = await worker(tasks[index], index)
+    }
   }
+  await Promise.all(
+    Array.from({ length: Math.min(limit, tasks.length) }, () => loop()),
+  )
+  return results
 }
 
 function parseJson(text) {
@@ -140,77 +183,10 @@ function parseJson(text) {
   }
 }
 
-const checks = []
-const density = run('density-report.mjs', [scriptPath, storyboardPath, '--slides', slideIds, '--json'])
-checks.push(density)
-const densityJson = parseJson(density.stdout)
-
-const concepts = run('check-concepts.mjs', [
-  scriptPath,
-  contentPath,
-  storyboardPath,
-  '--concepts',
-  conceptsPath,
-  '--slides',
-  slideIds,
-])
-checks.push(concepts)
-
-checks.push(run('check-quiz-keys.mjs', [deckPath, '--slides', slideIds, '--json']))
-
-if (narrationPath) {
-  checks.push(
-    run('check-narration.mjs', [
-      scriptPath,
-      narrationPath,
-      ...(audioRoot ? ['--audio-root', audioRoot] : []),
-      '--only',
-      slideIds,
-    ]),
-  )
-}
-
-checks.push(
-  run('check-overflow.mjs', [
-    url,
-    '--start',
-    String(start),
-    '--pages',
-    String(section.slides.length),
-  ]),
-)
-
-checks.push(
-  run('check-overlap.mjs', [
-    url,
-    '--slides',
-    slideIds,
-    '--storyboard',
-    storyboardPath,
-    '--json',
-    ...(manual ? ['--manual'] : []),
-  ]),
-)
-
-checks.push(
-  run('check-rendered-section.mjs', [
-    '--sections',
-    sectionsPath,
-    '--storyboard',
-    storyboardPath,
-    '--section',
-    sectionId,
-    '--screenshots',
-    screenshotsDir,
-    '--deck',
-    deckPath,
-    ...(manual ? ['--manual'] : []),
-  ]),
-)
-
-// Per-lesson reference map + deterministic residue scan. The map is generated
-// once after the storyboard is projected; the page review only confirms deltas.
+// Per-lesson reference map. The map is generated once after the storyboard is
+// projected; the page review only handles unmapped deltas.
 let referenceAdaptation = null
+let referenceMapCheck = null
 if (fs.existsSync(referenceAdaptationPath)) {
   try {
     const mapping = readData(referenceAdaptationPath)
@@ -221,42 +197,147 @@ if (fs.existsSync(referenceAdaptationPath)) {
         .map(({ id, reference, lesson, residue }) => ({ id, reference, lesson, residue })),
     }
   } catch (error) {
-    checks.push({
-      name: 'check-reference-residue',
+    referenceMapCheck = {
+      name: 'reference adaptation map',
       status: 'fail',
       summary: `cannot read ${referenceAdaptationPath}: ${error.message}`,
       error: error.message,
-    })
+      stdout: '',
+      stderr: '',
+      durationMs: 0,
+    }
   }
 } else {
-  checks.push({
+  referenceMapCheck = {
     name: 'reference adaptation map',
     status: 'fail',
     summary: `missing ${referenceAdaptationPath}; run build-reference-adaptation before the page loop`,
     error: `missing ${referenceAdaptationPath}`,
-  })
+    stdout: '',
+    stderr: '',
+    durationMs: 0,
+  }
 }
 
-// High-signal rendered text is deterministic. The page self-review no longer
-// judges verbatim screen text; it only reviews visual/interaction semantics.
-checks.push(
-  run('check-rendered-text.mjs', [
-    '--url',
-    url,
-    '--deck',
-    deckPath,
-    '--storyboard',
-    storyboardPath,
-    '--slides',
-    slideIds,
-    '--concepts',
-    conceptsPath,
-    '--reference-adaptation',
-    referenceAdaptationPath,
-    '--json',
-    ...(manual ? ['--manual'] : []),
-  ]),
-)
+// Independent checks run in parallel. The browser checks are capped at two
+// concurrent Chromium processes; the fast Node checks can all run together.
+const fastTasks = [
+  ['density', () => run('density-report.mjs', [scriptPath, storyboardPath, '--slides', slideIds, '--json'])],
+  [
+    'concepts',
+    () =>
+      run('check-concepts.mjs', [
+        scriptPath,
+        contentPath,
+        storyboardPath,
+        '--concepts',
+        conceptsPath,
+        '--slides',
+        slideIds,
+      ]),
+  ],
+  ['quiz', () => run('check-quiz-keys.mjs', [deckPath, '--slides', slideIds, '--json'])],
+  ...(narrationPath
+    ? [
+        [
+          'narration',
+          () =>
+            run('check-narration.mjs', [
+              scriptPath,
+              narrationPath,
+              ...(audioRoot ? ['--audio-root', audioRoot] : []),
+              '--only',
+              slideIds,
+            ]),
+        ],
+      ]
+    : []),
+  [
+    'rendered-section',
+    () =>
+      run('check-rendered-section.mjs', [
+        '--sections',
+        sectionsPath,
+        '--storyboard',
+        storyboardPath,
+        '--section',
+        sectionId,
+        '--screenshots',
+        screenshotsDir,
+        '--deck',
+        deckPath,
+        ...(manual ? ['--manual'] : []),
+      ]),
+  ],
+]
+const browserTasks = [
+  [
+    'overflow',
+    () =>
+      run('check-overflow.mjs', [
+        url,
+        '--start',
+        String(start),
+        '--pages',
+        String(section.slides.length),
+      ]),
+  ],
+  [
+    'overlap',
+    () =>
+      run('check-overlap.mjs', [
+        url,
+        '--slides',
+        slideIds,
+        '--storyboard',
+        storyboardPath,
+        '--json',
+        ...(manual ? ['--manual'] : []),
+      ]),
+  ],
+  [
+    'rendered-text',
+    () =>
+      run('check-rendered-text.mjs', [
+        '--url',
+        url,
+        '--deck',
+        deckPath,
+        '--storyboard',
+        storyboardPath,
+        '--slides',
+        slideIds,
+        '--concepts',
+        conceptsPath,
+        '--reference-adaptation',
+        referenceAdaptationPath,
+        '--json',
+        ...(manual ? ['--manual'] : []),
+      ]),
+  ],
+]
+const [fastResults, browserResults] = await Promise.all([
+  mapLimit(fastTasks, fastTasks.length, async ([key, fn]) => [key, await fn()]),
+  mapLimit(browserTasks, 2, async ([key, fn]) => [key, await fn()]),
+])
+const checksByKey = Object.fromEntries([...fastResults, ...browserResults])
+if (referenceMapCheck) checksByKey['reference-map'] = referenceMapCheck
+
+const checks = [
+  'density',
+  'concepts',
+  'quiz',
+  'narration',
+  'overflow',
+  'overlap',
+  'rendered-section',
+  'rendered-text',
+  'reference-map',
+]
+  .map((key) => checksByKey[key])
+  .filter(Boolean)
+const densityJson = parseJson(checksByKey.density?.stdout || '')
+const concepts = checksByKey.concepts
 
 const screenshots = section.slides.map((id) => ({
   slideId: id,
@@ -264,7 +345,12 @@ const screenshots = section.slides.map((id) => ({
 }))
 
 const failed = checks.filter((check) => check.status !== 'pass')
-const publicChecks = checks.map(({ name, status, summary }) => ({ name, status, summary }))
+const publicChecks = checks.map(({ name, status, summary, durationMs }) => ({
+  name,
+  status,
+  summary,
+  durationMs: Math.round(durationMs || 0),
+}))
 
 // The reviewer needs the page's script text, not the whole courseware.md.
 // Ship the parsed fields with the evidence so the page review is a single-file

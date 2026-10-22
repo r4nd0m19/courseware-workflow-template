@@ -5,6 +5,7 @@ workflow/tools/chrome-path.txt
 .zcode/
 .specify/workflows/steps/
 review/gui-gates/
+review/*/page-review-cache/
 prototype/shell-site/
 prototype/dist/
 prototype/site/audio/

@@ -956,6 +956,25 @@ try {
     )
   }
 
+  // ---- page review cache ----
+  total += 1
+  const cacheCheckStep = findStep(workflowData.steps, 'page-review-cache')
+  const cacheAiStep = findStep(workflowData.steps, 'page-review-ai')
+  const cacheStoreStep = findStep(workflowData.steps, 'page-review-cache-store')
+  const pageCachePass =
+    cacheCheckStep?.type === 'shell' &&
+    cacheAiStep?.type === 'if' &&
+    String(cacheAiStep.condition || '').includes('page-review-cache.output.data.reuse') &&
+    cacheStoreStep?.type === 'shell' &&
+    fs.existsSync(path.join(root, 'tools/page-review-cache.mjs'))
+  console.log(`${pageCachePass ? 'PASS' : 'FAIL'} page self-review cache`)
+  if (!pageCachePass) {
+    failed += 1
+    console.error(
+      'page loop must check/store the page review cache and skip self-review-page only when reuse is true',
+    )
+  }
+
   // ---- compact page review scope ----
   total += 1
   const pageReviewPrompt = String(findStep(workflowData.steps, 'self-review-page')?.prompt || '')
@@ -1211,6 +1230,114 @@ try {
   if (!playerPass) {
     failed += 1
     console.error('write-player-page.mjs must emit a 1440×900 iframe player with whole-canvas scaling')
+  }
+
+  // ---- page review cache round-trip ----
+  total += 1
+  const cacheDeck = path.join(tmpRoot, 'cache-deck.json')
+  const cacheEvidence = path.join(tmpRoot, 'cache-evidence.json')
+  const cacheReview = path.join(tmpRoot, 'cache-review.json')
+  const cacheSkeleton = path.join(tmpRoot, 'cache-skeleton.json')
+  const cacheDir = path.join(tmpRoot, 'page-review-cache')
+  fs.writeFileSync(cacheDeck, JSON.stringify({ slides: [{ id: 'S01', type: 'blank', title: 'x' }] }))
+  const baseEvidence = {
+    section: { slides: ['S01'] },
+    scriptSlides: [{ id: 'S01', screenContent: 'x' }],
+    density: { slides: [{ slideId: 'S01', signals: { screenChars: 1 } }] },
+    referenceAdaptation: { entries: [] },
+    checks: [{ name: 'smoke', status: 'pass', summary: 'ok' }],
+    screenshots: [{ slideId: 'S01', png: path.join(tmpRoot, 'missing.png') }],
+  }
+  fs.writeFileSync(cacheEvidence, JSON.stringify(baseEvidence))
+  const cacheReviewData = {
+    stage: 'page-S01',
+    artifactPaths: ['x'],
+    reviewedArtifacts: [],
+    automatedChecks: [{ name: 'smoke', status: 'pass' }],
+    checklist: [
+      { item: 'interaction produces the declared evidence (not just watch/next)', status: 'pass' },
+    ],
+    density: [
+      {
+        slideId: 'S01',
+        semanticUnits: [{ label: 'unit', evidence: 'evidence' }],
+        signals: { screenChars: 1 },
+        verdict: 'pass',
+        notes: '',
+      },
+    ],
+    concepts: [],
+    issues: [],
+    referenceAdaptation: 'deterministic',
+    verdict: 'pass',
+    reviewedAt: '2026-10-22T00:00:00Z',
+  }
+  fs.writeFileSync(cacheReview, JSON.stringify(cacheReviewData))
+  const cacheSkeletonData = {
+    ...cacheReviewData,
+    density: [
+      {
+        slideId: 'S01',
+        semanticUnits: [],
+        signals: { screenChars: 1 },
+        verdict: 'fail',
+        notes: '',
+      },
+    ],
+    checklist: [
+      { item: 'interaction produces the declared evidence (not just watch/next)', status: 'n/a' },
+    ],
+    verdict: 'fail',
+  }
+  fs.writeFileSync(cacheSkeleton, JSON.stringify(cacheSkeletonData))
+  const cacheBaseArgs = [
+    '--lesson-slug', 'smoke',
+    '--section', 'S01',
+    '--evidence', cacheEvidence,
+    '--deck', cacheDeck,
+    '--registry', path.join(tmpRoot, 'missing-registry.json'),
+    '--cache-dir', cacheDir,
+    '--json',
+  ]
+  const cacheStore = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'page-review-cache.mjs'), '--mode', 'store', ...cacheBaseArgs, '--review-json', cacheReview],
+    { encoding: 'utf8' },
+  )
+  const cacheCheck = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'page-review-cache.mjs'), '--mode', 'check', ...cacheBaseArgs, '--review-json', cacheSkeleton],
+    { encoding: 'utf8' },
+  )
+  let cacheReuse = false
+  try {
+    cacheReuse = JSON.parse(cacheCheck.stdout).reuse === true
+  } catch {
+    cacheReuse = false
+  }
+  const changedEvidence = {
+    ...baseEvidence,
+    scriptSlides: [{ id: 'S01', screenContent: 'changed' }],
+  }
+  fs.writeFileSync(cacheEvidence, JSON.stringify(changedEvidence))
+  fs.writeFileSync(cacheSkeleton, JSON.stringify(cacheSkeletonData))
+  const cacheInvalidated = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'page-review-cache.mjs'), '--mode', 'check', ...cacheBaseArgs, '--review-json', cacheSkeleton],
+    { encoding: 'utf8' },
+  )
+  let cacheMiss = false
+  try {
+    cacheMiss = JSON.parse(cacheInvalidated.stdout).reuse === false
+  } catch {
+    cacheMiss = false
+  }
+  const cachePass =
+    cacheStore.status === 0 && cacheCheck.status === 0 && cacheReuse && cacheMiss
+  console.log(`${cachePass ? 'PASS' : 'FAIL'} page review cache reuse/invalidation`)
+  if (!cachePass) {
+    failed += 1
+    console.error('page-review-cache must reuse unchanged pages and invalidate when page inputs change')
   }
 
   // ---- performance tools ----
