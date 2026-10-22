@@ -956,6 +956,24 @@ try {
     )
   }
 
+  // ---- compact page review scope ----
+  total += 1
+  const pageReviewPrompt = String(findStep(workflowData.steps, 'self-review-page')?.prompt || '')
+  const compactPageReviewPass =
+    pageReviewPrompt.includes('visual layout and interaction are understandable') &&
+    !pageReviewPrompt.includes('concepts[]: one entry') &&
+    !pageReviewPrompt.includes('referenceAdaptation: the bundle') &&
+    pageEvidenceSource.includes('conceptEntries') &&
+    pageEvidenceSource.includes('referenceAdaptationSummary') &&
+    pageEvidenceSource.includes('componentPlan')
+  console.log(`${compactPageReviewPass ? 'PASS' : 'FAIL'} compact page self-review scope`)
+  if (!compactPageReviewPass) {
+    failed += 1
+    console.error(
+      'page review must only judge density/interaction/visual/component/placeholder; concepts and reference adaptation are pre-filled deterministically',
+    )
+  }
+
   // ---- density is page-primary ----
   total += 1
   const scriptReviewCheckStep = findStep(workflowData.steps, 'check-self-review-script')

@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.27.1 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.28.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
@@ -10,6 +10,7 @@
 
 - **自审分层（0.22.0 / 0.23.0）**：`inputs` / `alpha` / `beta` / `gold` 改为由门禁结果与逐页自审确定性汇总，不再启动 AI 复述；`script` 自审改读一份紧凑证据包（逐屏脚本字段 + 闸门结果），不再读整份 `courseware.md`、content pack、style pack 和 registry；页自审只读证据包 + 截图，MD 由 JSON 自动渲染。**density/segmenting 自 0.23.0 起以页面自审为唯一权威**：脚本自审不再填 `density`、不再跑 `density-report`，`check-self-review-script` 也不再带 `--script`；页面证据包提供密度信号，页自审做最终判断。AI 自审只保留 `brief` / `script` / `component-plan` / 每页一次判断；参考适配映射每课生成一次。
 - **固定 1440×900 播放器（0.26.0 / 0.26.1 / 0.27.1）**：`workflow/runtime/player.html` 用 1440×900 iframe 渲染课件，再整体等比缩放到窗口；内部布局固定，浏览器缩放只改变整体大小。**0.26.1 起没有外层工具栏**，页面上只看到课件本身；**0.27.1 起读取 `#slide` 的背景色/背景图并 `cover` 到外层**，宽屏两侧显示课件自身背景，不再留天空色空白。壳内全屏按钮和 `F` 快捷键路由到播放器全屏，放大用全屏，不再提供 100% 滚动模式。`extract-shell`、`prepare-shell-site`、`check-shell --serve-preview` 都会写入 `player.html`；审核 gate 用播放器链接。直接 deck URL 留给工具和调试。
+- **页自审瘦身（0.28.0）**：页面 AI 只判断 density 语义单元、交互证据、视觉版面、新组件行为和占位/个人信息；concepts 与 referenceAdaptation 由确定性检查预填，AI 只处理未映射参考内容的增量。证据包去掉 relatedConcepts/quizKeys/overlap/screenshot metadata/script machine 全量字段，S02B 证据 9.2KB → 5.9KB，prompt 2888B → 2569B。
 - **渲染文本确定性对比（0.25.0）**：`check-rendered-text` 从 deck 提取初始可见的高信号字面量（标题、代码、quiz 题干/选项、表格、items、chapter topics/flow、矩阵题活动面板、概念 mustAppear），在渲染后的 `#slide.textContent` 上归一化后精确包含，缺失即阻断；长散文用 `#slide.innerText` 的 token 覆盖率做非阻断提示。页自审不再判断逐字文本。
 - **参考适配每课一次（0.24.0）**：`build-reference-adaptation` 在脚本批准、storyboard 投影后读一次参考壳源码，生成 `review/<lesson>/reference-adaptation.json`（参考内容 → 本课替换、适用页、`residue`）；页自审只读这份映射做本页增量确认。`check-reference-residue` 在渲染后的 `#slide` 文本里确定性扫描 `residue: replace` 的参考字符串，命中即失败。
 - **人工审核 = 文件地址 + 原生选择**：11 个 `gui-gate` 在非 TTY 运行时写哈希绑定的 pending 请求并暂停；agent 把审核文件绝对路径/课件 URL 发给老师，用 harness 原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject，再用 `tools/gate-review.mjs decide` 记录，最后用 `tools/run-workflow.mjs resume` 继续。verdict 绑定 run/step/gate/digest/nonce 并一次性消费；agent 不能 `-i` 代答。

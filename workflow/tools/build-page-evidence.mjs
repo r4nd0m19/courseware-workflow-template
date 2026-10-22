@@ -156,9 +156,7 @@ const concepts = run('check-concepts.mjs', [
 ])
 checks.push(concepts)
 
-const quiz = run('check-quiz-keys.mjs', [deckPath, '--slides', slideIds, '--json'])
-checks.push(quiz)
-const quizJson = parseJson(quiz.stdout)
+checks.push(run('check-quiz-keys.mjs', [deckPath, '--slides', slideIds, '--json']))
 
 if (narrationPath) {
   checks.push(
@@ -182,17 +180,17 @@ checks.push(
   ]),
 )
 
-const overlap = run('check-overlap.mjs', [
-  url,
-  '--slides',
-  slideIds,
-  '--storyboard',
-  storyboardPath,
-  '--json',
-  ...(manual ? ['--manual'] : []),
-])
-checks.push(overlap)
-const overlapJson = parseJson(overlap.stdout)
+checks.push(
+  run('check-overlap.mjs', [
+    url,
+    '--slides',
+    slideIds,
+    '--storyboard',
+    storyboardPath,
+    '--json',
+    ...(manual ? ['--manual'] : []),
+  ]),
+)
 
 checks.push(
   run('check-rendered-section.mjs', [
@@ -218,11 +216,9 @@ if (fs.existsSync(referenceAdaptationPath)) {
     const mapping = readData(referenceAdaptationPath)
     referenceAdaptation = {
       path: referenceAdaptationPath,
-      referenceLesson: mapping.referenceLesson || '',
-      entries: (mapping.entries || []).filter((entry) =>
-        (entry.pages || []).some((id) => section.slides.includes(id)),
-      ),
-      unmapped: mapping.unmapped || [],
+      entries: (mapping.entries || [])
+        .filter((entry) => (entry.pages || []).some((id) => section.slides.includes(id)))
+        .map(({ id, reference, lesson, residue }) => ({ id, reference, lesson, residue })),
     }
   } catch (error) {
     checks.push({
@@ -262,27 +258,27 @@ checks.push(
   ]),
 )
 
-const screenshots = section.slides.map((id) => {
-  const metadataPath = path.join(screenshotsDir, `${id}.json`)
-  return {
-    slideId: id,
-    metadata: fs.existsSync(metadataPath) ? readData(metadataPath) : null,
-    png: path.join(screenshotsDir, `${id}.png`),
-    pngExists: fs.existsSync(path.join(screenshotsDir, `${id}.png`)),
-  }
-})
+const screenshots = section.slides.map((id) => ({
+  slideId: id,
+  png: path.join(screenshotsDir, `${id}.png`),
+}))
 
 const failed = checks.filter((check) => check.status !== 'pass')
-const publicChecks = checks.map(({ stdout, ...rest }) => rest)
+const publicChecks = checks.map(({ name, status, summary }) => ({ name, status, summary }))
 
 // The reviewer needs the page's script text, not the whole courseware.md.
 // Ship the parsed fields with the evidence so the page review is a single-file
 // read plus the screenshot.
 const parsedScript = parseScript(scriptPath)
 const scriptById = new Map(parsedScript.slides.map((slide) => [slide.id, slide]))
+const boardById = new Map((storyboard.slides || []).map((slide) => [slide.id, slide]))
 const scriptSlides = section.slides.map((id) => {
   const slide = scriptById.get(id)
   if (!slide) return { id, missing: true }
+  const board = boardById.get(id) || {}
+  const machine = slide.machine || {}
+  // Compact: the reviewer needs the interaction contract, not the whole
+  // machine block (which duplicates components/layout/concept fields).
   return {
     id: slide.id,
     title: slide.headingTitle,
@@ -290,7 +286,8 @@ const scriptSlides = section.slides.map((id) => {
     interactionDesign: slide.interactionDesign,
     narration: slide.narration,
     transition: slide.transition,
-    machine: slide.machine,
+    interaction: machine.interaction || board.interaction || null,
+    componentPlan: machine.componentPlan || null,
   }
 })
 let relatedConcepts = []
@@ -308,6 +305,24 @@ if (conceptsPath && fs.existsSync(conceptsPath)) {
   }
 }
 
+// Deterministic concept and reference checks are authoritative. Pre-fill their
+// review entries so the page AI does not duplicate the judgment; the AI only
+// handles density semantic units, interaction evidence, visual semantics and
+// placeholder/personal-data checks.
+const conceptEntries = relatedConcepts.map((concept) => ({
+  conceptId: concept.id,
+  verdict: concepts.status === 'pass' ? 'pass' : 'gap',
+  evidence:
+    concepts.status === 'pass'
+      ? 'deterministic check-concepts passed for this page; mustAppear phrases verified'
+      : 'deterministic check-concepts failed; see automatedChecks',
+  slideIds: [...section.slides],
+}))
+const mappedIds = (referenceAdaptation?.entries || []).map((entry) => entry.id)
+const referenceAdaptationSummary = referenceAdaptation
+  ? `确定性参考适配：本页映射 ${mappedIds.length ? mappedIds.join('、') : '无'}；check-reference-residue 结果见 automatedChecks。如发现未映射的参考课可见内容，请在 issues 中记为 blocking。`
+  : '参考适配映射缺失或无效；见 automatedChecks/issues。'
+
 const evidence = {
   schemaVersion: '1.0',
   lessonSlug,
@@ -324,13 +339,9 @@ const evidence = {
   screenshotsDir,
   reviewJson,
   reviewMd,
-  referenceSource: referenceSource || '',
   referenceAdaptation,
   scriptSlides,
-  relatedConcepts,
   density: densityJson,
-  quizKeys: quizJson,
-  overlap: overlapJson,
   screenshots,
   checks: publicChecks,
   verdict: failed.length ? 'fail' : 'pass',
@@ -351,7 +362,6 @@ for (const file of [
   storyboardPath,
   deckPath,
   outPath,
-  referenceSource,
   referenceAdaptationPath,
 ]) {
   if (fs.existsSync(path.resolve(file))) {
@@ -359,7 +369,7 @@ for (const file of [
   }
 }
 for (const screenshot of screenshots) {
-  if (screenshot.pngExists) {
+  if (fs.existsSync(path.resolve(screenshot.png))) {
     reviewedArtifacts.push({ path: relative(screenshot.png), sha256: hashFile(screenshot.png) })
   }
 }
@@ -377,7 +387,7 @@ const skeleton = {
   artifactPaths: reviewedArtifacts.map((artifact) => artifact.path),
   reviewedArtifacts,
   density: densityEntries,
-  concepts: [],
+  concepts: conceptEntries,
   automatedChecks: publicChecks.map((check) => ({
     name: check.name,
     status: check.status,
@@ -385,12 +395,18 @@ const skeleton = {
   })),
   checklist: [
     { item: 'interaction produces the declared evidence (not just watch/next)', status: 'n/a' },
-    { item: 'reference-lesson content replaced; no reference residue', status: 'n/a' },
-    { item: 'staged component behavior matches its brief (only if components are listed)', status: 'n/a' },
+    {
+      item: 'visual layout and interaction are understandable; no obvious crowding or misread',
+      status: 'n/a',
+    },
+    {
+      item: 'staged component behavior matches its brief (only if components are listed)',
+      status: 'n/a',
+    },
     { item: 'no placeholder, no personal data', status: 'n/a' },
   ],
   issues: [],
-  referenceAdaptation: '',
+  referenceAdaptation: referenceAdaptationSummary,
   verdict: 'fail',
   reviewedAt: new Date().toISOString(),
 }

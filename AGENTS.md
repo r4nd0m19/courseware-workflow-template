@@ -132,6 +132,7 @@ node workflow/tools/smoke-test.mjs
 - 0.26.0 起人工审核和课堂展示用 `player.html`（固定 1440×900 iframe + 整体缩放），不要用直接 deck URL 做审核链接：壳是响应式的，浏览器缩放会让直接 URL 重排，而 AI 截图固定 1440×900。`extract-shell` / `prepare-shell-site` / `check-shell --serve-preview` 会自动写入播放器；不要改壳 CSS/JS 来修缩放，播放器是外层缩放容器。
 - 0.26.1 起播放器不再有外层工具栏：页面上只看到课件本身；全屏走壳内全屏按钮或 `F` 键，放大用全屏，不再提供 100% 滚动模式。不要把“课件播放器”标题栏/按钮加回来。
 - 0.27.1 起播放器把 `#slide` 的背景色/背景图 `cover` 到外层，宽屏两侧显示课件自身背景，不再留天空色空白；不要改成纯色/黑边或裁切内容。
+- 0.28.0 起页自审只让 AI 判断 density 语义单元、交互证据、视觉版面、新组件行为、占位/个人信息；`concepts` 和 `referenceAdaptation` 由 `build-page-evidence` 用确定性检查预填，AI 不要重写。不要为了“更全面”把概念/参考适配/渲染文本/quiz/溢出重新塞回 AI checklist。
 - 0.27.0 起页自审性能测试用 `workflow/tools/bench-page-review.mjs`（确定性管线）和 `workflow/tools/workflow-timing.mjs`（真实 run 的逐步骤耗时，含 AI）。基准不是门禁；不要把基准失败当成页面失败，也不要在基准里调用 AI。
 - 概念、内容覆盖、答案位置分布、无滚动条、组件注册、页面冻结都是阻断项。新增规则或特判前，先查业界做法并走决策咨询。
 - 修改组件后要重跑该组件的 core/interaction 测试、相关页面溢出检查，并刷新受影响的审核哈希。
