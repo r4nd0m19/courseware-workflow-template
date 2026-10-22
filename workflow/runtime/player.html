@@ -48,11 +48,30 @@
     try {
       const doc = frame.contentDocument
       if (!doc) return
-      // Blend letterboxing with the shell background; no outer chrome.
-      const background = doc.defaultView.getComputedStyle(doc.body).backgroundColor
-      if (background && background !== 'rgba(0, 0, 0, 0)') {
-        document.body.style.background = background
-        stage.style.background = background
+      // Extend the courseware background into the letterbox: use the stage's
+      // own background color/image, not a separate player color. The central
+      // 1440×900 iframe still renders the exact courseware layout.
+      const bodyStyle = doc.defaultView.getComputedStyle(doc.body)
+      const slide = doc.querySelector('#slide')
+      const slideStyle = slide ? doc.defaultView.getComputedStyle(slide) : null
+      const background =
+        slideStyle?.backgroundColor && slideStyle.backgroundColor !== 'rgba(0, 0, 0, 0)'
+          ? slideStyle.backgroundColor
+          : bodyStyle.backgroundColor
+      const image =
+        slideStyle?.backgroundImage && slideStyle.backgroundImage !== 'none'
+          ? slideStyle.backgroundImage
+          : bodyStyle.backgroundImage
+      for (const target of [document.body, stage]) {
+        if (background && background !== 'rgba(0, 0, 0, 0)') {
+          target.style.backgroundColor = background
+        }
+        if (image && image !== 'none') {
+          target.style.backgroundImage = image
+          target.style.backgroundSize = 'cover'
+          target.style.backgroundPosition = 'center'
+          target.style.backgroundRepeat = 'no-repeat'
+        }
       }
       const button = doc.getElementById('fullscreenBtn')
       if (button) button.onclick = toggleFullscreen
