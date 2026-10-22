@@ -4,9 +4,9 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`courseware-production` `0.33.0`（83 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
-- preset：`courseware` `0.3.7`
-- 模板版本：`0.15.0`（2026-10-22）
+- 工作流版本：`courseware-production` `0.33.1`（83 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
+- preset：`courseware` `0.3.8`
+- 模板版本：`0.15.1`（2026-10-22）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
 - 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；density 以页面自审为唯一权威；参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。页面自审是**单次模型调用**（证据 + 内联截图 → 结构化 JSON，无文件/命令工具），模型/端点/key 由用户配置。
 - 播放器：`player.html` 固定 1440×900 画布、整体缩放；无外层工具栏，页面上只看到课件本身；宽屏两侧用课件自身背景延伸，不再留天空色空白；浏览器缩放不再重排，审核链接使用播放器。
@@ -86,7 +86,7 @@ node workflow/tools/page-review-ai.mjs --check-config
 - 也可以不用配置文件，改用 `COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。
 - 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。
 - `structuredOutput` 建议 `json`；DeepSeek 兼容端点可能返回 DSML 文本，工具检测到会自动重试一次 JSON 模式。`maxTokens` 默认 8192，推理模型可能把几千 token 花在 thinking 上。
-- ZCode 用户可以在配置里写 `"zcodeConfig": "C:\\\\Users\\\\<you>\\\\.zcode\\\\v2\\\\provider_config.json", "zcodeProvider": "new-provider-2"`，直接复用 ZCode 已配置的 provider/model/key，不需要另外复制 key。
+- ZCode 用户可以在配置里写 `"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`，直接复用 ZCode 已配置的 provider/model/key，不需要另外复制 key。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 是候选路径数组，Windows 用 `~`、WSL 用 `/mnt/c/...`，谁存在用谁。
 - 工作流在逐页循环前运行 `check-page-review-config`，配置缺失会提前失败。
 - `page-review-ai.mjs --dry-run` 可以只生成请求预览，不调用模型、不打印 key。
 
@@ -140,7 +140,7 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 
 ```bash
 specify workflow info courseware-shell        # 应显示 0.1.0、3 steps
-specify workflow info courseware-production   # 应显示 0.33.0、83 steps
+specify workflow info courseware-production   # 应显示 0.33.1、83 steps
 specify integration status                    # 应包含 codex
 node workflow/tools/smoke-test.mjs            # 完整仓库 124/124；模板仓库安装后 119/119（2 项壳检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等

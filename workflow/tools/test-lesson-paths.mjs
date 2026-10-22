@@ -67,11 +67,15 @@ fs.writeFileSync(
   ].join('\n'),
 )
 
-function runLesson(slug) {
+function runLesson(slug, extraEnv = {}) {
   const result = spawnSync(
     process.execPath,
     [wrapper, toy, '-i', `lesson_slug=${slug}`],
-    { cwd: projectRoot, encoding: 'utf8' },
+    {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      env: { ...process.env, ...extraEnv },
+    },
   )
   const output = `${result.stdout || ''}\n${result.stderr || ''}`
   if (result.status !== 0) {
@@ -81,9 +85,27 @@ function runLesson(slug) {
   }
   try {
     const outcome = JSON.parse(result.stdout)
-    if (outcome.run_id) runIds.push(outcome.run_id)
-  } catch {
-    // The file check below is the assertion that matters.
+    if (!outcome.run_id) {
+      console.error(`FAIL lesson paths (${slug}) — wrapper output has no run_id`)
+      cleanup()
+      process.exit(1)
+    }
+    if (
+      extraEnv.SPECKIT_WORKFLOW_RUN_ID &&
+      outcome.run_id === extraEnv.SPECKIT_WORKFLOW_RUN_ID
+    ) {
+      console.error(
+        `FAIL lesson paths (${slug}) — new run reused inherited SPECKIT_WORKFLOW_RUN_ID ` +
+          `(${outcome.run_id}); a nested smoke test must never overwrite a live run`,
+      )
+      cleanup()
+      process.exit(1)
+    }
+    runIds.push(outcome.run_id)
+  } catch (error) {
+    console.error(`FAIL lesson paths (${slug}) — cannot parse wrapper output: ${error.message}`)
+    cleanup()
+    process.exit(1)
   }
   let env
   try {
@@ -109,8 +131,17 @@ function runLesson(slug) {
   }
 }
 
-runLesson('alpha')
+const inheritedRunId = `smoke-inherited-${process.pid}`
+runLesson('alpha', { SPECKIT_WORKFLOW_RUN_ID: inheritedRunId })
 runLesson('beta')
+if (fs.existsSync(path.join(projectRoot, '.specify/workflows/runs', inheritedRunId))) {
+  console.error(
+    `FAIL lesson paths — inherited run id ${inheritedRunId} was created; ` +
+      'run-workflow.mjs must generate a fresh id for a new run',
+  )
+  cleanup()
+  process.exit(1)
+}
 
 const checker = path.join(toolsDir, 'check-lesson-paths.mjs')
 const checkerEnv = {

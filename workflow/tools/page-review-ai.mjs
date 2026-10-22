@@ -105,12 +105,32 @@ const fileConfig = readConfigFile(configPath)
 // Optional convenience for ZCode users: reuse the provider/model/key already
 // configured in ZCode instead of creating a second key file. This is explicit
 // (--zcode-config / COURSEWARE_REVIEW_ZCODE_CONFIG); it never prints the key.
+// `file` may be a string or an array of candidate paths (Windows + WSL).
+function zcodeConfigCandidates(value) {
+  return (Array.isArray(value) ? value : [value])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .map(expandHome)
+}
+
 function readZcodeProvider(file, providerId) {
-  let data
-  try {
-    data = readData(expandHome(file))
-  } catch (error) {
-    throw new Error(`cannot read ${file}: ${error.message}`)
+  const candidates = zcodeConfigCandidates(file)
+  let data = null
+  let used = ''
+  let lastError = null
+  for (const candidate of candidates) {
+    try {
+      data = readData(candidate)
+      used = candidate
+      break
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (!data) {
+    throw new Error(
+      `cannot read ${candidates.join(' or ') || '(no path)'}: ${lastError?.message || 'not found'}`,
+    )
   }
   const rules = data?.config?.providerConfigRules?.providerRules || []
   if (!rules.length) throw new Error('no providerConfigRules.providerRules')
@@ -119,7 +139,7 @@ function readZcodeProvider(file, providerId) {
     : rules.find((rule) => rule.enabled === true) ||
       rules.find((rule) => rule.enabled !== false) ||
       rules[0]
-  if (!chosen) throw new Error(`provider ${providerId} not found`)
+  if (!chosen) throw new Error(`provider ${providerId} not found in ${used}`)
   const apiType = String(chosen.config?.api?.type || '')
   const api =
     apiType === 'anthropic-messages'
@@ -144,7 +164,14 @@ function readZcodeProvider(file, providerId) {
     ) || models.find((rule) => rule.providerId === chosen.providerId)
   const model = modelRule?.modelId || ''
   if (!model) throw new Error(`provider ${chosen.providerId} has no model rule`)
-  return { api, baseUrl, model, apiKey, providerId: chosen.providerId }
+  return {
+    api,
+    baseUrl,
+    model,
+    apiKey,
+    providerId: chosen.providerId,
+    configPath: used,
+  }
 }
 
 const effectiveZcodeConfigPath =

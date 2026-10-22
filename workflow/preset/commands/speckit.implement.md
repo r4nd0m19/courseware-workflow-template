@@ -15,6 +15,7 @@ $ARGUMENTS
 - **逐页模式（工作流默认）**：参数含 `--section <id>`。只实现/修改该页，渲染该页，提交老师审核；上一页未 `approve` 不得继续。
 - **整份模式（仅手动兜底）**：参数不含 `--section`。实现全部 `APPROVED` 屏；仍需按 `review-sections.yml` 逐页自审和人工审核，不得跳过页 gate。正常生产必须由 `courseware-production` workflow 驱动；`build-screen` / `check-rendered-section` / `freeze-section` 在 workflow 外会 fail closed，不要用整份模式绕过页 gate（调试/测试才加 `--manual`）。
 - **数据文件**：参数可含 `--deck-data <path>`，工作流默认传 `specs/<lesson>/deck.json`；本命令只写这个文件，不得另起 deck 数据文件。
+- **不要在 workflow 内启动其它 workflow 或跑 smoke-test**：本命令只实现当前页；不要运行 `smoke-test.mjs`、`run-workflow.mjs`、`specify workflow run/resume`。这些命令会继承当前 `SPECKIT_WORKFLOW_RUN_ID`，可能覆盖正在运行的 run（2026-10-22 的 S05 事故）。测试由人工/独立终端在 workflow 外运行。
 - **暂存组件**：参数可含 `--staging <dir>`（默认 `registry/staging`）。本页需要的新组件已由 `speckit.component-build` 按页实现进暂存区；这里直接使用，不得自己实现组件，也不得要求它先注册 core。
 - 人工审核以页为单位：`review-sections.yml` 每个 section 只含一页；工具参数仍叫 `--section`，但展示给老师时一律称“页”。
 

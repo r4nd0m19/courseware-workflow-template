@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.33.0 / 83 步（production）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.33.1 / 83 步（production）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
 
 **人工审核只有三类：壳、整份课程脚本、每一页。**
 
@@ -10,6 +10,7 @@
 
 核心变化：
 
+- **runner 隔离（0.33.1）**：`run-workflow.mjs` 的新 run **一律生成新的 run id**，不再继承环境里的 `SPECKIT_WORKFLOW_RUN_ID`；`smoke-test.mjs` 启动时清除继承的 run id；`test-lesson-paths` 回归覆盖“继承 id 也不能复用”。页面实现 agent 不得在 workflow 内跑 `smoke-test`/其它 workflow。2026-10-22 的 S05 事故就是 smoke test 复用了 production run id、覆盖了 `04649d9c` 的 state；这不是页面内容问题。
 - **壳审核独立（0.33.0）**：新增 `courseware-shell` 工作流，只依赖壳包/风格包，**不需要 content pack**；顺序是 `validate-shell` → `review-shell` → `approve-shell`，按 `shell_slug` 写 `review/shells/<slug>/shell-approval.json`（壳包全文哈希 + gate run id）。内容工作流开头用 `check-shell-approval` 校验壳哈希和 gate run，不再重复审壳。
 - **人工审核收敛到三类（0.33.0）**：只保留 `review-shell`、`review-script`、`review-page`；`review-inputs`、`review-brief`、`review-self-study-audit`、`review-shell-art`、`review-component-plan`、`review-alpha`、`review-beta`、`gold` 全部去掉人类 gate，保留确定性/AI 内部自审与检查。
 
@@ -489,7 +490,7 @@ content: internal self-reviews/checks → review-script (once) → review-page (
 }
 ```
 
-也可以把 key 放进 `COURSEWARE_REVIEW_API_KEY`，或用 `apiKeyEnv` 指定其他环境变量名。ZCode 用户可以在配置里写 `"zcodeConfig": "C:\\\\Users\\\\<you>\\\\.zcode\\\\v2\\\\provider_config.json", "zcodeProvider": "new-provider-2"`，直接复用 ZCode 已配置的 provider/model/key。`openai-chat` 用同样的 `baseUrl`/`model`，只是请求路径和消息格式不同。`structuredOutput` 默认 `tool`（强制调用 `submit_page_review`）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`，因为 DeepSeek 兼容端点可能返回 DSML 文本（工具检测到会自动重试一次 JSON 模式）。`maxTokens` 默认 8192，推理模型的 thinking 可能占掉几千 token。完整示例：`workflow/examples/page-review.config.example.json`。
+也可以把 key 放进 `COURSEWARE_REVIEW_API_KEY`，或用 `apiKeyEnv` 指定其他环境变量名。ZCode 用户可以在配置里写 `"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`，直接复用 ZCode 已配置的 provider/model/key。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 支持候选路径数组，Windows 用 `~` 路径、WSL 用 `/mnt/c/...`，谁存在用谁。`openai-chat` 用同样的 `baseUrl`/`model`，只是请求路径和消息格式不同。`structuredOutput` 默认 `tool`（强制调用 `submit_page_review`）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`，因为 DeepSeek 兼容端点可能返回 DSML 文本（工具检测到会自动重试一次 JSON 模式）。`maxTokens` 默认 8192，推理模型的 thinking 可能占掉几千 token。完整示例：`workflow/examples/page-review.config.example.json`。
 
 - self-review 写 `review/self-review-<stage>.json/.md`（schema：`workflow/schemas/self-review.schema.json`；模板：`preset/templates/self-review-template.md`）。
 - `check-self-review` 要求：`verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。

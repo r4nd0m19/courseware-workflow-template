@@ -45,6 +45,7 @@ node workflow/tools/run-workflow.mjs resume <run-id>
 
 - `review/script-approval.json` 由工作流的 `review-script` gate + `approve-script` 步骤生成，绑定整份 `courseware.md` 的 SHA-256、每屏哈希和 gate run id。`approve-script` 会核对 `.specify/workflows/runs/<run-id>/state.json`：`review-script` 必须已完成且 choice 为 `approve`，`paused` 的 gate 不能铸造批准；`verify-script-approval` 再用 `--expect-run` 要求账本来自当前 run。批准后编辑脚本会让它失效；不要手改，也不要手动运行 `approve-script.mjs`。
 - 本地账本只能证明“某次 run 的 gate 记录为 approve”，不能证明按键的一定是真人；老师必须在自己的终端回答 gate，agent 不得代答。
+- `run-workflow.mjs` 的新 run **一律生成新 run id**，不继承 `SPECKIT_WORKFLOW_RUN_ID`；`smoke-test.mjs` 启动时清除继承的 run id。页面实现/自审的 agent 不得在 workflow 内跑 `smoke-test` 或其它 workflow（会继承/覆盖运行中的 run）。
 - `run-workflow.mjs` 在非交互运行中把 Spec Kit 的 `paused` 映射为 **exit 3**，并打印恢复命令、gate 的完整审核请求（含课件 URL）和 `show_file` 路径。看到 exit 3 就停止；老师在自己的终端交互式恢复。
 - 所有下游工具（`check-component-plan`、`build-narration`、`check-narration`、`check-section-freeze`、`freeze-section`、`build-shell-site`、`build-screen`、`check-deck-data`、`check-overflow`、`check-staged-components`、`register-staged-components`、`record-component-usage`）在收到 `--script`（或默认账本）时会重新校验批准；失败不会产生下游产物。
 
@@ -296,7 +297,7 @@ node workflow/tools/page-review-ai.mjs \
 - 静态页规则：页面明确声明 `watch` / `static-reading` 且有书面静态理由时，checklist 0（交互是否产出声明证据）记 `n/a`，不因“只是看”判 fail；只有页面声称互动/学生产出证据、实际却直接给答案时才 fail。S02 同一证据 3 次验证全部 pass（2 次保留非阻断提示）。
 - 工具只允许模型填 `density` / `checklist` / `issues` / `referenceAdaptation` / `verdict`；`signals`、`concepts`、`automatedChecks`、`reviewedArtifacts` 由工具保留/合并。模型声称 `fixed: true` 也会被强制改成 `false`。
 - 失败时不会写半成品：schema 不合法、缺截图、HTTP 错误都退出非 0；原始模型输出写到 `review/<slug>/page-review-raw-<section>.json` 方便排查。
-- `--zcode-config <provider_config.json> --zcode-provider <id>` 可以直接复用 ZCode 已配置的 Anthropic 兼容 provider/model/key，key 不打印、不落盘。也可以把这两个字段写进 `page-review.json`：`"zcodeConfig": "...", "zcodeProvider": "new-provider-2"`。
+- `--zcode-config <provider_config.json> --zcode-provider <id>` 可以直接复用 ZCode 已配置的 Anthropic 兼容 provider/model/key，key 不打印、不落盘。也可以把这两个字段写进 `page-review.json`：`"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 是候选路径数组，Windows 用 `~`、WSL 用 `/mnt/c/...`，谁存在用谁。
 - 回归测试：`node workflow/tools/test-page-review-ai.mjs`（本地 mock server，不调用真实模型）。
 
 ## 9A-2. 页自审风险校准
