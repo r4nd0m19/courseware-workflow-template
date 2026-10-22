@@ -227,6 +227,17 @@ node workflow/tools/workflow-timing.mjs --run <run-id>
 `build-page-evidence` 内部并行跑快速检查，overflow/overlap/rendered-text 并发上限 2；证据包
 的 `checks[].durationMs` 可直接用于定位最慢检查。
 
+## 9A-2. 页自审风险校准
+
+```bash
+node workflow/tools/page-review-risk.mjs --lesson-slug <slug> \
+  --review-dir review --include-archive-sections --json
+```
+
+- 输出每页 low/medium/high、风险原因、历史 blocking/真实问题数；
+- `wouldSkip` 表示该页会被跳过 AI，`missedBlocking`/`missedAny` 表示会漏掉的历史问题；
+- 只用于校准，不改 workflow 行为；没有“0 missed blocking”之前不要启用页级跳过 AI。
+
 ## 9B. 页面自审缓存
 
 ```bash

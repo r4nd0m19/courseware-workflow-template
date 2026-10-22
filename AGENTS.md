@@ -134,6 +134,7 @@ node workflow/tools/smoke-test.mjs
 - 0.27.1 起播放器把 `#slide` 的背景色/背景图 `cover` 到外层，宽屏两侧显示课件自身背景，不再留天空色空白；不要改成纯色/黑边或裁切内容。
 - 0.28.0 起页自审只让 AI 判断 density 语义单元、交互证据、视觉版面、新组件行为、占位/个人信息；`concepts` 和 `referenceAdaptation` 由 `build-page-evidence` 用确定性检查预填，AI 不要重写。不要为了“更全面”把概念/参考适配/渲染文本/quiz/溢出重新塞回 AI checklist。
 - 0.29.0 起 `build-page-evidence` 并行跑确定性检查（浏览器检查并发上限 2），页循环用 `page-review-cache` 按键复用 AI 判断；共享文件变化只刷新 `reviewedArtifacts`，不重跑 AI。缓存文件在 `review/<lesson>/page-review-cache/`，是运行时状态，不要提交或手改。
+- 0.30.0 起 `page-review-risk.mjs` 只做风险校准，不自动跳过 AI。001 校准显示 low 只有 S01 且有非阻断问题、medium 页含 blocking，所以**不要启用页级跳过 AI**；除非校准报告为 `missedBlocking`/`missedAny` 全空且连续多课验证。
 - 0.27.0 起页自审性能测试用 `workflow/tools/bench-page-review.mjs`（确定性管线）和 `workflow/tools/workflow-timing.mjs`（真实 run 的逐步骤耗时，含 AI）。基准不是门禁；不要把基准失败当成页面失败，也不要在基准里调用 AI。
 - 概念、内容覆盖、答案位置分布、无滚动条、组件注册、页面冻结都是阻断项。新增规则或特判前，先查业界做法并走决策咨询。
 - 修改组件后要重跑该组件的 core/interaction 测试、相关页面溢出检查，并刷新受影响的审核哈希。
