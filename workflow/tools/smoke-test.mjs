@@ -1340,6 +1340,15 @@ try {
     console.error('page-review-cache must reuse unchanged pages and invalidate when page inputs change')
   }
 
+  // ---- page review risk calibration tool ----
+  total += 1
+  const riskCalibrationPass = fs.existsSync(path.join(toolsDir, 'page-review-risk.mjs'))
+  console.log(`${riskCalibrationPass ? 'PASS' : 'FAIL'} page review risk calibration tool`)
+  if (!riskCalibrationPass) {
+    failed += 1
+    console.error('page-review-risk.mjs is missing')
+  }
+
   // ---- performance tools ----
   total += 1
   const timingRun = path.join(tmpRunsDir, 'timing-perf')
