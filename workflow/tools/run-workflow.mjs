@@ -54,9 +54,12 @@ const specifyBin = process.env.SPECIFY_BIN || 'specify'
 
 // Spec Kit exposes the run id to Python steps but not to shell-step
 // environments. The page loop's resume guard needs it to distinguish this
-// run's pending gate from a stale one. Generate it here and let Spec Kit use
-// it via SPECKIT_WORKFLOW_RUN_ID; on resume, take the explicit run-id
-// positional so a guard never sees a stale value inherited from the caller.
+// run's pending gate from a stale one. Generate a fresh id for every new run
+// and let Spec Kit use it via SPECKIT_WORKFLOW_RUN_ID; on resume, take the
+// explicit run-id positional so a guard never sees a stale value inherited
+// from the caller. Never inherit SPECKIT_WORKFLOW_RUN_ID for a new run: a
+// workflow/smoke test launched inside an active run would otherwise reuse the
+// parent run id and overwrite its state directory.
 function resumeRunId(values) {
   for (let i = 0; i < values.length; i++) {
     const value = values[i]
@@ -71,7 +74,7 @@ function resumeRunId(values) {
 }
 const effectiveRunId = command === 'resume'
   ? resumeRunId(args)
-  : (process.env.SPECKIT_WORKFLOW_RUN_ID || randomBytes(4).toString('hex'))
+  : randomBytes(4).toString('hex')
 const childEnv = { ...process.env }
 if (effectiveRunId) childEnv.SPECKIT_WORKFLOW_RUN_ID = effectiveRunId
 else delete childEnv.SPECKIT_WORKFLOW_RUN_ID
@@ -191,7 +194,8 @@ const runId = outcome.run_id || '<unknown>'
 const step = outcome.current_step_id || '<unknown>'
 
 if (status === 'completed' || status === 'succeeded' || status === 'success') {
-  console.log(`OK workflow ${outcome.workflow_id || ''} completed (run ${runId})`.replace('  ', ' '))
+  // Keep stdout machine-readable: tests and agents parse the JSON outcome.
+  console.error(`OK workflow ${outcome.workflow_id || ''} completed (run ${runId})`.replace('  ', ' '))
   process.exit(0)
 }
 

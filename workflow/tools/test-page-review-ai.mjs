@@ -277,6 +277,47 @@ await test('config preflight accepts a file config and a relative key file', asy
   assert.match(result.stdout, /key=file:/)
 })
 
+await test('config preflight accepts ZCode config path candidates', async () => {
+  const zcodeFile = path.join(tmp, 'zcode-provider.json')
+  fs.writeFileSync(
+    zcodeFile,
+    JSON.stringify({
+      config: {
+        providerConfigRules: {
+          providerRules: [
+            {
+              providerId: 'fake',
+              enabled: true,
+              config: {
+                api: { type: 'anthropic-messages', baseUrl: 'https://example.invalid' },
+                access: { apiKey: 'test-key' },
+              },
+            },
+          ],
+        },
+        modelConfigRules: {
+          providerModelRules: [
+            { providerId: 'fake', modelId: 'vision-test', config: { enabled: true } },
+          ],
+        },
+      },
+    }),
+  )
+  const configFile = path.join(tmp, 'zcode-array-config.json')
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      zcodeConfig: [path.join(tmp, 'missing-provider.json'), zcodeFile],
+      zcodeProvider: 'fake',
+      structuredOutput: 'json',
+    }),
+  )
+  const result = await runTool(['--check-config', '--config', configFile])
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stdout, /zcode=fake/)
+  assert.match(result.stdout, /model=vision-test/)
+})
+
 await test('dry run builds one request with one output tool and inline image', async () => {
   const requestOut = path.join(tmp, 'request.json')
   const result = await runTool(

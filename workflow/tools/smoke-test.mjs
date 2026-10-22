@@ -7,6 +7,14 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { readData } from './lib.mjs'
 
+// Smoke tests spawn real workflow runs. They may themselves be launched from
+// inside an active workflow shell; never inherit its run id, or a test run
+// would write into the live run directory.
+if (process.env.SPECKIT_WORKFLOW_RUN_ID) {
+  console.log('NOTE smoke-test — clearing inherited SPECKIT_WORKFLOW_RUN_ID')
+  delete process.env.SPECKIT_WORKFLOW_RUN_ID
+}
+
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(toolsDir, '..')
 const projectRoot = path.resolve(root, '..')
@@ -1418,7 +1426,7 @@ try {
   )
   const pageReviewTestOutput = `${pageReviewTest.stdout || ''}\n${pageReviewTest.stderr || ''}`
   const pageReviewToolPass =
-    pageReviewTest.status === 0 && /14\/14 page-review-ai tests passed/.test(pageReviewTestOutput)
+    pageReviewTest.status === 0 && /15\/15 page-review-ai tests passed/.test(pageReviewTestOutput)
   console.log(`${pageReviewToolPass ? 'PASS' : 'FAIL'} single-shot page review tool`)
   if (!pageReviewToolPass) {
     failed += 1
