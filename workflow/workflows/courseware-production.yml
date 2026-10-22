@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.27.1"
+  version: "0.28.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -738,39 +738,39 @@ steps:
                   AI self-review before human review (stage: page-{{ steps.advance_section.output.data.section.id }}).
                   Page: {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }}
                   Slide: {{ steps.advance_section.output.data.section.slides | join(', ') }}
-                  Read ONLY the evidence bundle
-                  review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json
-                  and the page screenshot under screenshots/{{ inputs.lesson_slug }}/. The bundle contains
-                  the page's parsed script fields (`scriptSlides`), related concepts, and the
-                  density/concepts/quiz/narration/overflow/overlap/rendered-check/rendered-text
-                  results. Do not read
-                  courseware.md/storyboard/deck and do not rerun those checks; the skeleton already has
-                  the hashes and automated checks.
-                  Fill review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json in place:
+                  Read ONLY:
+                  1. the evidence bundle review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json
+                  2. the page screenshot under screenshots/{{ inputs.lesson_slug }}/
+                  The bundle already contains the parsed page script (`scriptSlides`), density
+                  signals, the per-page reference mapping and the automated check results.
+                  Do not read courseware.md/storyboard/deck, do not run commands, and do not
+                  re-derive checks. Work in one pass and write the JSON once.
+                  The skeleton is pre-filled with deterministic results that are authoritative:
+                  - `concepts`: deterministic check-concepts verdicts; do not change.
+                  - `referenceAdaptation`: deterministic mapping summary; do not change it unless
+                    you find visible reference-lesson content not covered by the mapping (then add
+                    a blocking issue and append the reference string/replacement).
+                  - `automatedChecks` / `reviewedArtifacts`: keep them.
+                  Fill only these judgment fields in
+                  review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json:
                   - density[].semanticUnits / verdict / notes: name what the screen newly asks the
                     student to connect. Same-rule variants, two sides of a comparison, and review of
                     taught content are one unit; multiple independent teaching points are blocking
                     unless split, or marked exception with a written reason.
-                  - concepts[]: one entry for every related concept in the bundle (conceptId, pass/gap,
-                    evidence, slideIds). If this page introduces a concept, the rendered page must show
-                    its term, definition and every mustAppear phrase as readable screen text, including
-                    the static fallback.
-                  - checklist: interaction produces the declared evidence (not just watch/next);
-                    reference-lesson content replaced; staged component behavior matches its brief
-                    (only if components are listed); no placeholder or personal data. High-signal
-                    rendered text (title/code/quiz/table/items/concepts) is already checked by
-                    `check-rendered-text` in automatedChecks; do not re-judge it.
-                  - referenceAdaptation: the bundle's `referenceAdaptation` is the per-lesson map,
-                    already filtered to this page. Confirm each mapped replacement is visible on
-                    the rendered page; if you see reference-lesson content not covered by the map,
-                    record the new reference string and its lesson replacement here. Do not re-read
-                    shells/<shell>/source/lesson.js unless the map is missing or clearly incomplete.
-                    The deterministic `check-rendered-text` pass also scans the mapped
-                    `residue: replace` strings; you only handle deltas. Keep shell/brand/style.
-                  - If the bundle lists unregistered components, read their staged packages under
-                    {{ inputs.component_staging }}/<id>/ and confirm behavior; add those files to
-                    `reviewedArtifacts`. The page gate also approves them into core.
+                  - checklist:
+                    * interaction produces the declared evidence (not just watch/next);
+                    * visual layout and interaction are understandable; no obvious crowding or misread;
+                    * staged component behavior matches its brief (only if components are listed;
+                      otherwise n/a);
+                    * no placeholder, no personal data.
                   - issues and verdict.
+                  High-signal rendered text, concepts, quiz keys, overflow/overlap, narration files and
+                  reference residue are already checked deterministically; do not re-judge them here.
+                  If this page has unregistered components
+                  ({{ steps.load-page-components.output.data.unregistered | join(', ') }} — empty means none),
+                  read only their staged packages under {{ inputs.component_staging }}/<id>/ and
+                  confirm behavior; add those files to `reviewedArtifacts`. Otherwise do not read
+                  component packages. The page gate also approves them into core.
                   Do not write the MD; it is rendered from the JSON. If a safe fix is needed, make it
                   and rerun build-page-evidence plus the affected gate. Verdict pass only if no blocking
                   issues; otherwise stop.
