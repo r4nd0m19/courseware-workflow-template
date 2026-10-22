@@ -36,6 +36,7 @@ const screenshotsDir = opt('--screenshots')
 const url = opt('--url')
 const conceptsPath = opt('--concepts')
 const narrationPath = opt('--narration')
+const approvalPath = opt('--approval')
 const audioRoot = opt('--audio-root')
 const outPath = opt(
   '--out',
@@ -67,7 +68,7 @@ if (
   !url
 ) {
   console.error(
-    'usage: node build-page-evidence.mjs --lesson-slug <slug> --script <courseware.md> --content <content-pack.json> --storyboard <storyboard.yml> --sections <review-sections.yml> --section <id> --deck <deck.json> --screenshots <dir> --url <deck-url> [--concepts <file>] [--narration <file>] [--audio-root <dir>] [--out <file>] [--review-json <file>] [--review-md <file>] [--manual]',
+    'usage: node build-page-evidence.mjs --lesson-slug <slug> --script <courseware.md> --content <content-pack.json> --storyboard <storyboard.yml> --sections <review-sections.yml> --section <id> --deck <deck.json> --screenshots <dir> --url <deck-url> [--concepts <file>] [--narration <file>] [--audio-root <dir>] [--approval <script-approval.json>] [--out <file>] [--review-json <file>] [--review-md <file>] [--manual]',
   )
   process.exit(2)
 }
@@ -246,6 +247,7 @@ const fastTasks = [
               scriptPath,
               narrationPath,
               ...(audioRoot ? ['--audio-root', audioRoot] : []),
+              ...(approvalPath ? ['--approval', approvalPath] : []),
               '--only',
               slideIds,
             ]),
