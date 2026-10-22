@@ -2,17 +2,19 @@
 // Reuse a page AI self-review when the page-specific inputs are unchanged.
 //
 // The cache stores the final review JSON and a key over the page's script,
-// density signals, reference mapping, deterministic check summaries,
-// screenshot bytes, deck slide and registry. Shared-file changes do NOT
-// invalidate the AI judgment: the cached judgment fields are merged into the
-// fresh skeleton so reviewedArtifacts/automatedChecks stay current.
+// density signals, reference mapping, deterministic check summaries, PNG and
+// AI-image bytes, staged component bytes, deck slide and registry. Shared-file
+// changes do NOT invalidate the AI judgment: the cached judgment fields are
+// merged into the fresh skeleton so reviewedArtifacts/automatedChecks stay
+// current.
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { readData } from './lib.mjs'
 import { parseFlagValue } from './self-review-lib.mjs'
+import { readStagedComponents } from './page-review-lib.mjs'
 
-const CACHE_FORMAT = 'page-review-v1'
+const CACHE_FORMAT = 'page-review-v2'
 const args = process.argv.slice(2)
 const mode = parseFlagValue(args, '--mode')
 const lessonSlug = parseFlagValue(args, '--lesson-slug')
@@ -20,13 +22,18 @@ const section = parseFlagValue(args, '--section')
 const evidencePath = parseFlagValue(args, '--evidence')
 const deckPath = parseFlagValue(args, '--deck')
 const registryPath = parseFlagValue(args, '--registry', 'registry/index.json')
+const stagingDir = parseFlagValue(args, '--staging', 'registry/staging')
+const unregistered = String(parseFlagValue(args, '--unregistered') || '')
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean)
 const cacheDir = parseFlagValue(args, '--cache-dir', `review/${lessonSlug}/page-review-cache`)
 const reviewJson = parseFlagValue(args, '--review-json')
 const jsonOut = args.includes('--json')
 
 if (!mode || !lessonSlug || !section || !evidencePath || !deckPath || !reviewJson) {
   console.error(
-    'usage: node page-review-cache.mjs --mode check|store --lesson-slug <slug> --section <id> --evidence <page-evidence.json> --deck <deck.json> --review-json <self-review-page.json> --cache-dir <dir> [--registry <index.json>] [--json]',
+    'usage: node page-review-cache.mjs --mode check|store --lesson-slug <slug> --section <id> --evidence <page-evidence.json> --deck <deck.json> --review-json <self-review-page.json> --cache-dir <dir> [--registry <index.json>] [--staging <dir>] [--unregistered <id,id>] [--json]',
   )
   process.exit(2)
 }
@@ -39,7 +46,7 @@ function sha256File(file) {
   }
 }
 
-function keyFor(evidence) {
+function keyFor(evidence, staged) {
   const deck = readData(deckPath)
   const deckById = new Map((deck.slides || []).map((slide) => [slide.id, slide]))
   const deckSlides = (evidence.section?.slides || []).map((id) => deckById.get(id) || { id, missing: true })
@@ -53,7 +60,9 @@ function keyFor(evidence) {
     screenshots: (evidence.screenshots || []).map((shot) => ({
       slideId: shot.slideId,
       sha256: sha256File(shot.png),
+      aiImageSha256: sha256File(shot.aiImage),
     })),
+    stagedComponents: staged.artifacts,
     deckSlides,
     registrySha256: sha256File(registryPath),
   }
@@ -62,7 +71,14 @@ function keyFor(evidence) {
 
 const cacheFile = path.join(cacheDir, `${section}.json`)
 const evidence = readData(evidencePath)
-const key = keyFor(evidence)
+let staged = { summaries: [], artifacts: [] }
+try {
+  staged = readStagedComponents({ stagingDir, ids: unregistered, root: process.cwd() })
+} catch (error) {
+  console.error(`FAIL page review cache — ${error.message}`)
+  process.exit(1)
+}
+const key = keyFor(evidence, staged)
 
 function emit(result) {
   if (jsonOut) process.stdout.write(`${JSON.stringify(result)}\n`)
@@ -129,15 +145,34 @@ if (mode === 'check') {
     emit({ reuse: false, key, cacheFile, reason: 'cached review shape is incomplete' })
     process.exit(0)
   }
+  const seenArtifacts = new Set()
+  const reviewedArtifacts = []
+  for (const artifact of [...(skeleton.reviewedArtifacts || []), ...staged.artifacts]) {
+    if (!artifact?.path || !artifact?.sha256 || seenArtifacts.has(artifact.path)) continue
+    seenArtifacts.add(artifact.path)
+    reviewedArtifacts.push(artifact)
+  }
+  const artifactPaths = [
+    ...new Set([
+      ...(skeleton.artifactPaths || []),
+      ...reviewedArtifacts.map((artifact) => artifact.path),
+    ]),
+  ]
   const merged = {
     ...skeleton,
+    artifactPaths,
+    reviewedArtifacts,
     density,
     checklist,
     issues: (review.issues || []).filter(
       (issue) => !/^共享(文件|组件)/.test(String(issue.description || '')),
     ),
+    referenceAdaptation: review.referenceAdaptation || skeleton.referenceAdaptation,
     verdict: review.verdict,
     reviewedAt: new Date().toISOString(),
+    ...(review.reviewMeta
+      ? { reviewMeta: { ...review.reviewMeta, cached: true } }
+      : {}),
   }
   fs.mkdirSync(path.dirname(path.resolve(reviewJson)), { recursive: true })
   fs.writeFileSync(path.resolve(reviewJson), `${JSON.stringify(merged, null, 2)}\n`)

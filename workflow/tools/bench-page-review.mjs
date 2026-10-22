@@ -12,6 +12,7 @@ import { performance } from 'node:perf_hooks'
 import { readData } from './lib.mjs'
 import { serveDir } from './shell-lib.mjs'
 import { parseFlagValue, toolDir } from './self-review-lib.mjs'
+import { buildPageReviewPrompt } from './page-review-lib.mjs'
 
 const args = process.argv.slice(2)
 const lessonSlug = parseFlagValue(args, '--lesson-slug')
@@ -111,20 +112,21 @@ function fileSize(file) {
   }
 }
 
-function pagePromptBytes() {
+function pagePromptBytes(evidenceJson, skeletonJson) {
   try {
-    const workflow = readData('workflow/workflows/courseware-production.yml')
-    const walk = (steps) => {
-      for (const step of steps || []) {
-        if (step.id === 'self-review-page' && step.prompt) return step.prompt
-        for (const key of ['steps', 'then', 'else']) {
-          const found = walk(step[key])
-          if (found) return found
-        }
-      }
-      return null
-    }
-    return Buffer.byteLength(walk(workflow.steps) || '', 'utf8')
+    const images = (evidenceJson?.screenshots || []).map((shot) => ({
+      slideId: shot.slideId,
+      mediaType: 'image/jpeg',
+      bytes: 0,
+      sha256: '',
+    }))
+    const prompt = buildPageReviewPrompt({
+      evidence: evidenceJson,
+      skeleton: skeletonJson,
+      images,
+      components: [],
+    })
+    return Buffer.byteLength(prompt.promptText, 'utf8')
   } catch {
     return 0
   }
@@ -153,7 +155,6 @@ if (!url) {
   url = server.url
 }
 
-const promptBytes = pagePromptBytes()
 const results = []
 try {
   for (let round = 1; round <= repeat; round += 1) {
@@ -201,6 +202,13 @@ try {
       )
       const evidenceBytes = fileSize(evidencePath)
       const skeletonBytes = fileSize(reviewJson)
+      let skeletonJson = null
+      try {
+        skeletonJson = readData(reviewJson)
+      } catch {
+        skeletonJson = null
+      }
+      const promptBytes = pagePromptBytes(evidenceJson, skeletonJson)
       results.push({
         round,
         section: section.id,
@@ -210,6 +218,7 @@ try {
         evidenceStatus: evidence.status === 0 ? 'pass' : 'fail',
         evidenceBytes,
         skeletonBytes,
+        promptBytes,
         screenshotBytes,
         aiImageBytes,
         renderMs: Number(render.durationMs.toFixed(1)),
@@ -245,22 +254,28 @@ const summary = [...bySection.entries()].map(([section, runs]) => {
     evidenceSecondsMax: Number(Math.max(...runs.map((run) => run.evidenceSeconds)).toFixed(3)),
     evidenceBytesAvg: Math.round(avg('evidenceBytes')),
     skeletonBytesAvg: Math.round(avg('skeletonBytes')),
+    promptBytesAvg: Math.round(avg('promptBytes')),
     screenshotBytesAvg: Math.round(avg('screenshotBytes')),
     aiImageBytesAvg: Math.round(avg('aiImageBytes')),
     renderMsAvg: Number(avg('renderMs').toFixed(1)),
     passRate: runs.filter((run) => run.evidenceStatus === 'pass').length / runs.length,
   }
 })
+const promptBytesAvg = results.length
+  ? results.reduce((sum, run) => sum + run.promptBytes, 0) / results.length
+  : 0
 const overall = {
-  promptBytes,
+  promptBytesAvg: Math.round(promptBytesAvg),
   pages: summary.length,
   runs: results.length,
   evidenceSecondsAvg:
     results.reduce((sum, run) => sum + run.evidenceSeconds, 0) / results.length,
   estimatedTextTokensAvg:
-    (results.reduce((sum, run) => sum + run.evidenceBytes + run.skeletonBytes, 0) /
-      results.length +
-      promptBytes) /
+    results.reduce(
+      (sum, run) => sum + run.evidenceBytes + run.skeletonBytes + run.promptBytes,
+      0,
+    ) /
+    results.length /
     4,
 }
 const checkTotals = new Map()
@@ -281,14 +296,23 @@ const slowestChecks = [...checkTotals.values()]
     maxMs: row.maxMs,
   }))
   .sort((a, b) => b.avgMs - a.avgMs)
-const report = { url, lessonSlug, repeat, promptBytes, overall, summary, slowestChecks, results }
+const report = {
+  url,
+  lessonSlug,
+  repeat,
+  promptBytes: Math.round(promptBytesAvg),
+  overall,
+  summary,
+  slowestChecks,
+  results,
+}
 
 if (outFile) fs.writeFileSync(path.resolve(outFile), `${JSON.stringify(report, null, 2)}\n`)
 if (jsonOut) {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
 } else {
   console.log(`URL: ${url}`)
-  console.log(`Prompt bytes: ${promptBytes}; pages: ${summary.length}; runs: ${results.length}`)
+  console.log(`Prompt bytes: ${Math.round(promptBytesAvg)}; pages: ${summary.length}; runs: ${results.length}`)
   console.log('')
   console.log('section  evidence_s  evidence_KB  skeleton_KB  screenshot_KB  render_ms  pass')
   for (const row of summary) {

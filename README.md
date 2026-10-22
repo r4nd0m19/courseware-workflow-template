@@ -4,10 +4,10 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`0.31.0`（91 个顶层步骤）
-- preset：`courseware` `0.3.5`
-- 模板版本：`0.13.0`（2026-10-22）
-- 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；density 以页面自审为唯一权威；参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。
+- 工作流版本：`0.32.0`（92 个顶层步骤）
+- preset：`courseware` `0.3.6`
+- 模板版本：`0.14.0`（2026-10-22）
+- 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；density 以页面自审为唯一权威；参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。页面自审是**单次模型调用**（证据 + 内联截图 → 结构化 JSON，无文件/命令工具），模型/端点/key 由用户配置。
 - 播放器：`player.html` 固定 1440×900 画布、整体缩放；无外层工具栏，页面上只看到课件本身；宽屏两侧用课件自身背景延伸，不再留天空色空白；浏览器缩放不再重排，审核链接使用播放器。
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
@@ -56,6 +56,38 @@ specify integration use zcode
 审核时 agent 必须调用当前 harness 的原生提问 UI，选项只用中文 **“通过，继续”** / **“不通过，需要改”**。默认老师不懂英语和技术术语：不要出现 approve/reject/gate/verdict/content-pack/路径/命令，不要要求老师运行命令、改文件、装软件或提供 JSON。缺少资料时只问老师有没有教案、讲义、网页、Word、PDF 或图片。
 
 安装完成后**不需要重启 ZCode**：打开 `START-HERE.md`，或直接对 agent 说 **“开始做课件”**。老师不需要使用 `speckit-*` 技能，也不需要运行任何命令。
+
+## 页面自审模型配置（必须）
+
+0.32.0 起页面自审不再由 coding agent 执行，而是一次直接模型调用。运行前必须提供一个支持图片输入的模型。配置优先读项目内 `.courseware/page-review.json`（已 gitignore，Windows/WSL 可共用），否则读 `~/.config/courseware/page-review.json`：
+
+```bash
+install -d -m 700 ~/.config/courseware
+cat > ~/.config/courseware/page-review.json <<'JSON'
+{
+  "api": "anthropic-messages",
+  "baseUrl": "https://你的视觉模型网关",
+  "model": "支持图片输入的模型",
+  "apiKeyFile": "~/.config/courseware/page-review.key",
+  "maxTokens": 8192,
+  "timeoutMs": 120000,
+  "structuredOutput": "json"
+}
+JSON
+chmod 600 ~/.config/courseware/page-review.json
+printf '%s' '<api-key>' > ~/.config/courseware/page-review.key
+chmod 600 ~/.config/courseware/page-review.key
+
+node workflow/tools/page-review-ai.mjs --check-config
+```
+
+- `api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。
+- 也可以不用配置文件，改用 `COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。
+- 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。
+- `structuredOutput` 建议 `json`；DeepSeek 兼容端点可能返回 DSML 文本，工具检测到会自动重试一次 JSON 模式。`maxTokens` 默认 8192，推理模型可能把几千 token 花在 thinking 上。
+- ZCode 用户可以在配置里写 `"zcodeConfig": "C:\\\\Users\\\\<you>\\\\.zcode\\\\v2\\\\provider_config.json", "zcodeProvider": "new-provider-2"`，直接复用 ZCode 已配置的 provider/model/key，不需要另外复制 key。
+- 工作流在逐页循环前运行 `check-page-review-config`，配置缺失会提前失败。
+- `page-review-ai.mjs --dry-run` 可以只生成请求预览，不调用模型、不打印 key。
 
 ## 命令行安装
 
@@ -106,9 +138,9 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 ## 安装后验证
 
 ```bash
-specify workflow info courseware-production   # 应显示 0.31.0、91 steps
+specify workflow info courseware-production   # 应显示 0.32.0、92 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 完整仓库 120/120；模板仓库安装后 116/116（1 项壳检查 SKIP）
+node workflow/tools/smoke-test.mjs            # 完整仓库 122/122；模板仓库安装后 118/118（1 项壳检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
 
