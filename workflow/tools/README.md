@@ -224,6 +224,25 @@ node workflow/tools/workflow-timing.mjs --run <run-id>
 
 `bench-page-review` 不调用 AI，只测确定性部分；真正的 `self-review-page` 耗时用
 `workflow-timing` 从真实 run 的 `log.jsonl` 读。基准不是门禁，失败项只记录状态。
+`build-page-evidence` 内部并行跑快速检查，overflow/overlap/rendered-text 并发上限 2；证据包
+的 `checks[].durationMs` 可直接用于定位最慢检查。
+
+## 9B. 页面自审缓存
+
+```bash
+node workflow/tools/page-review-cache.mjs --mode check \
+  --lesson-slug <slug> --section S02B \
+  --evidence review/<slug>/page-evidence-S02B.json \
+  --deck specs/<slug>/deck.json --registry registry/index.json \
+  --cache-dir review/<slug>/page-review-cache \
+  --review-json review/<slug>/self-review-page-S02B.json --json
+
+node workflow/tools/page-review-cache.mjs --mode store ... --review-json ...
+```
+
+- 键由页面脚本、density 信号、参考映射、检查摘要、截图哈希、deck slide 和 registry 组成。
+- `check` 命中时把上次 AI 判断字段合并到新骨架，刷新 `reviewedArtifacts`，工作流跳过 `self-review-page`。
+- `store` 在 `check-self-review-page` 通过后写入缓存；缓存目录是运行时状态，不提交。
 
 ```bash
 node workflow/tools/check-self-review.mjs review/self-review-brief.json

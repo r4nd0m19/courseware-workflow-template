@@ -212,6 +212,7 @@ try {
         checks: (evidenceJson?.checks || []).map((check) => ({
           name: check.name,
           status: check.status,
+          durationMs: check.durationMs || 0,
         })),
         evidenceFile: evidencePath,
         error: evidence.status === 0 ? '' : String(evidence.stderr || '').slice(0, 500),
@@ -256,7 +257,25 @@ const overall = {
       promptBytes) /
     4,
 }
-const report = { url, lessonSlug, repeat, promptBytes, overall, summary, results }
+const checkTotals = new Map()
+for (const result of results) {
+  for (const check of result.checks) {
+    const row = checkTotals.get(check.name) || { name: check.name, runs: 0, totalMs: 0, maxMs: 0 }
+    row.runs += 1
+    row.totalMs += check.durationMs
+    row.maxMs = Math.max(row.maxMs, check.durationMs)
+    checkTotals.set(check.name, row)
+  }
+}
+const slowestChecks = [...checkTotals.values()]
+  .map((row) => ({
+    name: row.name,
+    runs: row.runs,
+    avgMs: Math.round(row.totalMs / row.runs),
+    maxMs: row.maxMs,
+  }))
+  .sort((a, b) => b.avgMs - a.avgMs)
+const report = { url, lessonSlug, repeat, promptBytes, overall, summary, slowestChecks, results }
 
 if (outFile) fs.writeFileSync(path.resolve(outFile), `${JSON.stringify(report, null, 2)}\n`)
 if (jsonOut) {
@@ -280,6 +299,12 @@ if (jsonOut) {
     `Average evidence: ${overall.evidenceSecondsAvg.toFixed(2)} s/page; ` +
       `estimated text tokens: ${Math.round(overall.estimatedTextTokensAvg)}/page`,
   )
+  console.log('')
+  console.log('slowest deterministic checks:')
+  for (const check of slowestChecks.slice(0, 6)) {
+    console.log(`  ${check.name.padEnd(22)} avg ${String(check.avgMs).padStart(5)} ms  max ${String(check.maxMs).padStart(5)} ms`)
+  }
+  console.log('')
   console.log('AI self-review is not measured here; use workflow-timing.mjs on a real run.')
   if (outFile) console.log(`Report: ${path.resolve(outFile)}`)
 }
