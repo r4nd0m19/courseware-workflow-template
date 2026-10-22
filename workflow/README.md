@@ -2,15 +2,18 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.31.0 / 91 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.32.0 / 92 步（含逐页循环嵌套）+ 壳库（001 pilot 生产路径）**。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
 核心变化：
 
+- **单次模型页自审（0.32.0）**：`self-review-page` 从 `prompt` 步骤改为 `shell`，由 `page-review-ai.mjs` 直接发一次 HTTP 请求（Anthropic Messages 或 OpenAI Chat Completions）。证据包 JSON 和截图（`aiImage`，缺失回退 PNG）内联在请求里，模型只能返回 `submit_page_review` 结构化 JSON；它没有文件、命令或 MCP 工具，不能读仓库、跑门禁或改文件。配置由用户提供（优先项目内 `.courseware/page-review.json`，否则 `~/.config/courseware/page-review.json`，或 `COURSEWARE_REVIEW_*`；ZCode 用户可用 `zcodeConfig`/`zcodeProvider` 复用现有 provider）；`check-page-review-config` 在组件预构建/页循环前 fail-closed。没有配置或模型不支持图片时直接失败，不会退回 `zcode -p` / `claude -p` 这类 coding agent，也不会悄悄退化成纯文本判断。001 S01 实测（DeepSeek `deepseek-flash`，JSON 模式）：3 次 **6.5 / 20.6 / 13.7 s，平均 13.6 s**；旧的 coding-agent 自审为 **3 分 16.7 秒**。`check-self-review` 对真实输出通过（基于当时通过的证据包；当前 S01 重建证据会因 mascot 与 `pre`/`cover-output` 文本的真实重叠在 `check-overlap` 失败，这是页面布局问题，不是模型调用耗时）。
+- **S02 完整链路实测（2026-10-22）**：截图 4.0 s + 证据 8.2 s + 模型 13.4/7.2/5.5 s（平均 8.7 s）+ MD 1.1 s + 检查 1.2 s。自审段平均 **20.6 s**（范围约 17–26 s），含截图的完整页流程平均约 **24.6 s**。静态页规则加入后，同一 S02 证据 3 次全部 **pass**（checklist 0 = n/a；2 次保留非阻断提示，指出“先回忆却直接给答案”）；规则前同一证据曾出现 1 fail / 2 pass。
+- **静态页自审规则（0.32.0）**：页面明确声明 `watch` / `static-reading` 且有书面静态理由时，checklist 0 记 `n/a`，不因“只是看”判 fail；只有页面声称互动/学生产出证据、实际却直接给答案时才 fail。
 - **自审分层（0.22.0 / 0.23.0）**：`inputs` / `alpha` / `beta` / `gold` 改为由门禁结果与逐页自审确定性汇总，不再启动 AI 复述；`script` 自审改读一份紧凑证据包（逐屏脚本字段 + 闸门结果），不再读整份 `courseware.md`、content pack、style pack 和 registry；页自审只读证据包 + 截图，MD 由 JSON 自动渲染。**density/segmenting 自 0.23.0 起以页面自审为唯一权威**：脚本自审不再填 `density`、不再跑 `density-report`，`check-self-review-script` 也不再带 `--script`；页面证据包提供密度信号，页自审做最终判断。AI 自审只保留 `brief` / `script` / `component-plan` / 每页一次判断；参考适配映射每课生成一次。
 - **固定 1440×900 播放器（0.26.0 / 0.26.1 / 0.27.1）**：`workflow/runtime/player.html` 用 1440×900 iframe 渲染课件，再整体等比缩放到窗口；内部布局固定，浏览器缩放只改变整体大小。**0.26.1 起没有外层工具栏**，页面上只看到课件本身；**0.27.1 起读取 `#slide` 的背景色/背景图并 `cover` 到外层**，宽屏两侧显示课件自身背景，不再留天空色空白。壳内全屏按钮和 `F` 快捷键路由到播放器全屏，放大用全屏，不再提供 100% 滚动模式。`extract-shell`、`prepare-shell-site`、`check-shell --serve-preview` 都会写入 `player.html`；审核 gate 用播放器链接。直接 deck URL 留给工具和调试。
-- **AI 截图降规格（0.31.0）**：`build-screen` 在 1440×900 PNG 之外，用 CDP 从同一状态生成 **1280 宽** AI 审核图（默认 JPEG 80，`--ai-format webp` 可选），记录尺寸/哈希；证据包和页自审 prompt 读 `aiImage`，缺失才回退 PNG。16:10 舞台实际约 1280×675；S02B 视觉像素约 -17%。PNG 继续给证据/老师。
+- **AI 截图降规格（0.31.0）**：`build-screen` 在 1440×900 PNG 之外，用 CDP 从同一状态生成 **1280 宽** AI 审核图（默认 JPEG 80，`--ai-format webp` 可选），记录尺寸/哈希；证据包和页自审请求读 `aiImage`，缺失才回退 PNG。16:10 舞台实际约 1280×675；S02B 视觉像素约 -17%。PNG 继续给证据/老师。
 - **页自审风险校准（0.30.0）**：`page-review-risk.mjs` 用页面类型、组件、交互层级、density、概念和参考映射算 low/medium/high，并对照历史问题报告“跳过低风险 AI 会漏什么”。001 结果只有 S01 为 low，且 S01 有非阻断断行、medium 页有 S05/S06/S07 blocking，所以**暂不启用页级跳过 AI**。
 - **页自审并行 + 缓存（0.29.0）**：`build-page-evidence` 的快速检查并发执行，overflow/overlap/rendered-text 三个浏览器检查并发上限 2；每个检查记录 `durationMs`。001 全 16 页确定性管线 **9.86 s/页 → 5.57 s/页**。`page-review-cache.mjs` 按页面脚本/density/映射/检查摘要/截图/deck/registry 哈希缓存 AI 判断；内容不变时跳过 `self-review-page`，只刷新 `reviewedArtifacts`。缓存目录是运行时状态，不提交。
 - **页自审瘦身（0.28.0）**：页面 AI 只判断 density 语义单元、交互证据、视觉版面、新组件行为和占位/个人信息；concepts 与 referenceAdaptation 由确定性检查预填，AI 只处理未映射参考内容的增量。证据包去掉 relatedConcepts/quizKeys/overlap/screenshot metadata/script machine 全量字段，S02B 证据 9.2KB → 5.9KB，prompt 2888B → 2569B。
@@ -73,10 +76,12 @@
 | `tools/check-script-approval.mjs` / `approval-lib.mjs` | 校验批准账本：schema、人工批准人、gate 结果与 run 状态、整份/每屏哈希、APPROVED 状态 |
 | `tools/run-workflow.mjs` | fail-closed 运行 `specify workflow run/resume`；`paused` → 退出码 3；人工 gate 打印审核文件绝对路径、链接、`gate-review.mjs show/decide` 与 `resume` 命令，内置 gate 仍打印人工恢复命令 |
 | `tools/build-narration.mjs` / `check-narration.mjs` | Edge TTS 语音生成与校验；按旁白文本 + 音色 + rate/pitch/format/provider 哈希复用 MP3，文本变化才重生成 |
-| `tools/page-review-cache.mjs` | 页面自审缓存：内容不变时复用 AI 判断，刷新哈希并跳过 `self-review-page` |
+| `tools/page-review-ai.mjs` / `page-review-lib.mjs` | 单次模型页自审：证据 + 内联截图 → 一次 HTTP 请求 → 结构化 JSON；无文件/命令工具；配置由用户提供 |
+| `tools/page-review-cache.mjs` | 页面自审缓存：内容、截图或暂存组件不变时复用 AI 判断，刷新哈希并跳过 `self-review-page` |
 | `tools/page-review-risk.mjs` | 页自审风险校准：low/medium/high + 对照历史问题估算跳过 AI 的漏判 |
 | `tools/bench-page-review.mjs` | 页自审确定性基准：证据包/截图/JSON/MD 的耗时、最慢检查与上下文大小 |
-| `tools/workflow-timing.mjs` | 真实 run 的逐步骤耗时报告（含 `self-review-page` AI 步骤） |
+| `tools/workflow-timing.mjs` | 真实 run 的逐步骤耗时报告（含 `self-review-page` 模型步骤） |
+| `tools/test-page-review-ai.mjs` | 单次页自审工具回归：Anthropic/OpenAI 请求形状、fallback、fail-closed、缓存失效 |
 | `tools/write-player-page.mjs` / `runtime/player.html` | 固定 1440×900 无工具栏播放器；缩放只改变整体大小 |
 | `tools/smoke-test.mjs` | 全量工具回归（含人工 gate 静态检查与端到端） |
 | `tools/test-gui-gate.mjs` | 人工 gate 端到端：暂停 → pending → `gate-review show/decide` → `run-workflow resume` → completed |
@@ -426,7 +431,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 6. `speckit.component-plan` → 复用/缺口/简报（全局纸面设计）；`review-component-plan` 人审。**不在这里预建组件**；实现由页面循环在首次需要它的页面完成。
 7. `script-to-storyboard` → `storyboard.yml`（确定性投影）；`validate-storyboard` / parity / concepts / coverage / vocabulary / teaching / `check-review-sections` 自动门禁。storyboard 不再人审，也不再跑 AI 自审。
 8. `build-tasks` → 逐页任务（确定性生成）。tasks.md 是内部拆分，不再人审，也不再跑 AI 自审。随后 `list-missing-components` → `speckit.component-build --prebuild` 在页循环前一次性建好所有缺组件。
-9. **逐页循环**：`section-freeze-check` → `load-page-components`（本页缺哪些组件）→ 缺则 `build-missing-page-components`（`speckit.component-build --section --slides --components`）→ 暂存组件校验 → `implement-section`（写 `--deck-data`，`--no-self-review`）→ 语音 → `section-shell-build --staging` → 语音闸门 → 截图（绑定 deck 哈希）→ deck-data/baseline/concepts/quiz-keys → `build-page-evidence`（density/concepts/quiz/narration/overflow/overlap/rendered/截图 + 自审骨架）→ `self-review-page`（只读证据包，填骨架；组件自审并入这里）→ `review-page` 人审（同时批准本页新组件）→ `register-staged-page-components --only … --clean` → `check-registry` → 从 registry 重建站点 → deck-data（不含 staging）→ `freeze-section`。
+9. **逐页循环**：`section-freeze-check` → `load-page-components`（本页缺哪些组件）→ 缺则 `build-missing-page-components`（`speckit.component-build --section --slides --components`）→ 暂存组件校验 → `implement-section`（写 `--deck-data`，`--no-self-review`）→ 语音 → `section-shell-build --staging` → 语音闸门 → 截图（绑定 deck 哈希）→ deck-data/baseline/concepts/quiz-keys → `build-page-evidence`（density/concepts/quiz/narration/overflow/overlap/rendered/截图 + 自审骨架）→ `self-review-page`（单次模型调用：证据包 + 内联截图，填骨架；组件摘要/哈希也内联）→ `review-page` 人审（同时批准本页新组件）→ `register-staged-page-components --only … --clean` → `check-registry` → 从 registry 重建站点 → deck-data（不含 staging）→ `freeze-section`。
 10. 全部页面批准后：`all-sections-frozen` → `alpha-shell-build` → 整份截图/基线 → `alpha-deck-data-gate` / `alpha-source-fidelity-gate` / `alpha-bundle-gate` / `alpha-shell-gate` / `alpha-shell-art-gate` / `alpha-narration-gate` / script/parity/overflow → `review-alpha`。
 11. `speckit.converge` → `review-beta`；`gold-script-gates` / `gold-parity-gate` / `final-gates` / `gold-shell-gate` / `gold-shell-art-gate` → `gold` 签字。
 
@@ -455,12 +460,29 @@ node workflow/tools/check-overflow.mjs http://127.0.0.1:8082/ --script specs/001
 ## AI 自审 → 人工审核（每个 gate 前）
 
 ```text
-prompt self-review → check-self-review → human gate
+single-shot model call (evidence + inline screenshots) → check-self-review → human gate
 ```
+
+- **页面自审不是 coding agent**：`self-review-page` 是 `shell` 步骤，调用 `page-review-ai.mjs` 发一次 HTTP 请求；模型只拿到证据 JSON 和截图，只能返回 `submit_page_review` 结构化 JSON，没有文件/命令/MCP 工具。它不能读 `courseware.md`、跑 `check-overlap` 或修改页面。
+- **模型由用户配置**：优先读项目内 `.courseware/page-review.json`（已 gitignore，适合 Windows/WSL 共用），否则读 `~/.config/courseware/page-review.json`；也支持 `COURSEWARE_REVIEW_CONFIG`、`COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。`api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。模型必须支持图片输入；不支持时请求直接失败，不会退化成纯文本。
+- **配置预检**：`check-page-review-config` 在逐页循环前运行；缺配置时整次运行在开始制作页面前失败，不会做到一半才报错。
+
+最小配置（项目内 `.courseware/page-review.json` 或 `~/.config/courseware/page-review.json`，权限 600）：
+
+```json
+{
+  "api": "anthropic-messages",
+  "baseUrl": "https://你的视觉模型网关",
+  "model": "支持图片输入的模型",
+  "apiKeyFile": "~/.config/courseware/page-review.key"
+}
+```
+
+也可以把 key 放进 `COURSEWARE_REVIEW_API_KEY`，或用 `apiKeyEnv` 指定其他环境变量名。ZCode 用户可以在配置里写 `"zcodeConfig": "C:\\\\Users\\\\<you>\\\\.zcode\\\\v2\\\\provider_config.json", "zcodeProvider": "new-provider-2"`，直接复用 ZCode 已配置的 provider/model/key。`openai-chat` 用同样的 `baseUrl`/`model`，只是请求路径和消息格式不同。`structuredOutput` 默认 `tool`（强制调用 `submit_page_review`）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`，因为 DeepSeek 兼容端点可能返回 DSML 文本（工具检测到会自动重试一次 JSON 模式）。`maxTokens` 默认 8192，推理模型的 thinking 可能占掉几千 token。完整示例：`workflow/examples/page-review.config.example.json`。
 
 - self-review 写 `review/self-review-<stage>.json/.md`（schema：`workflow/schemas/self-review.schema.json`；模板：`preset/templates/self-review-template.md`）。
 - `check-self-review` 要求：`verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。
-- **每页只跑一次页面自审**：`speckit.implement` 在工作流中带 `--no-self-review`，只实现页面；组件自审并入页面自审。页循环先运行 `build-page-evidence`，把 density、concepts、quiz、narration、overflow、overlap、rendered-check 和截图元数据汇总成一个 JSON；`self-review-page` 只读证据包、本页脚本块和截图，不重跑命令、不读全量文件。
+- **每页只跑一次页面自审**：`speckit.implement` 在工作流中带 `--no-self-review`，只实现页面；组件自审并入页面自审。页循环先运行 `build-page-evidence`，把 density、concepts、quiz、narration、overflow、overlap、rendered-check 和截图元数据汇总成一个 JSON；`page-review-ai.mjs` 再把这个 JSON、截图和暂存组件摘要/哈希一起发给模型，一次写完判断字段。
 - **自审绑定确切字节**：每份自审的 `reviewedArtifacts` 记录被审文件的 SHA-256；`check-self-review` 重算并比对，文件一变即 `stale review` 失败。改稿后必须重新自审，不能只改哈希。
 - **参考适配（页自审必填）**：读参考课件源码（如 `<shell>/source/lesson.js`）和本课内容，自己判断参考课里哪些可见内容属于参考课、本课对应是什么；不套固定清单，把识别和替换写进 self-review 的 `referenceAdaptation`。`check-self-review --require-reference-adaptation` 要求该字段非空，渲染页面不得残留参考课内容。
 - **标题前缀 / 重叠 / 截图新鲜度**：`check-script` 拒绝制作前缀标题；页循环的 `check-overlap` 拒绝文字与人物/插画相交；`build-screen --deck` + `check-rendered-section --deck` 保证截图来自当前 deck。

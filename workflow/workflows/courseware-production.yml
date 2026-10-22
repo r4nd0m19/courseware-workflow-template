@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.31.0"
+  version: "0.32.0"
   author: "courseware"
   description: "壳预览（占位内容 + 占位语音）人工审核 → 内容包 → 参考源码直拷风格包（哈希/几何/DOM/动画保真）→ AI 自审 → 人工审核 → 教学简报（含核心概念台账）→ 人类可读脚本（整份一次审）→ 概念覆盖阻断闸门 → 自学充分性审核（先报告后决定）→ 本课插画生成/溯源 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页壳站点构建/渲染/人工审 → Alpha/Beta/Gold"
 
@@ -568,6 +568,13 @@ steps:
     type: shell
     run: "node workflow/tools/build-tasks.mjs --lesson {{ inputs.lesson }} --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --out specs/{{ inputs.lesson_slug }}/tasks.md"
 
+  # Fail before building components/pages if the single-shot review model is
+  # not configured. The page reviewer is a direct HTTP call, not a coding agent;
+  # it needs an explicit vision-capable model/endpoint.
+  - id: check-page-review-config
+    type: shell
+    run: "node workflow/tools/page-review-ai.mjs --check-config"
+
   # ---------- component prebuild ----------
   # Build all declared new/extend components that are neither registered nor
   # staged, once before the page loop. The page loop then only reviews/registers
@@ -733,59 +740,22 @@ steps:
 
               - id: page-review-cache
                 type: shell
-                run: "node workflow/tools/page-review-cache.mjs --mode check --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --deck {{ inputs.deck_data }} --registry {{ inputs.component_registry }} --cache-dir review/{{ inputs.lesson_slug }}/page-review-cache --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --json"
+                run: "node workflow/tools/page-review-cache.mjs --mode check --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --deck {{ inputs.deck_data }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --unregistered \"{{ steps.load-page-components.output.data.unregistered | join(',') }}\" --cache-dir review/{{ inputs.lesson_slug }}/page-review-cache --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --json"
                 output_format: json
 
               - id: page-review-ai
                 type: if
                 condition: "{{ not steps.page-review-cache.output.data.reuse }}"
                 then:
+                  # Single-shot model call, NOT a coding agent. The tool reads
+                  # the evidence bundle, inlines the AI screenshots, makes one
+                  # HTTP request, validates one structured JSON object and
+                  # merges it into the skeleton. The model gets no tools and
+                  # cannot read the repository or run commands.
                   - id: self-review-page
-                    type: prompt
-                    integration: "{{ inputs.integration }}"
-                    prompt: |
-                      AI self-review before human review (stage: page-{{ steps.advance_section.output.data.section.id }}).
-                      Page: {{ steps.advance_section.output.data.section.id }} · {{ steps.advance_section.output.data.section.title }}
-                      Slide: {{ steps.advance_section.output.data.section.slides | join(', ') }}
-                      Read ONLY:
-                      1. the evidence bundle review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json
-                      2. the AI review image at `screenshots[].aiImage` in that bundle
-                         (1280-wide; JPEG by default, WebP if configured; if `aiImage` is empty,
-                         use `screenshots[].png`)
-                      Do not open the full-resolution PNG when `aiImage` exists.
-                      The bundle already contains the parsed page script (`scriptSlides`), density
-                      signals, the per-page reference mapping and the automated check results.
-                      Do not read courseware.md/storyboard/deck, do not run commands, and do not
-                      re-derive checks. Work in one pass and write the JSON once.
-                      The skeleton is pre-filled with deterministic results that are authoritative:
-                      - `concepts`: deterministic check-concepts verdicts; do not change.
-                      - `referenceAdaptation`: deterministic mapping summary; do not change it unless
-                        you find visible reference-lesson content not covered by the mapping (then add
-                        a blocking issue and append the reference string/replacement).
-                      - `automatedChecks` / `reviewedArtifacts`: keep them.
-                      Fill only these judgment fields in
-                      review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json:
-                      - density[].semanticUnits / verdict / notes: name what the screen newly asks the
-                        student to connect. Same-rule variants, two sides of a comparison, and review of
-                        taught content are one unit; multiple independent teaching points are blocking
-                        unless split, or marked exception with a written reason.
-                      - checklist:
-                        * interaction produces the declared evidence (not just watch/next);
-                        * visual layout and interaction are understandable; no obvious crowding or misread;
-                        * staged component behavior matches its brief (only if components are listed;
-                          otherwise n/a);
-                        * no placeholder, no personal data.
-                      - issues and verdict.
-                      High-signal rendered text, concepts, quiz keys, overflow/overlap, narration files and
-                      reference residue are already checked deterministically; do not re-judge them here.
-                      If this page has unregistered components
-                      ({{ steps.load-page-components.output.data.unregistered | join(', ') }} — empty means none),
-                      read only their staged packages under {{ inputs.component_staging }}/<id>/ and
-                      confirm behavior; add those files to `reviewedArtifacts`. Otherwise do not read
-                      component packages. The page gate also approves them into core.
-                      Do not write the MD; it is rendered from the JSON. If a safe fix is needed, make it
-                      and rerun build-page-evidence plus the affected gate. Verdict pass only if no blocking
-                      issues; otherwise stop.
+                    type: shell
+                    timeout: 600
+                    run: "node workflow/tools/page-review-ai.mjs --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --component-staging {{ inputs.component_staging }} --unregistered \"{{ steps.load-page-components.output.data.unregistered | join(',') }}\""
 
               - id: render-page-review
                 type: shell
@@ -797,7 +767,7 @@ steps:
 
               - id: page-review-cache-store
                 type: shell
-                run: "node workflow/tools/page-review-cache.mjs --mode store --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --deck {{ inputs.deck_data }} --registry {{ inputs.component_registry }} --cache-dir review/{{ inputs.lesson_slug }}/page-review-cache --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json"
+                run: "node workflow/tools/page-review-cache.mjs --mode store --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --deck {{ inputs.deck_data }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --unregistered \"{{ steps.load-page-components.output.data.unregistered | join(',') }}\" --cache-dir review/{{ inputs.lesson_slug }}/page-review-cache --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json"
 
           - id: review-page
             type: gui-gate

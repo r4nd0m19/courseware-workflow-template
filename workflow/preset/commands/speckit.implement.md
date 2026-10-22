@@ -97,7 +97,7 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 ## Self-review（强制，人工审核前）
 
-> 工作流会在 `$ARGUMENTS` 里传 `--no-self-review`：此时只实现本页，**跳过本节以及下面的 Human Review 节**；页面自审和人工审核分别由 workflow 的 `self-review-page` / `review-page` 步骤统一完成（自审读取本页 evidence bundle）。手动运行没有该参数时才执行这两节。
+> 工作流会在 `$ARGUMENTS` 里传 `--no-self-review`：此时只实现本页，**跳过本节以及下面的 Human Review 节**；页面自审和人工审核分别由 workflow 的 `self-review-page`（单次模型调用，读取本页 evidence bundle） / `review-page` 步骤统一完成。手动运行没有该参数时才执行这两节。
 
 - 写 `$COURSEWARE_REVIEW_DIR/self-review-page-<id>.json` 和 `.md`，模板按 `specify preset resolve self-review-template`。
 - 参考适配：读参考课件源码（如 `<shell>/source/lesson.js`）和本课内容，自己判断参考课里哪些可见内容属于参考课（文字、代码、文件名、标签、图片、人物道具、例子等，由你识别，不套固定清单），本课对应应该是什么；把识别项和替换写进自审的 `referenceAdaptation`。渲染页面不能残留参考课内容；壳/品牌/风格/布局保持不变。

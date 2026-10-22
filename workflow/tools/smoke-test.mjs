@@ -959,17 +959,43 @@ try {
   // ---- AI review image downscale ----
   total += 1
   const buildScreenSource = fs.readFileSync(path.join(root, 'tools/build-screen.mjs'), 'utf8')
-  const aiImagePrompt = String(findStep(workflowData.steps, 'self-review-page')?.prompt || '')
+  const pageReviewAiSource = fs.readFileSync(path.join(root, 'tools/page-review-ai.mjs'), 'utf8')
+  const pageReviewLibSource = fs.readFileSync(path.join(root, 'tools/page-review-lib.mjs'), 'utf8')
   const aiImagePass =
     buildScreenSource.includes('Page.captureScreenshot') &&
     buildScreenSource.includes('aiImage') &&
     pageEvidenceSource.includes('aiImage') &&
-    aiImagePrompt.includes('aiImage')
+    pageReviewAiSource.includes('shot.aiImage')
   console.log(`${aiImagePass ? 'PASS' : 'FAIL'} AI review image downscale`)
   if (!aiImagePass) {
     failed += 1
     console.error(
-      'build-screen must emit a smaller aiImage and the page evidence/prompt must point at it',
+      'build-screen must emit a smaller aiImage and the page review tool must prefer it over png',
+    )
+  }
+
+  // ---- single-shot page review (no coding agent) ----
+  total += 1
+  const selfReviewStep = findStep(workflowData.steps, 'self-review-page')
+  const pageReviewPreflight = findStep(workflowData.steps, 'check-page-review-config')
+  const singleShotPass =
+    selfReviewStep?.type === 'shell' &&
+    Number(selfReviewStep.timeout) >= 300 &&
+    String(selfReviewStep.run || '').includes('page-review-ai.mjs') &&
+    !selfReviewStep.prompt &&
+    pageReviewPreflight?.type === 'shell' &&
+    String(pageReviewPreflight.run || '').includes('--check-config') &&
+    fs.existsSync(path.join(root, 'tools/page-review-ai.mjs')) &&
+    fs.existsSync(path.join(root, 'tools/page-review-lib.mjs')) &&
+    pageReviewAiSource.includes('fetch(endpoint') &&
+    pageReviewLibSource.includes('Static-page rule') &&
+    !pageReviewAiSource.includes('child_process') &&
+    !pageReviewAiSource.includes('spawn(')
+  console.log(`${singleShotPass ? 'PASS' : 'FAIL'} single-shot page review (no coding agent)`)
+  if (!singleShotPass) {
+    failed += 1
+    console.error(
+      'page self-review must be a direct single-shot model call with no coding-agent CLI, and the workflow must preflight its config',
     )
   }
 
@@ -994,14 +1020,15 @@ try {
 
   // ---- compact page review scope ----
   total += 1
-  const pageReviewPrompt = String(findStep(workflowData.steps, 'self-review-page')?.prompt || '')
   const compactPageReviewPass =
-    pageReviewPrompt.includes('visual layout and interaction are understandable') &&
-    !pageReviewPrompt.includes('concepts[]: one entry') &&
-    !pageReviewPrompt.includes('referenceAdaptation: the bundle') &&
+    pageReviewLibSource.includes('visual layout') &&
+    pageReviewLibSource.includes('interaction evidence') &&
+    !pageReviewLibSource.includes('concepts[]: one entry') &&
+    !pageReviewLibSource.includes('referenceAdaptation: the bundle') &&
     pageEvidenceSource.includes('conceptEntries') &&
     pageEvidenceSource.includes('referenceAdaptationSummary') &&
-    pageEvidenceSource.includes('componentPlan')
+    pageEvidenceSource.includes('componentPlan') &&
+    pageEvidenceSource.includes('visual layout and interaction are understandable')
   console.log(`${compactPageReviewPass ? 'PASS' : 'FAIL'} compact page self-review scope`)
   if (!compactPageReviewPass) {
     failed += 1
@@ -1247,6 +1274,23 @@ try {
   if (!playerPass) {
     failed += 1
     console.error('write-player-page.mjs must emit a 1440×900 iframe player with whole-canvas scaling')
+  }
+
+  // ---- single-shot page review tool ----
+  total += 1
+  const pageReviewTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-page-review-ai.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const pageReviewTestOutput = `${pageReviewTest.stdout || ''}\n${pageReviewTest.stderr || ''}`
+  const pageReviewToolPass =
+    pageReviewTest.status === 0 && /14\/14 page-review-ai tests passed/.test(pageReviewTestOutput)
+  console.log(`${pageReviewToolPass ? 'PASS' : 'FAIL'} single-shot page review tool`)
+  if (!pageReviewToolPass) {
+    failed += 1
+    console.error(pageReviewTestOutput.trimEnd())
+    console.error('page-review-ai.mjs must pass its Anthropic/OpenAI/fallback/fail-closed tests')
   }
 
   // ---- page review cache round-trip ----
