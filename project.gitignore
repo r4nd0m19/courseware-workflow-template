@@ -10,6 +10,7 @@ review/shells/
 review/*/page-review-cache/
 review/*/page-review-raw-*.json
 review/*/page-review-request-*.json
+review/*/courseware.teacher.md
 prototype/shell-site/
 prototype/dist/
 prototype/site/audio/

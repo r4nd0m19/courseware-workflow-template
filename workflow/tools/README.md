@@ -209,6 +209,10 @@ node workflow/tools/build-self-review-gold.mjs ...
 node workflow/tools/render-self-review-md.mjs review/<slug>/self-review-page-S02B.json \
   --out review/<slug>/self-review-page-S02B.md --screenshots screenshots/<slug>
 
+# 老师版脚本（0.35.0）：只含屏幕内容/旁白/转场/一行学生动作，不含交互设计/制作字段
+node workflow/tools/render-teacher-script.mjs specs/<slug>/courseware.md \
+  --out review/<slug>/courseware.teacher.md
+
 # 参考适配（0.24.0）：每课一次映射 + 每页确定性残留扫描
 node workflow/tools/check-reference-adaptation.mjs \
   review/<slug>/reference-adaptation.json \

@@ -104,7 +104,8 @@ node workflow/tools/run-workflow.mjs courseware-production \
 
 - `specs/<lesson>/spec.md`：教学简报（UbD）。
 - `specs/<lesson>/concepts.yml`：核心概念台账；每个概念的术语、定义、`mustAppear` 短语必须真正出现在引入页的屏幕内容里。只写在旁白或代码声明里不算。
-- `specs/<lesson>/courseware.md`：人类可读课件脚本，整份一次人工审核。
+- `specs/<lesson>/courseware.md`：人类可读课件脚本，整份一次人工审核；交互设计与制作字段保留在这里供工具使用。
+- `review/<lesson>/courseware.teacher.md`：老师审核版脚本，由 `render-teacher-script` 自动生成（屏幕内容、旁白、转场、一行学生动作），不手改、不提交。
 - `specs/<lesson>/storyboard.yml`：从 `courseware.md` 投影出的分镜，不应手工改。
 - `specs/<lesson>/deck.json`：声明式 deck；只允许 `type` / `component` / `props` 等数据字段，禁止 `style`、`className`、`html`、`innerHTML`、`on*`。
 - `review/shells/<shell_slug>/shell-preview.md` / `shell-shots/`：壳审核证据，由独立 `courseware-shell` 的 `validate-shell` 生成；`shell-preview.json` 记录预览服务的 URL/PID，`shell-report.json` 是完整报告。壳预览自带 30 页占位内容与 4 音色占位语音（`shells/<id>/site/preview-audio/`、`preview-data.json`）。不要手改。
@@ -132,6 +133,7 @@ node workflow/tools/smoke-test.mjs
 
 - 自审（self-review）可以修安全的小问题，但不得把脚本/截图标成人工 APPROVED；人工审核点必须留给人。**页面自审是例外**：0.32.0 起它是单次模型调用，没有文件/命令工具，不能修任何东西；它报 blocking 就失败，由主 agent 修复后重跑页面。
 - 0.22.0 起 `self-review-inputs` / `self-review-alpha` / `self-review-beta` / `self-review-gold` 是确定性 shell 步骤（从门禁结果与逐页自审汇总），不要当成 AI 自审去手写或改判；`self-review-script` / `self-review-component-plan` 仍是 AI 判断步骤，证据包与骨架由工具生成。**`self-review-page` 自 0.32.0 起不是 coding agent 步骤**，而是 `page-review-ai.mjs` 的单次 HTTP 模型调用。
+- 0.35.0 起老师审核脚本看**老师版**：`render-teacher-script` 从 `courseware.md` 确定性生成 `review/<lesson>/courseware.teacher.md`，只含标题、对应目标、本屏作用、屏幕内容、一行“学生要做”摘要、旁白、转场；`review-script` gate 的 `show_file` 指向这份。交互设计和制作字段继续留在 `courseware.md`（唯一内容源，检查工具/分镜投影依赖），不要从源文件删除。老师版是自动生成物，不手改；脚本批准账本仍绑定完整 `courseware.md`，源文件任何编辑都会使批准失效。
 - 0.34.0 起 density/segmenting 与交互/组件复杂度以**脚本自审为唯一权威**（`density_authority` 默认 `script`）：`build-script-review-evidence` 生成 `density[]` 与 `complexity[]` 骨架，`self-review-script` 在脚本阶段判断一屏一个语义边界、交互/组件是否过复杂；`check-self-review-script` 用 `--script --role script --density-authority script` 强制。多语义单元或多组件必须拆屏，或标 `exception` 并写明理由；有问题先改脚本，不要留到页面阶段。页面自审不再判断 density（`page-review-ai` 使用无 density 的输出 schema），只判断交互证据、视觉版面、组件行为、占位/个人信息。旧的页面 density 代码保留用于回滚：显式传 `-i density_authority=page` 才恢复页面唯一权威；不要同时启用两套权威。Alpha/Gold 仍继承脚本阶段已通过的 density 结论。
 - 0.23.0 的“density 以页面自审为唯一权威”已被 0.34.0 取代，仅作为历史说明保留；不要按 0.23.0 的规则让脚本自审跳过 density。
 - 0.24.0 起参考适配每课生成一次 `review/<lesson>/reference-adaptation.json`（`residue: replace|allow`），页自审只读映射做增量确认；`check-reference-residue` 会从渲染后的 `#slide` 文本扫描 `replace` 字符串。不要每页重读 `shells/<id>/source/lesson.js`，也不要把通用 C++ 语法标成 `replace`。
