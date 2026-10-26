@@ -445,6 +445,7 @@ try {
     [reviewDensityPass, '--script', script, '--role', 'page', '--density-authority', 'page'],
     0,
   )
+  run('teacher script view', 'test-teacher-script.mjs', [], 0)
   run('self-study audit pass', 'check-self-study.mjs', [selfStudy, '--script', script, '--proposal', selfStudyProposal], 0)
   run('self-study audit fail', 'check-self-study.mjs', [selfStudyFail, '--script', script, '--proposal', selfStudyProposal], 1)
   run('style pack full pass', 'validate-style-pack.mjs', [fullStyle, '--check-baselines'], 0)
@@ -1174,6 +1175,27 @@ try {
     failed += 1
     console.error(
       'check-self-review-script must pass --script --role script --density-authority, and density_authority must default to script',
+    )
+  }
+
+  // ---- teacher-facing script review ----
+  total += 1
+  const teacherRenderStep = findStep(workflowData.steps, 'render-teacher-script')
+  const scriptReviewGate = findStep(workflowData.steps, 'review-script')
+  const topLevelIds = workflowData.steps.map((step) => step.id)
+  const teacherScriptPass =
+    teacherRenderStep?.type === 'shell' &&
+    String(teacherRenderStep.run || '').includes('render-teacher-script.mjs') &&
+    String(teacherRenderStep.run || '').includes('courseware.teacher.md') &&
+    scriptReviewGate?.type === 'gui-gate' &&
+    scriptReviewGate.show_file === 'review/{{ inputs.lesson_slug }}/courseware.teacher.md' &&
+    topLevelIds.indexOf('render-teacher-script') >= 0 &&
+    topLevelIds.indexOf('render-teacher-script') < topLevelIds.indexOf('review-script')
+  console.log(`${teacherScriptPass ? 'PASS' : 'FAIL'} teacher-facing script review`)
+  if (!teacherScriptPass) {
+    failed += 1
+    console.error(
+      'render-teacher-script must run before review-script, and review-script must show review/<lesson>/courseware.teacher.md',
     )
   }
 

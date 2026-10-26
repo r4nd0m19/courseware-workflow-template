@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.34.0"
+  version: "0.35.0"
   author: "courseware"
   description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 教学简报 → 人类可读脚本（整份一次审）→ 概念/自学/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
 
@@ -353,10 +353,18 @@ steps:
     type: shell
     run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --script {{ inputs.courseware_script }} --role script --density-authority {{ inputs.density_authority }} --concepts {{ inputs.concepts }}"
 
+  # The teacher reviews the lesson, not the production metadata. Render a
+  # deterministic view with screen content, narration, transition and a
+  # one-line student-action summary; the full courseware.md remains the single
+  # source of truth and is still what the approval ledger binds.
+  - id: render-teacher-script
+    type: shell
+    run: "node workflow/tools/render-teacher-script.mjs {{ inputs.courseware_script }} --out review/{{ inputs.lesson_slug }}/courseware.teacher.md"
+
   - id: review-script
     type: gui-gate
-    message: "Review the human-readable courseware script (courseware.md): per-screen content, interaction design, narration, misconception feedback, split pages."
-    show_file: "review/{{ inputs.lesson_slug }}/self-review-script.md"
+    message: "Review the teacher-facing courseware script: per-screen content, narration, transition, and the one-line student action."
+    show_file: "review/{{ inputs.lesson_slug }}/courseware.teacher.md"
     options: [approve, reject]
     on_reject: abort
 
