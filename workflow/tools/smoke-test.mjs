@@ -70,7 +70,7 @@ function scriptDensity(scriptPath) {
   return JSON.parse(res.stdout)
 }
 
-function writeScriptReview(file, { density, hash } = {}) {
+function writeScriptReview(file, { density, complexity, hash } = {}) {
   const review = {
     stage: 'script',
     artifactPaths: [script],
@@ -82,6 +82,7 @@ function writeScriptReview(file, { density, hash } = {}) {
     reviewedAt: '2026-10-19T00:00:00Z',
   }
   if (density) review.density = density
+  if (complexity) review.complexity = complexity
   fs.writeFileSync(file, JSON.stringify(review, null, 2))
   return file
 }
@@ -176,12 +177,18 @@ conceptReview.concepts = [
 fs.writeFileSync(reviewConceptPass, JSON.stringify(conceptReview, null, 2))
 
 const smokeDensity = scriptDensity(script)
-for (const slide of smokeDensity.slides) {
-  slide.semanticUnits = [{ label: `${slide.slideId} smoke unit`, evidence: 'smoke evidence' }]
-  slide.verdict = 'pass'
-  slide.notes = ''
-}
-const cloneDensity = () => JSON.parse(JSON.stringify(smokeDensity))
+// density-report also emits complexity signals; the review schema keeps them in
+// the separate `complexity` array, so fixture entries must not copy them in.
+const densityEntriesFrom = (report) =>
+  report.slides.map((slide) => ({
+    slideId: slide.slideId,
+    semanticUnits: [{ label: `${slide.slideId} smoke unit`, evidence: 'smoke evidence' }],
+    signals: slide.signals,
+    verdict: 'pass',
+    notes: '',
+  }))
+const cloneDensity = () =>
+  JSON.parse(JSON.stringify({ slides: densityEntriesFrom(smokeDensity) }))
 
 const reviewDensityPass = writeScriptReview(path.join(tmpRoot, 'review-density-pass.json'), {
   density: cloneDensity().slides,
@@ -211,6 +218,44 @@ multiUnitExceptionDensity.slides[0].notes = 'two worked examples of the same rul
 const reviewDensityMultiException = writeScriptReview(
   path.join(tmpRoot, 'review-density-multi-exception.json'),
   { density: multiUnitExceptionDensity.slides },
+)
+const smokeComplexity = smokeDensity.slides.map((slide) => {
+  const components = Number(slide.complexity?.components || 0)
+  return {
+    slideId: slide.slideId,
+    signals: slide.complexity,
+    verdict: components > 1 ? 'exception' : 'pass',
+    notes: components > 1 ? 'several components form one page-level learning action' : '',
+  }
+})
+const reviewScriptAuthorityPass = writeScriptReview(
+  path.join(tmpRoot, 'review-script-authority-pass.json'),
+  { density: cloneDensity().slides, complexity: smokeComplexity },
+)
+const reviewScriptAuthorityNoComplexity = writeScriptReview(
+  path.join(tmpRoot, 'review-script-authority-no-complexity.json'),
+  { density: cloneDensity().slides },
+)
+const complexDensity = JSON.parse(JSON.stringify(smokeComplexity))
+complexDensity[0].signals = { ...complexDensity[0].signals, components: 2, newComponents: 0 }
+complexDensity[0].verdict = 'pass'
+complexDensity[0].notes = ''
+const reviewScriptAuthorityComplex = writeScriptReview(
+  path.join(tmpRoot, 'review-script-authority-complex.json'),
+  { density: cloneDensity().slides, complexity: complexDensity },
+)
+const complexException = JSON.parse(JSON.stringify(smokeComplexity))
+complexException[0].verdict = 'exception'
+complexException[0].notes = 'two panels are one comparison step'
+const reviewScriptAuthorityComplexException = writeScriptReview(
+  path.join(tmpRoot, 'review-script-authority-complex-exception.json'),
+  { density: cloneDensity().slides, complexity: complexException },
+)
+const mismatchComplexity = JSON.parse(JSON.stringify(smokeComplexity))
+mismatchComplexity[0].signals = { ...mismatchComplexity[0].signals, components: 99 }
+const reviewScriptAuthorityComplexMismatch = writeScriptReview(
+  path.join(tmpRoot, 'review-script-authority-complex-mismatch.json'),
+  { density: cloneDensity().slides, complexity: mismatchComplexity },
 )
 
 try {
@@ -335,6 +380,69 @@ try {
     'self-review multi-unit exception passes',
     'check-self-review.mjs',
     [reviewDensityMultiException, '--script', script],
+    0,
+  )
+  run(
+    'script-authority density and complexity pass',
+    'check-self-review.mjs',
+    [reviewScriptAuthorityPass, '--script', script, '--role', 'script', '--density-authority', 'script'],
+    0,
+  )
+  run(
+    'script-authority missing complexity fails',
+    'check-self-review.mjs',
+    [
+      reviewScriptAuthorityNoComplexity,
+      '--script',
+      script,
+      '--role',
+      'script',
+      '--density-authority',
+      'script',
+    ],
+    1,
+    'complexity report is required',
+  )
+  run(
+    'script-authority complex interaction fails',
+    'check-self-review.mjs',
+    [reviewScriptAuthorityComplex, '--script', script, '--role', 'script', '--density-authority', 'script'],
+    1,
+    'component(s)',
+  )
+  run(
+    'script-authority complex exception passes',
+    'check-self-review.mjs',
+    [
+      reviewScriptAuthorityComplexException,
+      '--script',
+      script,
+      '--role',
+      'script',
+      '--density-authority',
+      'script',
+    ],
+    0,
+  )
+  run(
+    'script-authority complexity signal mismatch fails',
+    'check-self-review.mjs',
+    [
+      reviewScriptAuthorityComplexMismatch,
+      '--script',
+      script,
+      '--role',
+      'script',
+      '--density-authority',
+      'script',
+    ],
+    1,
+    'complexity signals for',
+  )
+  run(
+    'page-authority role keeps density at page review',
+    'check-self-review.mjs',
+    [reviewDensityPass, '--script', script, '--role', 'page', '--density-authority', 'page'],
     0,
   )
   run('self-study audit pass', 'check-self-study.mjs', [selfStudy, '--script', script, '--proposal', selfStudyProposal], 0)
@@ -1050,19 +1158,22 @@ try {
     )
   }
 
-  // ---- density is page-primary ----
+  // ---- density is script-primary ----
   total += 1
   const scriptReviewCheckStep = findStep(workflowData.steps, 'check-self-review-script')
-  const scriptReviewNoDensity =
-    scriptReviewCheckStep &&
-    !String(scriptReviewCheckStep.run || '').includes('--script')
+  const scriptReviewCheckRun = String(scriptReviewCheckStep?.run || '')
+  const scriptReviewGatesDensity =
+    scriptReviewCheckRun.includes('--script') &&
+    scriptReviewCheckRun.includes('--role script') &&
+    scriptReviewCheckRun.includes('--density-authority') &&
+    /^  density_authority:\n    type: string\n    default: "script"/m.test(workflowYaml)
   console.log(
-    `${scriptReviewNoDensity ? 'PASS' : 'FAIL'} script review does not gate density`,
+    `${scriptReviewGatesDensity ? 'PASS' : 'FAIL'} script review gates density and complexity`,
   )
-  if (!scriptReviewNoDensity) {
+  if (!scriptReviewGatesDensity) {
     failed += 1
     console.error(
-      'check-self-review-script must not pass --script; density is judged in the page self-review',
+      'check-self-review-script must pass --script --role script --density-authority, and density_authority must default to script',
     )
   }
 
@@ -1426,7 +1537,7 @@ try {
   )
   const pageReviewTestOutput = `${pageReviewTest.stdout || ''}\n${pageReviewTest.stderr || ''}`
   const pageReviewToolPass =
-    pageReviewTest.status === 0 && /15\/15 page-review-ai tests passed/.test(pageReviewTestOutput)
+    pageReviewTest.status === 0 && /16\/16 page-review-ai tests passed/.test(pageReviewTestOutput)
   console.log(`${pageReviewToolPass ? 'PASS' : 'FAIL'} single-shot page review tool`)
   if (!pageReviewToolPass) {
     failed += 1

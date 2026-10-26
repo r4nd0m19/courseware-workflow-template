@@ -15,11 +15,17 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "stage": { "type": "string", "minLength": 1 },
+    "stage": {
+      "type": "string",
+      "minLength": 1
+    },
     "artifactPaths": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "reviewedArtifacts": {
       "type": "array",
@@ -27,10 +33,16 @@
       "description": "Content-hash binding: the review only vouches for these exact bytes.",
       "items": {
         "type": "object",
-        "required": ["path", "sha256"],
+        "required": [
+          "path",
+          "sha256"
+        ],
         "additionalProperties": false,
         "properties": {
-          "path": { "type": "string", "minLength": 1 },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
           "sha256": {
             "type": "string",
             "pattern": "^[a-fA-F0-9]{64}$"
@@ -40,23 +52,40 @@
     },
     "density": {
       "type": "array",
-      "description": "Per-screen segmenting review. Required by check-self-review when --script/--storyboard are supplied.",
+      "description": "Per-screen segmenting review. Required by check-self-review for script reviews when density authority is script, and for page reviews when density authority is page (legacy).",
       "items": {
         "type": "object",
-        "required": ["slideId", "semanticUnits", "signals", "verdict"],
+        "required": [
+          "slideId",
+          "semanticUnits",
+          "signals",
+          "verdict"
+        ],
         "additionalProperties": false,
         "properties": {
-          "slideId": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+          "slideId": {
+            "type": "string",
+            "pattern": "^S[0-9]+[A-Z]?$"
+          },
           "semanticUnits": {
             "type": "array",
             "minItems": 1,
             "items": {
               "type": "object",
-              "required": ["label", "evidence"],
+              "required": [
+                "label",
+                "evidence"
+              ],
               "additionalProperties": false,
               "properties": {
-                "label": { "type": "string", "minLength": 1 },
-                "evidence": { "type": "string", "minLength": 1 }
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "evidence": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             }
           },
@@ -77,24 +106,96 @@
             ],
             "additionalProperties": false,
             "properties": {
-              "contentRefs": { "type": "integer", "minimum": 0 },
-              "tableRows": { "type": "integer", "minimum": 0 },
-              "tableCols": { "type": "integer", "minimum": 0 },
-              "textRows": { "type": "integer", "minimum": 0 },
-              "textBlocks": { "type": "integer", "minimum": 0 },
-              "codeLines": { "type": "integer", "minimum": 0 },
-              "codeBlocks": { "type": "integer", "minimum": 0 },
-              "bulletItems": { "type": "integer", "minimum": 0 },
-              "narrationSentences": { "type": "integer", "minimum": 0 },
-              "narrationChars": { "type": "integer", "minimum": 0 },
-              "screenChars": { "type": "integer", "minimum": 0 }
+              "contentRefs": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tableRows": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tableCols": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "textRows": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "textBlocks": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "codeLines": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "codeBlocks": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "bulletItems": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "narrationSentences": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "narrationChars": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "screenChars": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           },
           "verdict": {
             "type": "string",
-            "enum": ["pass", "exception", "fail"]
+            "enum": [
+              "pass",
+              "exception",
+              "fail"
+            ]
           },
-          "notes": { "type": "string" }
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "complexity": {
+      "type": "array",
+      "description": "Per-screen interaction/component complexity review (script authority).",
+      "items": {
+        "type": "object",
+        "required": [
+          "slideId",
+          "signals",
+          "verdict"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "slideId": {
+            "type": "string",
+            "pattern": "^S[0-9]+[A-Z]?$"
+          },
+          "signals": {
+            "type": "object"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "exception",
+              "fail"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
         }
       }
     },
@@ -107,16 +208,35 @@
       "description": "Per-concept coverage review. Required by check-self-review when --concepts is supplied.",
       "items": {
         "type": "object",
-        "required": ["conceptId", "verdict", "evidence"],
+        "required": [
+          "conceptId",
+          "verdict",
+          "evidence"
+        ],
         "additionalProperties": false,
         "properties": {
-          "conceptId": { "type": "string", "pattern": "^C[0-9]{2,}$" },
-          "verdict": { "type": "string", "enum": ["pass", "gap"] },
-          "evidence": { "type": "string", "minLength": 1 },
+          "conceptId": {
+            "type": "string",
+            "pattern": "^C[0-9]{2,}$"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "gap"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
           "slideIds": {
             "type": "array",
             "uniqueItems": true,
-            "items": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" }
+            "items": {
+              "type": "string",
+              "pattern": "^S[0-9]+[A-Z]?$"
+            }
           }
         }
       }
@@ -126,12 +246,27 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["name", "status"],
+        "required": [
+          "name",
+          "status"
+        ],
         "additionalProperties": false,
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
-          "notes": { "type": "string" }
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "skipped"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
         }
       }
     },
@@ -140,12 +275,27 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["item", "status"],
+        "required": [
+          "item",
+          "status"
+        ],
         "additionalProperties": false,
         "properties": {
-          "item": { "type": "string", "minLength": 1 },
-          "status": { "type": "string", "enum": ["pass", "fail", "n/a"] },
-          "notes": { "type": "string" }
+          "item": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "n/a"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
         }
       }
     },
@@ -153,17 +303,41 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["description", "severity", "fixed"],
+        "required": [
+          "description",
+          "severity",
+          "fixed"
+        ],
         "additionalProperties": false,
         "properties": {
-          "description": { "type": "string", "minLength": 1 },
-          "severity": { "type": "string", "enum": ["blocking", "non-blocking"] },
-          "fixed": { "type": "boolean" }
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "blocking",
+              "non-blocking"
+            ]
+          },
+          "fixed": {
+            "type": "boolean"
+          }
         }
       }
     },
-    "verdict": { "type": "string", "enum": ["pass", "fail"] },
-    "reviewedAt": { "type": "string", "minLength": 1 },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    },
+    "reviewedAt": {
+      "type": "string",
+      "minLength": 1
+    },
     "autoGenerated": {
       "type": "boolean",
       "description": "True when the review was produced deterministically from gate results and page reviews, without an AI judgment call."
@@ -173,15 +347,33 @@
       "description": "Provenance of the single-shot page review. Optional for deterministic reviews.",
       "additionalProperties": false,
       "properties": {
-        "mode": { "type": "string" },
-        "api": { "type": "string" },
-        "model": { "type": "string" },
-        "baseUrlHost": { "type": "string" },
-        "structuredOutput": { "type": "string" },
-        "durationMs": { "type": "number" },
-        "attempts": { "type": "integer" },
-        "usage": { "type": "object" },
-        "responseId": { "type": "string" },
+        "mode": {
+          "type": "string"
+        },
+        "api": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "baseUrlHost": {
+          "type": "string"
+        },
+        "structuredOutput": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "number"
+        },
+        "attempts": {
+          "type": "integer"
+        },
+        "usage": {
+          "type": "object"
+        },
+        "responseId": {
+          "type": "string"
+        },
         "promptSha256": {
           "type": "string",
           "pattern": "^[a-fA-F0-9]{64}$"
@@ -190,10 +382,25 @@
           "type": "string",
           "pattern": "^[a-fA-F0-9]{64}$"
         },
-        "imageCount": { "type": "integer" },
-        "promptBytes": { "type": "integer" },
-        "cached": { "type": "boolean" },
-        "fallbackReason": { "type": "string" }
+        "imageCount": {
+          "type": "integer"
+        },
+        "promptBytes": {
+          "type": "integer"
+        },
+        "cached": {
+          "type": "boolean"
+        },
+        "fallbackReason": {
+          "type": "string"
+        },
+        "densityAuthority": {
+          "type": "string",
+          "enum": [
+            "script",
+            "page"
+          ]
+        }
       }
     }
   }

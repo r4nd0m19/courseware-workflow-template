@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.33.1"
+  version: "0.34.0"
   author: "courseware"
   description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 教学简报 → 人类可读脚本（整份一次审）→ 概念/自学/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
 
@@ -127,6 +127,10 @@ inputs:
     type: string
     default: "70"
     prompt: "Number of pages/slides for the overflow gate"
+  density_authority:
+    type: string
+    default: "script"
+    prompt: "Density authority: script (default; review before implementation) or page (legacy; rendered page review)"
   baseline_dir:
     type: string
     default: ""
@@ -287,7 +291,7 @@ steps:
   # hashes and automated checks; the AI fills only judgment fields.
   - id: build-script-review-evidence
     type: shell
-    run: "node workflow/tools/build-script-review-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --concepts {{ inputs.concepts }} --registry {{ inputs.component_registry }} --review-sections {{ inputs.review_sections }} --review-dir review/{{ inputs.lesson_slug }} --evidence-out review/{{ inputs.lesson_slug }}/self-review-script-evidence.json --out review/{{ inputs.lesson_slug }}/self-review-script.json --md review/{{ inputs.lesson_slug }}/self-review-script.md"
+    run: "node workflow/tools/build-script-review-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --concepts {{ inputs.concepts }} --registry {{ inputs.component_registry }} --review-sections {{ inputs.review_sections }} --review-dir review/{{ inputs.lesson_slug }} --density-authority {{ inputs.density_authority }} --evidence-out review/{{ inputs.lesson_slug }}/self-review-script-evidence.json --out review/{{ inputs.lesson_slug }}/self-review-script.json --md review/{{ inputs.lesson_slug }}/self-review-script.md"
 
   - id: self-review-script
     type: prompt
@@ -297,36 +301,57 @@ steps:
       Read ONLY review/{{ inputs.lesson_slug }}/self-review-script-evidence.json and
       the spec.md path recorded in that bundle (`spec.path`). The evidence bundle contains every slide's
       screenContent, interactionDesign, narration, transition, interaction/componentPlan
-      fields, quiz-key results, concept results and the self-study audit summary.
-      Do not re-read courseware.md/content pack/style pack/registry, and do not
-      re-run gates; the auto-generated checks and hashes are already in the skeleton.
-      Density/segmenting is judged by the rendered page self-review, where the
-      screenshot and page evidence exist; do not fill `density` here and do not
-      duplicate that judgment.
+      fields, density signals, interaction complexity signals, quiz-key results, concept
+      results and the self-study audit summary.
+      Density authority for this run: {{ inputs.density_authority }}.
+      If it is "script" (default), density and interaction complexity are judged HERE,
+      before implementation. If it is "page" (legacy), do not fill density/complexity;
+      the rendered page review owns density.
+      Do not re-read content pack/style pack/registry, and do not re-run unrelated gates;
+      the auto-generated checks and hashes are already in the skeleton. You may read
+      courseware.md only when applying a safe script fix.
       Fill the skeleton review/{{ inputs.lesson_slug }}/self-review-script.json in place:
+      - density[] (script authority only): one entry per slide; name the semantic units.
+        One screen asks for one semantic boundary; same-rule variants, two sides of one
+        comparison, and review of taught content are one unit. Multiple independent
+        teaching points are blocking unless split, or marked exception with a written
+        reason.
+      - complexity[] (script authority only): one entry per slide; judge whether the
+        declared interaction/component is too complex for one screen. Use the structured
+        signals (components/newComponents/interactionLevel) plus the interaction design:
+        how many independent controls, student actions, states, and feedback branches the
+        student must handle; whether the screen can be described and tested as one coherent
+        action. Multiple components, or multiple new/extend components, are blocking unless
+        marked exception with a written reason. A component is not "too complex" merely
+        because it has several modes; it is too complex when the student must coordinate
+        several independent learning actions on one screen.
       - concepts[]: one entry per ledger concept (conceptId, pass/gap, evidence,
         slideIds). Cite the introducing slide and confirm the term, one-sentence
         definition and every mustAppear phrase are readable in 屏幕内容, not only in
         narration or a code declaration. A missing or gap entry is blocking.
-      - checklist: interaction-first (per screen, use interaction.contentDemand /
-        learningAction / evidence / whyStatic; watch only for observe with a teaching
-        reason, never "no component"; quiz only for retrieval or prediction; every
-        objective has at least one non-watch interaction), verbatim
-        code/output/quiz text, no TODO/placeholder, answer-position distribution from
-        quizKeys, self-study supplements labelled and page count matching pageBudget,
+      - checklist: (script authority) density one semantic boundary per screen and
+        interaction/component complexity fits one coherent student action; interaction-first
+        (per screen, use interaction.contentDemand / learningAction / evidence / whyStatic;
+        watch only for observe with a teaching reason, never "no component"; quiz only for
+        retrieval or prediction; every objective has at least one non-watch interaction),
+        verbatim code/output/quiz text, no TODO/placeholder, answer-position distribution
+        from quizKeys, self-study supplements labelled and page count matching pageBudget,
         no personal data.
       - issues and verdict.
-      Record the per-screen interaction table in
+      Record the per-screen interaction table and the density/complexity conclusions in
       review/{{ inputs.lesson_slug }}/self-review-script.md (keep the skeleton's
       automatedChecks and reviewedArtifacts unchanged).
-      Verdict pass only if no blocking issues; if a safe script fix is needed,
-      edit courseware.md, rerun build-script-review-evidence to refresh hashes and
-      the skeleton, then refill the judgment fields. Do not hand-edit hashes.
-      Do not mark the script APPROVED; only the teacher can.
+      Verdict pass only if no blocking issues. If a safe script fix exists inside the
+      current page structure (trim/relocate content, simplify the interaction, split one
+      existing screen's content), edit courseware.md, rerun build-script-review-evidence
+      to refresh hashes and the skeleton, then refill the judgment fields. If the fix
+      needs a new page or a change to review-sections.yml, stop with a blocking issue;
+      the main agent must rerun speckit.script and re-enter the script review. Do not
+      hand-edit hashes. Do not mark the script APPROVED; only the teacher can.
 
   - id: check-self-review-script
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --concepts {{ inputs.concepts }}"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --script {{ inputs.courseware_script }} --role script --density-authority {{ inputs.density_authority }} --concepts {{ inputs.concepts }}"
 
   - id: review-script
     type: gui-gate
@@ -689,7 +714,7 @@ steps:
               # one JSON instead of re-running commands/reading every file.
               - id: build-page-evidence
                 type: shell
-                run: "node workflow/tools/build-page-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --deck {{ inputs.deck_data }} --screenshots screenshots/{{ inputs.lesson_slug }} --url \"{{ inputs.deck_url }}\" --concepts {{ inputs.concepts }} --narration {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --reference-source \"{{ inputs.shell }}/source/lesson.js\" --reference-adaptation review/{{ inputs.lesson_slug }}/reference-adaptation.json --out review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"
+                run: "node workflow/tools/build-page-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --deck {{ inputs.deck_data }} --screenshots screenshots/{{ inputs.lesson_slug }} --url \"{{ inputs.deck_url }}\" --concepts {{ inputs.concepts }} --narration {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --reference-source \"{{ inputs.shell }}/source/lesson.js\" --reference-adaptation review/{{ inputs.lesson_slug }}/reference-adaptation.json --density-authority {{ inputs.density_authority }} --script-review review/{{ inputs.lesson_slug }}/self-review-script.json --out review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"
 
               - id: page-review-cache
                 type: shell
@@ -708,7 +733,7 @@ steps:
                   - id: self-review-page
                     type: shell
                     timeout: 600
-                    run: "node workflow/tools/page-review-ai.mjs --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --component-staging {{ inputs.component_staging }} --unregistered \"{{ steps.load-page-components.output.data.unregistered | join(',') }}\""
+                    run: "node workflow/tools/page-review-ai.mjs --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --density-authority {{ inputs.density_authority }} --component-staging {{ inputs.component_staging }} --unregistered \"{{ steps.load-page-components.output.data.unregistered | join(',') }}\""
 
               - id: render-page-review
                 type: shell
@@ -716,7 +741,7 @@ steps:
 
               - id: check-self-review-page
                 type: shell
-                run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }} --require-reference-adaptation"
+                run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --concepts {{ inputs.concepts }} --role page --density-authority {{ inputs.density_authority }} --require-reference-adaptation"
 
               - id: page-review-cache-store
                 type: shell

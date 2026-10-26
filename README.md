@@ -4,11 +4,11 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`courseware-production` `0.33.1`（83 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
-- preset：`courseware` `0.3.8`
-- 模板版本：`0.15.1`（2026-10-22）
+- 工作流版本：`courseware-production` `0.34.0`（83 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
+- preset：`courseware` `0.3.9`
+- 模板版本：`0.16.0`（2026-10-26）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
-- 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；density 以页面自审为唯一权威；参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。页面自审是**单次模型调用**（证据 + 内联截图 → 结构化 JSON，无文件/命令工具），模型/端点/key 由用户配置。
+- 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；**density 与交互/组件复杂度在脚本自审阶段判定**（`density_authority=script` 默认），页面自审不再判断 density；`density_authority=page` 保留旧路径用于回滚。参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。页面自审是**单次模型调用**（证据 + 内联截图 → 结构化 JSON，无文件/命令工具），模型/端点/key 由用户配置。
 - 播放器：`player.html` 固定 1440×900 画布、整体缩放；无外层工具栏，页面上只看到课件本身；宽屏两侧用课件自身背景延伸，不再留天空色空白；浏览器缩放不再重排，审核链接使用播放器。
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
 
@@ -140,9 +140,9 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 
 ```bash
 specify workflow info courseware-shell        # 应显示 0.1.0、3 steps
-specify workflow info courseware-production   # 应显示 0.33.1、83 steps
+specify workflow info courseware-production   # 应显示 0.34.0、83 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 完整仓库 124/124；模板仓库安装后 119/119（2 项壳检查 SKIP）
+node workflow/tools/smoke-test.mjs            # 完整仓库 130/130；模板仓库 125/125（2 项壳检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
 

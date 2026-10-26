@@ -6,8 +6,8 @@
 // approved script once, runs the cheap script gates, and writes both:
 //   - self-review-script-evidence.json (compact per-slide evidence)
 //   - self-review-script.json (skeleton with hashes/checks pre-filled)
-// The AI then fills only judgment fields (interaction-first, concepts, checklist).
-// Density/segmenting is deliberately left to the rendered page self-review.
+// The AI then fills only judgment fields (interaction-first, concepts, checklist,
+// and — when density authority is script — density and interaction complexity).
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData } from './lib.mjs'
@@ -30,6 +30,11 @@ const conceptsPath = parseFlagValue(args, '--concepts')
 const registryPath = parseFlagValue(args, '--registry', 'registry/index.json')
 const reviewSectionsPath = parseFlagValue(args, '--review-sections')
 const reviewDir = parseFlagValue(args, '--review-dir', `review/${lessonSlug}`)
+const densityAuthority = parseFlagValue(args, '--density-authority', 'page')
+if (!['script', 'page'].includes(densityAuthority)) {
+  console.error(`FAIL script evidence — --density-authority must be script or page, got ${densityAuthority}`)
+  process.exit(2)
+}
 const evidencePath = parseFlagValue(
   args,
   '--evidence-out',
@@ -104,9 +109,25 @@ try {
   // out rather than failing the evidence build.
 }
 
-// Density is intentionally absent here: segmenting is judged by the rendered
-// page self-review, where the screenshot and the page evidence bundle exist.
-// The script review must not duplicate that judgment or pay for its signals.
+// Script-authority density: the script is the only place where overload can
+// be caught before implementation. `density-report` is script-only here (the
+// storyboard is projected later); contentRefs come from the machine fields.
+let densityJson = null
+if (densityAuthority === 'script') {
+  const densityRun = runTool('density-report.mjs', [scriptPath, '--json'])
+  checks.push(densityRun)
+  if (densityRun.status === 'pass') {
+    try {
+      densityJson = JSON.parse(densityRun.stdout)
+    } catch {
+      checks.push({
+        name: 'density-report parse',
+        status: 'fail',
+        notes: 'density-report did not return valid JSON',
+      })
+    }
+  }
+}
 
 const feature = readData('.specify/feature.json')
 const specPath = path.join(feature.feature_directory, 'spec.md')
@@ -138,10 +159,12 @@ const artifacts = collectArtifacts([
 const evidence = {
   schemaVersion: '1.0',
   lessonSlug,
+  densityAuthority,
   script: artifact(scriptPath),
   spec: artifact(specPath),
   slides,
   checks: checks.map(({ stdout, stderr, ...rest }) => rest),
+  density: densityJson,
   quizKeys: quizJson,
   selfStudy: selfStudyExists ? summarizeSelfStudy(selfStudyAudit, selfStudyApply) : null,
 }
@@ -171,27 +194,56 @@ const issues = failedChecks.map((check) => ({
   fixed: false,
 }))
 
+const densitySlides = Array.isArray(densityJson?.slides) ? densityJson.slides : []
+const densityEntries = densitySlides.map((entry) => ({
+  slideId: entry.slideId,
+  semanticUnits: [],
+  signals: entry.signals,
+  verdict: 'fail',
+  notes: '',
+}))
+const complexityEntries = densitySlides.map((entry) => ({
+  slideId: entry.slideId,
+  signals: entry.complexity,
+  verdict: 'fail',
+  notes: '',
+}))
+const checklist = [
+  { item: '每一屏都有屏幕内容、交互设计、旁白、转场、制作字段', status: 'n/a' },
+  { item: '屏幕文字与旁白分开，旁白是逐字稿', status: 'n/a' },
+  { item: '每个交互都写清学生动作、成功反馈、错误反馈、完成条件、重置/重试', status: 'n/a' },
+  { item: '错误反馈绑定具体误区', status: 'n/a' },
+  { item: '每个 watch 屏都有静态替代和教学理由', status: 'n/a' },
+  { item: '互动优先：每屏先尝试从内容推出的互动，非 watch 互动有可获得证据', status: 'n/a' },
+  { item: '每个 objective 至少有一个非 watch 互动', status: 'n/a' },
+  { item: '自动检查全部 pass（check-script / concepts / quiz keys）', status: 'n/a' },
+  { item: '自学补充已应用，补丁有标签和依据，最终页数匹配 pageBudget.proposed', status: 'n/a' },
+  { item: '无 TODO/TBD/占位内容，无个人信息', status: 'n/a' },
+]
+if (densityAuthority === 'script') {
+  checklist.unshift(
+    { item: '密度：一屏一个语义边界；多单元必须拆屏或写明例外', status: 'n/a' },
+    {
+      item: '复杂度：交互/组件能作为一个连贯学习动作；多组件/多新组件必须拆屏或写明例外',
+      status: 'n/a',
+    },
+  )
+}
+
 const skeleton = {
   stage: 'script',
   artifactPaths: artifacts.map((item) => item.path),
   reviewedArtifacts: artifacts,
   automatedChecks: checks.map(({ stdout, stderr, ...rest }) => rest),
-  checklist: [
-    { item: '每一屏都有屏幕内容、交互设计、旁白、转场、制作字段', status: 'n/a' },
-    { item: '屏幕文字与旁白分开，旁白是逐字稿', status: 'n/a' },
-    { item: '每个交互都写清学生动作、成功反馈、错误反馈、完成条件、重置/重试', status: 'n/a' },
-    { item: '错误反馈绑定具体误区', status: 'n/a' },
-    { item: '每个 watch 屏都有静态替代和教学理由', status: 'n/a' },
-    { item: '互动优先：每屏先尝试从内容推出的互动，非 watch 互动有可获得证据', status: 'n/a' },
-    { item: '每个 objective 至少有一个非 watch 互动', status: 'n/a' },
-    { item: '自动检查全部 pass（check-script / concepts / quiz keys）', status: 'n/a' },
-    { item: '自学补充已应用，补丁有标签和依据，最终页数匹配 pageBudget.proposed', status: 'n/a' },
-    { item: '无 TODO/TBD/占位内容，无个人信息', status: 'n/a' },
-  ],
+  ...(densityAuthority === 'script'
+    ? { density: densityEntries, complexity: complexityEntries }
+    : {}),
+  checklist,
   issues,
   concepts: [],
   verdict: 'fail',
   reviewedAt: new Date().toISOString(),
+  reviewMeta: { densityAuthority },
 }
 
 writeSelfReview(skeleton, { outJson: outPath, outMd: mdPath })

@@ -408,6 +408,45 @@ await test('blocking issues force fail and fixed is always false', async () => {
   assert.equal(check.code, 1)
 })
 
+await test('script density authority preserves density and skips page density review', async () => {
+  const mock = path.join(tmp, 'mock-no-density.json')
+  fs.writeFileSync(
+    mock,
+    JSON.stringify(
+      anthropicResponse({
+        checklist: [
+          { index: 0, status: 'pass' },
+          { index: 1, status: 'pass' },
+          { index: 2, status: 'n/a' },
+          { index: 3, status: 'pass' },
+        ],
+        issues: [],
+        verdict: 'pass',
+      }),
+    ),
+  )
+  const review = freshSkeleton('script-density')
+  const skeleton = readJson(review)
+  skeleton.density[0].semanticUnits = [
+    { label: 'script unit', evidence: 'decided at script stage' },
+  ]
+  skeleton.density[0].verdict = 'pass'
+  fs.writeFileSync(review, JSON.stringify(skeleton, null, 2))
+  const result = await runTool(
+    baseArgs(review, ['--mock-response', mock, '--density-authority', 'script']),
+  )
+  assert.equal(result.code, 0, result.stderr)
+  const reviewJson = readJson(review)
+  assert.equal(reviewJson.density[0].semanticUnits[0].label, 'script unit')
+  assert.equal(reviewJson.reviewMeta.densityAuthority, 'script')
+  const check = await runNode(checkTool, [
+    review,
+    '--role', 'page',
+    '--density-authority', 'script',
+  ])
+  assert.equal(check.code, 0, check.stderr)
+})
+
 await test('OpenAI-compatible request/response is a single tool-forced call', async () => {
   const seen = []
   await withServer(

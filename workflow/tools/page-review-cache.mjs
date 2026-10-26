@@ -14,7 +14,7 @@ import { readData } from './lib.mjs'
 import { parseFlagValue } from './self-review-lib.mjs'
 import { readStagedComponents } from './page-review-lib.mjs'
 
-const CACHE_FORMAT = 'page-review-v2'
+const CACHE_FORMAT = 'page-review-v3'
 const args = process.argv.slice(2)
 const mode = parseFlagValue(args, '--mode')
 const lessonSlug = parseFlagValue(args, '--lesson-slug')
@@ -50,11 +50,22 @@ function keyFor(evidence, staged) {
   const deck = readData(deckPath)
   const deckById = new Map((deck.slides || []).map((slide) => [slide.id, slide]))
   const deckSlides = (evidence.section?.slides || []).map((id) => deckById.get(id) || { id, missing: true })
+  let skeletonDensity = []
+  try {
+    skeletonDensity = readData(reviewJson).density || []
+  } catch {
+    skeletonDensity = []
+  }
   const payload = {
     format: CACHE_FORMAT,
     section,
+    densityAuthority: evidence.densityAuthority || 'page',
     scriptSlides: evidence.scriptSlides || [],
     density: evidence.density || null,
+    // Only script-authority density is an input to the page review. Under page
+    // authority the skeleton is empty until the AI fills it, so including it
+    // would make store/check keys differ.
+    scriptDensity: evidence.densityAuthority === 'script' ? skeletonDensity : null,
     referenceAdaptation: evidence.referenceAdaptation || null,
     checks: (evidence.checks || []).map(({ name, status, summary }) => ({ name, status, summary })),
     screenshots: (evidence.screenshots || []).map((shot) => ({
