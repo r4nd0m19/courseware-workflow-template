@@ -35,20 +35,20 @@
 | overflow |  |  |  |
 | baseline |  |  |  |
 
-## 3. 逐屏内容密度（脚本 / 分镜 / 逐页 / Alpha 必填）
+## 3. 逐屏内容密度与交互复杂度（`density_authority=script` 时脚本必填；`page` 时逐页/Alpha 必填）
 
-先运行信号报告，再补语义单元：
+先运行信号报告，再补语义单元与复杂度判断：
 
 ```bash
 node workflow/tools/density-report.mjs <courseware.md> <storyboard.yml> \
   [--slides S04,S05,S06] --json
 ```
 
-把输出里的 `signals` **原样**放进 `review/self-review-<stage>.json` 的 `density`，然后逐屏填写：
+把输出里的 `signals` **原样**放进 `review/self-review-<stage>.json` 的 `density`，把 `complexity` **原样**放进 `complexity`，然后逐屏填写：
 
 - `semanticUnits`：本屏要求学生**新建立**的语义联系。每条写 `label` + `evidence`（脚本中的原句或字段）。
 - `verdict`：`pass` / `exception` / `fail`。
-- `notes`：`exception` 必填，说明为什么多个单元必须同屏。
+- `notes`：`exception` 必填，说明为什么多个单元/组件必须同屏。
 
 判定口径：
 
@@ -60,6 +60,18 @@ node workflow/tools/density-report.mjs <courseware.md> <storyboard.yml> \
 | 屏 | 语义单元 | 工具信号摘要 | 结论 | 理由 |
 |---|---|---|---|---|
 |  |  |  | pass/exception/fail |  |
+
+### 3.1 交互/组件复杂度（脚本阶段）
+
+`density-report.mjs --json` 的每屏 `complexity` 提供 `components`、`newComponents`、`interactionLevel`、`interactionType`、`staticPage`、`hasStaticAlternative`、`hasMisconception`。脚本自审据此判断：学生是否需要在一屏内协调多个独立控制、动作、状态或反馈分支。
+
+- `components > 1` 或 `newComponents > 1` 时必须拆屏，或标 `exception` 并写明“这些组件属于同一个连续学习动作”的理由。
+- 组件有多个模式不等于复杂；复杂是学生要同时处理多个独立学习动作。
+- `verdict: fail` 直接阻断，先改脚本/拆屏。
+
+| 屏 | 组件数 | 新/扩展 | 互动层级/类型 | 结论 | 理由 |
+|---|---|---|---|---|---|
+|  |  |  |  | pass/exception/fail |  |
 
 ## 4. 逐屏互动尝试（脚本 / 分镜 / 逐页 / Alpha 必填）
 
@@ -87,6 +99,7 @@ node workflow/tools/density-report.mjs <courseware.md> <storyboard.yml> \
 - [ ] 每页都尝试过互动；`watch` 页有教学理由，且不存在明显优于静态的互动
 - [ ] 非 watch 互动的证据可由所声明组件产生，不是“看动画”或“点下一步”
 - [ ] 每屏一个语义边界；超载已拆页或按 `exception` 写明理由
+- [ ] 每屏的交互/组件能作为一个连贯学习动作；多组件已拆屏或按 `exception` 写明理由
 - [ ] 无滚动条/裁切；所有内容单页可见
 - [ ] 无个人信息/未授权资产
 - [ ] 自动检查全部 pass（skipped 必须有理由）
@@ -120,4 +133,6 @@ node workflow/tools/density-report.mjs <courseware.md> <storyboard.yml> \
 - checklist 不得有 `fail`
 - `reviewedArtifacts` 的 SHA-256 必须与当前文件一致，否则视为过期自审
 - 传入 `--script` / `--storyboard` 时，`density` 必须覆盖每一屏，信号必须与当前脚本/分镜一致；
-  超过 1 个语义单元必须是 `exception` 且有 `notes`，`fail` 直接阻断
+  超过 1 个语义单元必须是 `exception` 且有 `notes`，`fail` 直接阻断。
+- `--role script --density-authority script` 时还必须有 `complexity`，覆盖每一屏；
+  组件数/新组件数超过 1 必须是 `exception` 且有 `notes`，信号必须与当前脚本一致。

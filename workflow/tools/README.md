@@ -192,12 +192,13 @@ node workflow/tools/build-self-review-inputs.mjs --lesson-slug <slug> \
   --shell-ok true --shell-review review/shells/<slug>/shell-preview.md \
   --out review/<slug>/self-review-inputs.json --md review/<slug>/self-review-inputs.md
 
-# script：紧凑逐屏证据包 + 自审骨架（AI 只填判断字段）
+# script：紧凑逐屏证据包 + density/complexity 自审骨架（AI 只填判断字段）
 node workflow/tools/build-script-review-evidence.mjs --lesson-slug <slug> \
   --script specs/<slug>/courseware.md --storyboard specs/<slug>/storyboard.yml \
   --content <content-pack.json> --style <style-pack.manifest.json> \
   --concepts specs/<slug>/concepts.yml --registry registry/index.json \
-  --review-sections specs/<slug>/review-sections.yml --review-dir review/<slug>
+  --review-sections specs/<slug>/review-sections.yml --review-dir review/<slug> \
+  --density-authority script
 
 # alpha / beta / gold：聚合或扫描，不调用模型
 node workflow/tools/build-self-review-alpha.mjs ...
@@ -268,11 +269,13 @@ node workflow/tools/page-review-ai.mjs \
 
 # 3) 真实调用；工作流里的正式命令还会带
 #    --component-staging registry/staging --unregistered <id,id>
+#    --density-authority script（默认；页面只判断渲染结果，不重新判 density）
 node workflow/tools/page-review-ai.mjs \
   --lesson-slug <slug> --section S02B \
   --evidence review/<slug>/page-evidence-S02B.json \
   --review-json review/<slug>/self-review-page-S02B.json \
-  --component-staging registry/staging --unregistered matrix-fill
+  --component-staging registry/staging --unregistered matrix-fill \
+  --density-authority script
 ```
 
 配置优先读项目内 `.courseware/page-review.json`（已 gitignore），否则读 `~/.config/courseware/page-review.json`；也可用 `COURSEWARE_REVIEW_CONFIG`：
@@ -295,7 +298,7 @@ node workflow/tools/page-review-ai.mjs \
 - `structuredOutput`：默认 `tool`（forced tool call）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`。DeepSeek 的 Anthropic 兼容端点可能返回 DSML 文本而不是标准 `tool_use`，工具检测到后会**自动重试一次 JSON 模式**；也可以直接写 `"structuredOutput": "json"` 避免这次重试。
 - `maxTokens` 默认 **8192**：推理模型可能把几千 token 花在 thinking 上，4096 会在输出前被截断。工具在 `stop_reason: max_tokens` 时会直接提示增大 `maxTokens`，不会写半成品。
 - 静态页规则：页面明确声明 `watch` / `static-reading` 且有书面静态理由时，checklist 0（交互是否产出声明证据）记 `n/a`，不因“只是看”判 fail；只有页面声称互动/学生产出证据、实际却直接给答案时才 fail。S02 同一证据 3 次验证全部 pass（2 次保留非阻断提示）。
-- 工具只允许模型填 `density` / `checklist` / `issues` / `referenceAdaptation` / `verdict`；`signals`、`concepts`、`automatedChecks`、`reviewedArtifacts` 由工具保留/合并。模型声称 `fixed: true` 也会被强制改成 `false`。
+- `density_authority=page` 时工具允许模型填 `density`；`density_authority=script` 时页面模型不输出 density，`density` 由脚本阶段结论保留。两种模式都只允许模型填 `checklist` / `issues` / `referenceAdaptation` / `verdict`；`signals`、`concepts`、`automatedChecks`、`reviewedArtifacts` 由工具保留/合并。模型声称 `fixed: true` 也会被强制改成 `false`。
 - 失败时不会写半成品：schema 不合法、缺截图、HTTP 错误都退出非 0；原始模型输出写到 `review/<slug>/page-review-raw-<section>.json` 方便排查。
 - `--zcode-config <provider_config.json> --zcode-provider <id>` 可以直接复用 ZCode 已配置的 Anthropic 兼容 provider/model/key，key 不打印、不落盘。也可以把这两个字段写进 `page-review.json`：`"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 是候选路径数组，Windows 用 `~`、WSL 用 `/mnt/c/...`，谁存在用谁。
 - 回归测试：`node workflow/tools/test-page-review-ai.mjs`（本地 mock server，不调用真实模型）。
@@ -325,23 +328,27 @@ node workflow/tools/page-review-cache.mjs --mode check \
 node workflow/tools/page-review-cache.mjs --mode store ... --review-json ...
 ```
 
-- 键由页面脚本、density 信号、参考映射、检查摘要、PNG 与 `aiImage` 哈希、deck slide、registry 和暂存组件文件哈希组成。**换模型或改 prompt 不会自动让缓存失效**；需要重新判断时删掉 `review/<slug>/page-review-cache/` 下对应缓存。
+- 键由页面脚本、density 信号、脚本阶段 density 结论（`density_authority=script` 时）、参考映射、检查摘要、PNG 与 `aiImage` 哈希、deck slide、registry 和暂存组件文件哈希组成。**换模型或改 prompt 不会自动让缓存失效**；需要重新判断时删掉 `review/<slug>/page-review-cache/` 下对应缓存。
 - `check` 命中时把上次 AI 判断字段（含 `referenceAdaptation` 增量）合并到新骨架，刷新 `reviewedArtifacts` 和暂存组件哈希，工作流跳过 `self-review-page`；`reviewMeta.cached` 标记为 `true`。
 - `store` 在 `check-self-review-page` 通过后写入缓存；缓存目录是运行时状态，不提交。
 
 ```bash
 node workflow/tools/check-self-review.mjs review/self-review-brief.json
 node workflow/tools/check-self-review.mjs review/self-review-script.json \
+  --script path/to/courseware.md --role script --density-authority script \
   --concepts path/to/concepts.yml
 ```
 
-> 0.23.0 起 density 以页面自审为唯一权威：脚本自审不带 `--script`，也不填 `density`；
-> 页面/Alpha 自审继续用 `--script --storyboard --slides` 强制 density 对照。
+> 0.34.0 起 density/复杂度以**脚本自审为唯一权威**（`density_authority=script` 默认）：
+> `build-script-review-evidence` 生成 `density[]` 与 `complexity[]`，`--script --role script
+> --density-authority script` 强制两者；页面自审不再判断 density。
+> 显式传 `--density-authority page` 才恢复旧的页面/Alpha density 对照路径。
 
 - 校验 `self-review.schema.json`。
 - 要求 `verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。
 - `--concepts` 要求每个在范围内的概念都有一条 `concepts` 记录（`conceptId`、`verdict: pass`、`evidence`、`slideIds`）；缺条目、`gap` 或引用范围外页面都会失败。
-- `--script` / `--storyboard` 同时启用 density 对照；`--slides` 限定逐页范围。
+- `--script` / `--storyboard` 同时启用 density 对照；`--slides` 限定逐页范围。`--role script --density-authority script` 还要求 `complexity[]`，且 `components/newComponents > 1` 必须有 `exception` 理由。
+- `--role page --density-authority script` 只检查页面判断字段（交互证据、视觉版面、组件行为、占位/个人信息），不强制 density。
 - 自审模板在 `workflow/preset/templates/self-review-template.md`。
 - 每个 human gate 前都应先跑这个检查；未通过不得请求人工审核。
 

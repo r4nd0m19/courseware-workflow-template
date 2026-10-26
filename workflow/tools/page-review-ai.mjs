@@ -239,6 +239,10 @@ const auth =
 const anthropicVersion =
   opt('--anthropic-version') || fileConfig.anthropicVersion || '2023-06-01'
 const imageDetail = opt('--image-detail') || fileConfig.imageDetail || 'auto'
+const densityAuthority = opt('--density-authority', 'page')
+if (!['script', 'page'].includes(densityAuthority)) {
+  fail(`--density-authority must be script or page, got ${densityAuthority}`, 2)
+}
 
 function resolveKeyFile(value) {
   const expanded = expandHome(value)
@@ -400,6 +404,7 @@ const prompt = buildPageReviewPrompt({
   images,
   components: components.summaries,
   structuredOutput,
+  densityAuthority,
 })
 const promptSha256 = fileSha256FromString(prompt.promptText)
 const evidenceSha256 = fileSha256(evidencePath)
@@ -420,12 +425,14 @@ function requestPreview() {
     structuredOutput,
     maxTokens,
     imageDetail,
+    densityAuthority,
   })
   return {
     api,
     endpoint,
     model,
     structuredOutput,
+    densityAuthority,
     key: apiKey ? apiKeySource : '(missing)',
     promptBytes,
     requestBytes: Buffer.byteLength(JSON.stringify(body), 'utf8'),
@@ -528,6 +535,7 @@ async function callModel() {
       structuredOutput: effectiveStructuredOutput,
       maxTokens,
       imageDetail,
+      densityAuthority,
     })
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -634,7 +642,7 @@ if (mockResponsePath) {
 
 let output
 try {
-  output = validatePageReviewOutput(modelResult.raw)
+  output = validatePageReviewOutput(modelResult.raw, { densityAuthority })
 } catch (error) {
   const rawOut = saveRaw({
     error: error.message,
@@ -655,6 +663,7 @@ const meta = {
   api,
   model,
   baseUrlHost,
+  densityAuthority,
   structuredOutput: modelResult.structuredOutput || structuredOutput,
   durationMs: Math.round(modelResult.durationMs || 0),
   attempts: modelResult.attempts ?? 0,
@@ -674,6 +683,7 @@ try {
     output,
     meta,
     componentArtifacts: components.artifacts,
+    densityAuthority,
   })
 } catch (error) {
   fail(error.message)
@@ -698,6 +708,7 @@ const summary = {
   densityUnits: review.density.reduce((sum, entry) => sum + entry.semanticUnits.length, 0),
   model,
   api,
+  densityAuthority,
   durationMs: meta.durationMs,
   attempts: meta.attempts,
   usage: meta.usage,

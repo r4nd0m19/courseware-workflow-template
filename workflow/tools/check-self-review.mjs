@@ -4,7 +4,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
-import { buildDensityReport, compareSignals, readSlideIds } from './density-lib.mjs'
+import { buildDensityReport, compareSignals, compareComplexitySignals, readSlideIds } from './density-lib.mjs'
 
 const args = process.argv.slice(2)
 const options = {
@@ -13,6 +13,8 @@ const options = {
   slides: null,
   root: process.cwd(),
   concepts: '',
+  role: '',
+  densityAuthority: 'page',
   requireReferenceAdaptation: false,
 }
 const positionals = []
@@ -33,6 +35,12 @@ for (let i = 0; i < args.length; i += 1) {
   } else if (arg === '--concepts') {
     options.concepts = args[i + 1] || ''
     i += 1
+  } else if (arg === '--role') {
+    options.role = args[i + 1] || ''
+    i += 1
+  } else if (arg === '--density-authority') {
+    options.densityAuthority = args[i + 1] || ''
+    i += 1
   } else if (arg === '--require-reference-adaptation') {
     options.requireReferenceAdaptation = true
   } else if (arg.startsWith('--')) {
@@ -41,6 +49,15 @@ for (let i = 0; i < args.length; i += 1) {
   } else {
     positionals.push(arg)
   }
+}
+
+if (options.role && !['script', 'page'].includes(options.role)) {
+  console.error(`--role must be script or page, got ${options.role}`)
+  process.exit(2)
+}
+if (!['script', 'page'].includes(options.densityAuthority)) {
+  console.error(`--density-authority must be script or page, got ${options.densityAuthority}`)
+  process.exit(2)
 }
 
 const file = positionals[0]
@@ -52,6 +69,10 @@ Options:
   --storyboard <file>         storyboard used for contentRefs in the density report
   --slides S04,S05,S06        require density entries only for these slides (default: all)
   --root <dir>                project root for reviewedArtifacts paths (default: cwd)
+  --role <script|page>         which review is being checked (default: legacy density behavior)
+  --density-authority <script|page>
+                              script = enforce density/complexity at script review;
+                              page = enforce density at rendered page review (legacy)
   --concepts <file>           require a per-concept verdict for the concept ledger
   --require-reference-adaptation
                               require a non-empty referenceAdaptation string (page reviews)
@@ -130,10 +151,18 @@ for (const artifact of data.reviewedArtifacts) {
 }
 
 // ---- density: objective signals + declared semantic units ----
+const enforceDensity =
+  Boolean(options.script) &&
+  (options.role === 'script'
+    ? options.densityAuthority === 'script'
+    : options.role === 'page'
+      ? options.densityAuthority === 'page'
+      : true)
 let densitySummary = ''
+let densityReport = null
 if (options.storyboard && !options.script) {
   problems.push('--storyboard requires --script for the density gate')
-} else if (options.script) {
+} else if (enforceDensity) {
   if (!Array.isArray(data.density) || data.density.length === 0) {
     problems.push(
       'density report is required: run density-report.mjs and record one entry per screen',
@@ -146,6 +175,7 @@ if (options.storyboard && !options.script) {
       problems.push(`cannot build density report: ${err.message}`)
     }
     if (report) {
+      densityReport = report
       const byId = new Map(report.slides.map((slide) => [slide.slideId, slide]))
       const entries = new Map()
       for (const entry of data.density) {
@@ -192,6 +222,74 @@ if (options.storyboard && !options.script) {
       }
       densitySummary = `; density: ${required.length} screen(s), ${units} unit(s), ${exceptions} exception(s)`
     }
+  }
+}
+
+// ---- complexity: script-authority interaction/component review ----
+let complexitySummary = ''
+if (options.role === 'script' && options.densityAuthority === 'script') {
+  if (!Array.isArray(data.complexity) || data.complexity.length === 0) {
+    problems.push(
+      'complexity report is required at script authority: record one entry per screen',
+    )
+  } else {
+    let expected = null
+    if (densityReport) {
+      expected = densityReport.slides.map((slide) => slide.slideId)
+    } else if (options.slides) {
+      expected = options.slides
+    }
+    const expectedSet = expected ? new Set(expected) : null
+    const computedById = new Map(
+      (densityReport?.slides || []).map((slide) => [slide.slideId, slide.complexity]),
+    )
+    const entries = new Map()
+    for (const entry of data.complexity) {
+      if (entries.has(entry.slideId)) {
+        problems.push(`complexity report lists slide ${entry.slideId} more than once`)
+      }
+      entries.set(entry.slideId, entry)
+      if (expectedSet && !expectedSet.has(entry.slideId)) {
+        problems.push(`complexity report references unknown slide ${entry.slideId}`)
+      }
+    }
+    if (expected) {
+      const missing = expected.filter((id) => !entries.has(id))
+      if (missing.length) {
+        problems.push(`complexity report is missing screen(s): ${missing.join(', ')}`)
+      }
+    }
+    let exceptions = 0
+    for (const [id, entry] of entries) {
+      const signals = entry.signals || {}
+      const components = Number(signals.components || 0)
+      const newComponents = Number(signals.newComponents || 0)
+      const computed = computedById.get(id)
+      if (computed) {
+        const diffs = compareComplexitySignals(signals, computed)
+        if (diffs.length) {
+          problems.push(
+            `complexity signals for ${id} do not match the current script/storyboard: ${diffs.join('; ')}`,
+          )
+        }
+      }
+      if (entry.verdict === 'exception') exceptions += 1
+      if (entry.verdict === 'exception' && !String(entry.notes || '').trim()) {
+        problems.push(`${id} is marked complexity exception but has no notes explaining why`)
+      }
+      if (entry.verdict === 'fail') {
+        problems.push(
+          `${id} complexity verdict is fail; split the interaction or simplify the component before review`,
+        )
+      }
+      if ((components > 1 || newComponents > 1) && entry.verdict !== 'exception') {
+        problems.push(
+          `${id} declares ${components} component(s) (${newComponents} new/extend) but verdict is ` +
+            `'${entry.verdict}'; split the screen or mark it 'exception' with a written reason`,
+        )
+      }
+    }
+    complexitySummary = `; complexity: ${entries.size} screen(s), ${exceptions} exception(s)`
   }
 }
 
@@ -259,6 +357,6 @@ if (problems.length) fail(`self-review ${file}`, problems)
 else
   ok(
     `self-review ${file}`,
-    `${data.stage}: ${data.automatedChecks.length} automated checks, ${data.issues.length} issue(s)${densitySummary}${conceptSummary}`,
+    `${data.stage}: ${data.automatedChecks.length} automated checks, ${data.issues.length} issue(s)${densitySummary}${complexitySummary}${conceptSummary}`,
   )
 if (problems.length) process.exit(1)

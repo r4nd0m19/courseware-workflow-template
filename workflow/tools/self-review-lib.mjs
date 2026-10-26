@@ -115,6 +115,26 @@ function renderConcepts(concepts) {
   return lines
 }
 
+function renderComplexity(complexity) {
+  if (!Array.isArray(complexity) || complexity.length === 0) return []
+  const lines = [
+    '## 逐屏交互/组件复杂度',
+    '',
+    '| 屏 | 组件数 | 新/扩展 | 互动层级 | 互动类型 | 结论 | 说明 |',
+    '|---|---|---|---|---|---|---|',
+  ]
+  for (const entry of complexity) {
+    const signals = entry.signals || {}
+    lines.push(
+      `| ${escapeCell(entry.slideId)} | ${escapeCell(signals.components ?? '')} | ` +
+        `${escapeCell(signals.newComponents ?? '')} | ${escapeCell(signals.interactionLevel)} | ` +
+        `${escapeCell(signals.interactionType)} | ${escapeCell(entry.verdict)} | ${escapeCell(entry.notes)} |`,
+    )
+  }
+  lines.push('')
+  return lines
+}
+
 export function renderSelfReviewMarkdown(review, options = {}) {
   const lines = []
   lines.push(`# AI 自审：${review.stage}`, '')
@@ -143,6 +163,7 @@ export function renderSelfReviewMarkdown(review, options = {}) {
   }
 
   lines.push(...renderDensity(review.density))
+  lines.push(...renderComplexity(review.complexity))
   lines.push(...renderConcepts(review.concepts))
 
   if (Array.isArray(review.checklist) && review.checklist.length) {

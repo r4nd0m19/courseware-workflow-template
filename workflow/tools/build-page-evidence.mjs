@@ -55,6 +55,15 @@ const referenceAdaptationPath = opt(
   '--reference-adaptation',
   path.join('review', lessonSlug, 'reference-adaptation.json'),
 )
+const densityAuthority = opt('--density-authority', 'page')
+const scriptReviewPath = opt(
+  '--script-review',
+  path.join('review', lessonSlug, 'self-review-script.json'),
+)
+if (!['script', 'page'].includes(densityAuthority)) {
+  console.error(`FAIL page evidence — --density-authority must be script or page, got ${densityAuthority}`)
+  process.exit(2)
+}
 
 if (
   !lessonSlug ||
@@ -422,6 +431,7 @@ const referenceAdaptationSummary = referenceAdaptation
 const evidence = {
   schemaVersion: '1.0',
   lessonSlug,
+  densityAuthority,
   section: {
     id: section.id,
     title: section.title,
@@ -472,20 +482,38 @@ for (const screenshot of screenshots) {
     reviewedArtifacts.push({ path: relative(screenshot.aiImage), sha256: hashFile(screenshot.aiImage) })
   }
 }
+const scriptDensity = new Map()
+if (densityAuthority === 'script' && fs.existsSync(path.resolve(scriptReviewPath))) {
+  try {
+    const scriptReview = readData(scriptReviewPath)
+    for (const entry of scriptReview.density || []) {
+      if (entry?.slideId) scriptDensity.set(entry.slideId, entry)
+    }
+  } catch {
+    // A missing/invalid script review is reported by the script gates. The
+    // page review still runs; density is simply not available as a reference.
+  }
+}
 const densityEntries = (Array.isArray(densityJson?.slides) ? densityJson.slides : []).map(
-  (entry) => ({
-    slideId: entry.slideId || section.slides[0],
-    semanticUnits: [],
-    signals: entry.signals || {},
-    verdict: 'fail',
-    notes: '',
-  }),
+  (entry) => {
+    const fromScript = scriptDensity.get(entry.slideId)
+    return {
+      slideId: entry.slideId || section.slides[0],
+      semanticUnits: fromScript?.semanticUnits || [],
+      signals: entry.signals || {},
+      verdict: fromScript?.verdict || 'fail',
+      notes: fromScript?.notes || '',
+    }
+  },
 )
 const skeleton = {
   stage: `page-${sectionId}`,
   artifactPaths: reviewedArtifacts.map((artifact) => artifact.path),
   reviewedArtifacts,
-  density: densityEntries,
+  ...(densityAuthority === 'page' ||
+  densityEntries.some((entry) => entry.semanticUnits.length)
+    ? { density: densityEntries }
+    : {}),
   concepts: conceptEntries,
   automatedChecks: publicChecks.map((check) => ({
     name: check.name,

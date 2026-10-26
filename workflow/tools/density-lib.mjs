@@ -88,6 +88,62 @@ export function screenSignals(slide, storyboardSlide) {
   }
 }
 
+// Structured interaction/component facts for the script-stage complexity
+// review. Free-text step/control counts are intentionally left to the reviewer;
+// these are the facts the script already declares in machine fields.
+export function complexitySignals(slide, storyboardSlide) {
+  const plan = Array.isArray(slide.machine?.componentPlan)
+    ? slide.machine.componentPlan
+    : []
+  const componentIds = Array.isArray(slide.machine?.components)
+    ? slide.machine.components
+    : Array.isArray(storyboardSlide?.components)
+      ? storyboardSlide.components
+      : []
+  const entries = plan.length
+    ? plan
+    : componentIds.map((id) => ({ id, status: 'unknown' }))
+  const interaction =
+    slide.machine?.interaction || storyboardSlide?.interaction || {}
+  return {
+    components: entries.length,
+    newComponents: entries.filter((entry) =>
+      ['new', 'extend'].includes(String(entry?.status || '')),
+    ).length,
+    interactionLevel: String(interaction.level || ''),
+    interactionType: String(interaction.type || ''),
+    staticPage:
+      String(interaction.level || '') === 'watch' ||
+      String(interaction.type || '') === 'static-reading',
+    hasStaticAlternative: Boolean(interaction.staticAlternative),
+    hasMisconception: Boolean(interaction.misconception),
+  }
+}
+
+const COMPLEXITY_SIGNAL_KEYS = [
+  'components',
+  'newComponents',
+  'interactionLevel',
+  'interactionType',
+  'staticPage',
+  'hasStaticAlternative',
+  'hasMisconception',
+]
+
+export function complexitySignalKeys() {
+  return [...COMPLEXITY_SIGNAL_KEYS]
+}
+
+export function compareComplexitySignals(declared, computed) {
+  const diffs = []
+  for (const key of COMPLEXITY_SIGNAL_KEYS) {
+    const want = computed?.[key]
+    const got = declared?.[key]
+    if (got !== want) diffs.push(`${key}: review=${got}, current=${want}`)
+  }
+  return diffs
+}
+
 const SIGNAL_KEYS = [
   'contentRefs',
   'tableRows',
@@ -138,6 +194,7 @@ export function buildDensityReport(scriptPath, storyboardPath, slideIds = null) 
       slideId: slide.id,
       title: slide.headingTitle,
       signals: screenSignals(slide, board),
+      complexity: complexitySignals(slide, board),
     })
   }
   if (wanted) {

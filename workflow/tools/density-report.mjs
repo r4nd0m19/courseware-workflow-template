@@ -43,6 +43,7 @@ if (options.json) {
       slideId: slide.slideId,
       semanticUnits: [],
       signals: slide.signals,
+      complexity: slide.complexity,
       verdict: 'pass',
       notes: '',
     })),
