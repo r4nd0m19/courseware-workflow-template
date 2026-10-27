@@ -182,6 +182,8 @@ node workflow/tools/check-teaching.mjs storyboard.yml content-pack.json
 
 ## 9. AI 自审检查
 
+0.38.0 起 `self-review-brief` / `self-review-script` / `self-review-component-plan` 是 `review-ai.mjs` 的**单次文本模型调用**：模型只拿到证据 JSON + 骨架，返回 checklist/density/complexity/concepts/issues/verdict；没有文件、命令或 MCP 工具。配置与页面自审共用（默认 `.courseware/page-review.json`，可用 `--config` / `COURSEWARE_REVIEW_CONFIG` 覆盖）。
+
 确定性自审（0.22.0；不再启动 AI）：
 
 ```bash
@@ -200,6 +202,25 @@ node workflow/tools/build-script-review-evidence.mjs --lesson-slug <slug> \
   --concepts specs/<slug>/concepts.yml --registry registry/index.json \
   --review-sections specs/<slug>/review-sections.yml --review-dir review/<slug> \
   --density-authority script
+
+# brief / component-plan：为单次文本自审生成紧凑证据与骨架
+node workflow/tools/build-brief-review-evidence.mjs --lesson-slug <slug> \
+  --content <content-pack.json> --style <style-pack.manifest.json> \
+  --concepts specs/<slug>/concepts.yml --review-dir review/<slug>
+node workflow/tools/build-component-plan-review-evidence.mjs --lesson-slug <slug> \
+  --script specs/<slug>/courseware.md --style <style-pack.manifest.json> \
+  --review-dir review/<slug>
+
+# 单次文本自审（0.38.0）：证据 JSON + 骨架 → 一次模型请求；无工具
+node workflow/tools/review-ai.mjs --mode brief \
+  --evidence review/<slug>/brief-review-evidence.json \
+  --review-json review/<slug>/self-review-brief.json
+node workflow/tools/review-ai.mjs --mode script \
+  --evidence review/<slug>/self-review-script-evidence.json \
+  --review-json review/<slug>/self-review-script.json
+node workflow/tools/review-ai.mjs --mode component-plan \
+  --evidence review/<slug>/component-plan-review-evidence.json \
+  --review-json review/<slug>/self-review-component-plan.json
 
 # alpha / beta / gold：聚合或扫描，不调用模型
 node workflow/tools/build-self-review-alpha.mjs ...

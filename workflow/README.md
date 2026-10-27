@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.37.0 / 84 步（production）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.38.0 / 87 步（production）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
 
 **人工审核只有三类：壳、整份课程脚本、每一页。**
 
@@ -10,6 +10,7 @@
 
 核心变化：
 
+- **去掉重复自审 + 单次文本审查（0.38.0）**：`speckit.specify` / `speckit.script` / `speckit.self-study-audit` / `speckit.component-plan` 在 workflow 里收到 `--no-self-review`，只生成产物；不再读门禁源码、跑额外检查、写 review.md 或请求人工审核。`self-review-brief` / `self-review-script` / `self-review-component-plan` 改为 `review-ai.mjs` 的单次文本模型调用（证据 JSON + 骨架 → 一次请求，无工具、无文件访问）。workflow 87 步；preset 0.3.11。
 - **页面证据去掉视觉几何门禁（0.37.0）**：`build-page-evidence` 不再跑 `check-overflow` / `check-overlap`，版面几何交给截图 AI + 老师逐页审核；精确渲染文本/代码、quiz、概念、旁白、参考残留、截图/deck 绑定仍为确定性阻断项。整份 Alpha/Gold 的 `check-overflow` 保留。
 - **截图 + 已批准脚本页自审（0.36.0）**：`page_review_scope` 默认 `visual-script`。`build-page-evidence` 仍跑非视觉确定性检查并阻断，`page-review-ai` 只把本页截图和已批准脚本页（屏幕内容、交互设计、转场）发给模型，判断可见内容是否与脚本一致，以及裁切、重叠、拥挤、可读性、可见占位/个人信息等视觉问题；不再把 density、检查结果、概念和参考映射塞给模型。视觉自审不通过时主 agent 先改页面、重建、重截图、重跑，直到通过才进入老师逐页审核。显式传 `-i page_review_scope=evidence` 可回滚到完整证据包路径；该路径与 `density_authority=page` 配套。
 - **老师版脚本（0.35.0）**：`render-teacher-script.mjs` 从 `courseware.md` 确定性生成 `review/<lesson>/courseware.teacher.md`，只显示标题、对应目标、本屏作用、屏幕内容、一行“学生要做”摘要、旁白、转场；`review-script` gate 改为显示这份老师版。完整 `courseware.md` 仍是唯一内容源，交互设计与制作字段保留给检查工具/分镜投影，脚本批准账本仍绑定完整源文件。老师版是运行时生成物，不提交、不手改。
@@ -47,11 +48,13 @@
 | `install.mjs` | 一键安装：复制 workflow、初始化 Spec Kit、装 preset/两个 workflow/依赖、检测 Chromium、smoke tests |
 | `preset/` | courseware preset：模板 + 命令（`speckit.script`、`component-plan`、`component-build`、`implement` 等） |
 | `workflows/courseware-shell.yml` | 3 步壳工作流：`validate-shell` → `review-shell` 人审 → `approve-shell`；不依赖内容包 |
-| `workflows/courseware-production.yml` | 84 步内容生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套）；只有 `review-script` 与 `review-page` 两个人类 gate |
+| `workflows/courseware-production.yml` | 87 步内容生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套）；只有 `review-script` 与 `review-page` 两个人类 gate |
 | `steps/gui-gate/` | Spec Kit 自定义 gate step：非 TTY 写 pending 并暂停；TTY 退化为终端提问；校验 `verdict_input` 禁用与证据哈希 |
 | `tools/gate-review.mjs` | 人工审核助手：`show` 打印审核文件/链接/证据；`decide` 在老师明确回答后写入一次性 verdict；`status` 查看 run/gate |
 | `tools/build-page-evidence.mjs` | 汇总本页 density 信号/concepts/quiz/narration/rendered-text/参考残留/截图，生成自审 JSON 骨架；0.37.0 起不再跑 overflow/overlap，`density_authority=script` 时密度结论只作参考 |
 | `tools/build-self-review-inputs.mjs` / `build-script-review-evidence.mjs` / `build-self-review-{alpha,beta,gold}.mjs` | 确定性自审与脚本证据包；脚本证据包在 `density_authority=script` 时生成 density/complexity 骨架 |
+| `tools/review-ai.mjs` / `review-ai-lib.mjs` | 单次文本自审：brief/script/component-plan 证据 + 骨架 → 一次模型请求 → 结构化 JSON；无工具 |
+| `tools/build-brief-review-evidence.mjs` / `build-component-plan-review-evidence.mjs` | 为单次文本自审生成紧凑证据与骨架 |
 | `tools/render-self-review-md.mjs` | 从自审 JSON 渲染 Markdown（页自审不再让 AI 写 MD） |
 | `tools/render-teacher-script.mjs` | 从 `courseware.md` 生成老师版脚本：屏幕内容、旁白、转场、一行学生动作摘要；不显示交互设计与制作字段 |
 | `tools/check-reference-adaptation.mjs` / `check-reference-residue.mjs` | 每课参考适配映射校验 + 渲染页参考字符串残留扫描 |
@@ -435,15 +438,17 @@ node workflow/tools/run-workflow.mjs courseware-production \
   -i baseline_dir="baselines/001-2d-arrays"
 ```
 
+> 工作流可能运行 20 分钟以上。用长超时前台调用，或使用 harness 的后台任务通知；不要把它放后台再用 `sleep 110` 轮询，sleep 不会加速流程。
+
 流程：
 
 1. **壳阶段（独立工作流 `courseware-shell`，不依赖内容包）**：`validate-shell`（壳包契约 + 30 页占位 deck + 4 音色占位语音 + 播放器 + 截图）→ `review-shell` 人审 → `approve-shell` 写 `review/shells/<slug>/shell-approval.json`。
 2. **内容阶段开始**：`check-shell-approval`（壳哈希 + gate run）→ `validate-content` / `validate-style-pack-full`（含冻结哈希）/ `validate-source-fidelity --source-only`；`ensure-registry` / `validate-registry`。
-3. `speckit.specify` → 教学简报（内部 AI 自审，不再人审）。
-4. `speckit.script` → `courseware.md` + `review-sections.yml`；`validate-script-draft` → `self-study-audit`（自动应用）→ `validate-script`；`review-script` 人审（整份一次，看 `render-teacher-script` 生成的老师版）→ `approve-script`（只接受 gate 的 `approve`，并核对 run state）→ `verify-script-approval`（重新校验整份/每屏哈希与当前 run）。
+3. `speckit.specify --no-self-review` → 教学简报；`build-brief-review-evidence` → `review-ai --mode brief` 单次文本自审，`check-self-review-brief` 门禁；不再人审。
+4. `speckit.script --no-self-review` → `courseware.md` + `review-sections.yml`；`build-script-review-evidence` → `review-ai --mode script` 单次文本自审；`validate-script-draft` → `self-study-audit --no-self-review`（自动应用）→ `validate-script`；`review-script` 人审（整份一次，看 `render-teacher-script` 生成的老师版）→ `approve-script`（只接受 gate 的 `approve`，并核对 run state）→ `verify-script-approval`（重新校验整份/每屏哈希与当前 run）。
 5. **本课插画**：`shell-art-brief`（逐槽提示词）→ `build-shell-art`（`generate-shell-art --prompt-file … --reuse`，未变化不重生成、不需要 key）→ `check-shell-art --require-all`（provenance；不再单独人审，插画在每页截图里审）。
 6. `build-narration` → `check-narration`（四声线 manifest；壳路径不再有 `build-audio-adapter`）。
-7. `speckit.component-plan` → 复用/缺口/简报（全局纸面设计，内部自审；不单独人审）。**不在这里预建组件**；实现由页面循环在首次需要它的页面完成，组件随该页一起人审。
+7. `speckit.component-plan --no-self-review` → 复用/缺口/简报；`build-component-plan-review-evidence` → `review-ai --mode component-plan` 单次文本自审；不单独人审。**不在这里预建组件**；实现由页面循环在首次需要它的页面完成，组件随该页一起人审。
 8. `script-to-storyboard` → `storyboard.yml`（确定性投影）；`validate-storyboard` / parity / concepts / coverage / vocabulary / teaching / `check-review-sections` 自动门禁。storyboard 不再人审，也不再跑 AI 自审。
 9. `build-tasks` → 逐页任务（确定性生成）。tasks.md 是内部拆分，不再人审，也不再跑 AI 自审。随后 `list-missing-components` → `speckit.component-build --prebuild` 在页循环前一次性建好所有缺组件。
 10. **逐页循环**：`section-freeze-check` → `load-page-components`（本页缺哪些组件）→ 缺则 `build-missing-page-components`（`speckit.component-build --section --slides --components`）→ 暂存组件校验 → `implement-section`（写 `--deck-data`，`--no-self-review`）→ 语音 → `section-shell-build --staging` → 语音闸门 → 截图（绑定 deck 哈希）→ deck-data/baseline/concepts/quiz-keys → `build-page-evidence`（density 信号/concepts/quiz/narration/rendered/截图 + 自审骨架；不再跑 overflow/overlap）→ `self-review-page`（单次模型调用：默认本页截图 + 已批准脚本页，填骨架；不重新判断 density；失败时主 agent 先修再重跑）→ `review-page` 人审（同时批准本页新组件）→ `register-staged-page-components --only … --clean` → `check-registry` → 从 registry 重建站点 → deck-data（不含 staging）→ `freeze-section`。
@@ -532,7 +537,7 @@ content: internal self-reviews/checks → review-script (once) → review-page (
 
 - `specify preset add` / `workflow add` 在 Claude Code 与 Codex 两个 integration 实测安装成功。
 - 一键安装 `node workflow/install.mjs --project … --integration …` 实测 exit 0。
-- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过、脚本阶段 density+complexity 通过/缺 complexity/多组件/例外、页面 authority 回滚、老师版脚本不含交互设计/制作字段）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、逐页清单（含“多屏合并成一个 section”被拒绝，防止绕过逐页人工审核）、截图列表、`next-section`、`approve-script`、`check-script-approval`（批准通过、缺账本、批准后编辑、伪造 `reject` gate、DRAFT 状态、paused run 均拒绝）、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration），workflow 逐页人工审核 gate 静态检查（`review-page` 位于每页实现与自审之后，消息带课件 URL、附本页自审文件；resume guard 位于实现/自审之前），3 个人工 gate（`review-shell`/`review-script`/`review-page`）全部为 `gui-gate` 且无 `verdict_input` 的静态检查，壳批准账本（真实 gate run 通过、篡改壳文件后拒绝），占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 133/133 通过；模板仓库 128/128 通过（2 项壳检查 SKIP））。
+- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过、脚本阶段 density+complexity 通过/缺 complexity/多组件/例外、页面 authority 回滚、老师版脚本不含交互设计/制作字段）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、逐页清单（含“多屏合并成一个 section”被拒绝，防止绕过逐页人工审核）、截图列表、`next-section`、`approve-script`、`check-script-approval`（批准通过、缺账本、批准后编辑、伪造 `reject` gate、DRAFT 状态、paused run 均拒绝）、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration），workflow 逐页人工审核 gate 静态检查（`review-page` 位于每页实现与自审之后，消息带课件 URL、附本页自审文件；resume guard 位于实现/自审之前），3 个人工 gate（`review-shell`/`review-script`/`review-page`）全部为 `gui-gate` 且无 `verdict_input` 的静态检查，壳批准账本（真实 gate run 通过、篡改壳文件后拒绝），占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 135/135 通过；模板仓库 130/130 通过（2 项壳检查 SKIP））。
 - 人工审核端到端实测（`tools/test-gui-gate.mjs`）：非 TTY 运行 exit 3，包装器打印审核文件绝对路径与 `gate-review.mjs show/decide`；pending 绑定 show/review 角色与哈希；`gate-review show` 打印审核文件与 options；`gate-review decide` 记录 `source: chat` / `decidedBy: teacher` 的 verdict；`run-workflow.mjs resume` 后 run `completed`，verdict 与 pending 均标记消费。
 - 逐页 gate resume 实测（`tools/test-gui-gate-resume.mjs`）：嵌套 `do-while → if` 中，gate 前的步骤每次执行都会改写证据；首次运行写 pending 后暂停，老师批准并 resume 后，`check-pending-gui-gate.mjs` 认出同一 run 的 pending gate，跳过 gate 前重建，原始 verdict 被消费，run `completed`，证据只被改写 1 次、没有第二个 pending。该用例防止 Spec Kit 重跑父 body 时自审 `reviewedAt` 变化导致批准失效。上述两个用例在 Spec Kit 1.0.10（WSL）与 1.2.2（Windows）各跑一遍，均通过；两个平台全量 smoke 均为 92/92。
 - Windows 兼容修复实测：`fs.cpSync` 的 filter 收到 `\\?\` 前缀路径，`path.relative` 因此把祖先目录（如 `staging`）当成相对路径的一部分，注册组件时只复制了 `component.json`；现在统一去掉长路径前缀并按“目标必须在源内”失败关闭。包装器非交互分支改用管道 stdin（不是 NUL），避免 Python `isatty()` 在 Windows 上误判为交互式而卡在终端 gate。

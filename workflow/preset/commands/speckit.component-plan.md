@@ -16,6 +16,8 @@ node workflow/tools/check-script-approval.mjs courseware.md
 
 必须 exit 0。失败说明脚本尚未获 `review-script` 人工 gate 批准、批准后又改过、批准账本缺失，或账本记录的 gate run 不存在/未完成；停止并回到工作流人工审核。不得手动运行 `approve-script.mjs`，也不得继续本命令。
 
+> **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，只生成产物；跳过本文件的 Self-review 与 Human Review（人工审核）两节，不要读取 `workflow/tools` 源码、不要额外跑门禁套件或临时脚本、不要写 `review.md`。自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
+
 ## Outline
 
 1. 前置条件：`courseware.md` 已获人工 `approve`（`check-script-approval` 通过；所有非 SKIP 屏 `status: APPROVED`）。
@@ -51,13 +53,13 @@ node workflow/tools/check-script-approval.mjs courseware.md
    ```
 8. 输出：`component-plan.md`、简报清单、复用/新建统计、检查结果。
 
-## Self-review（强制，人工审核前）
+## Self-review（仅非 workflow 模式，人工审核前）
 
 - 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-component-plan.json` 和 `.md`。
 - 检查每个交互需求都有检索记录、每个缺口都有简报、状态机/props/无障碍/降级/测试计划完整；`verdict` 必须为 `pass`。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。
 
-## Human Review（强制）
+## Human Review（仅非 workflow 模式）
 
 - 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为 `component-plan.md` + 简报。
 - 主动提出审核请求：复用结论、缺口列表、每个新组件的学习动作与交互状态机、风险。

@@ -8,6 +8,8 @@ description: 审核课件脚本是否足够学生自学；输出缺口报告与�
 $ARGUMENTS
 ```
 
+> **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，只生成产物；跳过本文件的 Human Review（人工审核）节，不要读取 `workflow/tools` 源码、不要额外跑门禁套件或临时脚本、不要写 `review.md`。自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
+
 ## 目的
 
 参考课件常常是**教师课堂讲授**用的：老师会口头补充、追问、给答案，屏幕只呈现提示和局部内容。直接把它做成学生自学课件，会出现「看得见结论、看不见推理」「有练习、没答案」「有动画、没解释」等缺口。
@@ -89,7 +91,7 @@ $ARGUMENTS
 - 不改变原有 `id`、`objectiveId`、`contentRefs`、`status`；新增页时必须同步 `review-sections.yml`，并在报告里标出页数变化。
 - **不要覆盖 `courseware.md`**；它由人工批准后的 apply 步骤替换。
 
-## 强制校验
+## 强制校验（工作流模式 `--no-self-review` 跳过；`check-self-study` 由 workflow 执行）
 
 ```bash
 node workflow/tools/check-self-study.mjs $COURSEWARE_REVIEW_DIR/self-study-audit.json \
@@ -98,7 +100,7 @@ node workflow/tools/check-self-study.mjs $COURSEWARE_REVIEW_DIR/self-study-audit
 
 有补充提案时，检查器会自动读取脚本同目录的 `courseware.self-study.md`。校验必须 exit 0；失败先修报告/提案，不得绕过。
 
-## 人工审核
+## Human Review（仅非 workflow 模式）
 
 - 展示 `$COURSEWARE_REVIEW_DIR/self-study-audit.md`，明确询问：`Approve the self-study supplement plan? (approve / reject)`。
 - 不得自行批准，不得在批准前修改 `courseware.md`。

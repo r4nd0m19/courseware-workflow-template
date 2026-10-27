@@ -10,6 +10,8 @@ $ARGUMENTS
 
 > 如果内容包还不存在，不要向老师要 `content-pack.json`、JSON、路径或命令。只问老师有没有这门课的教案、讲义、网页、Word、PDF 或图片；用 `speckit.extract-content` 生成内容包。
 
+> **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，只生成产物；跳过本文件的 Self-review 与 Human Review（人工审核）两节，不要读取 `workflow/tools` 源码、不要额外跑门禁套件或临时脚本、不要写 `review.md`。自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
+
 ## Outline
 
 1. 读取 `.specify/memory/constitution.md`、内容包（content pack）和风格包（style pack manifest）。
@@ -26,14 +28,14 @@ $ARGUMENTS
 7. 不要写页面实现、组件代码或 CSS。
 8. 完成后输出：spec 路径、concepts.yml 路径与概念数、required 项数量、仍需澄清的点。
 
-## Self-review（强制，人工审核前）
+## Self-review（仅非 workflow 模式，人工审核前）
 
 - 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-brief.json` 和 `.md`。
 - 运行/读取本阶段自动检查；`verdict` 必须为 `pass`。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。
 - 只有自审 pass 后才进入下面的 Human Review；不得自行把产物标成 APPROVED/reviewed。
 
-## Human Review（强制）
+## Human Review（仅非 workflow 模式）
 
 - 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为 `spec.md` 与内容覆盖映射。
 - 主动向用户提出审核请求：产物路径、3–5 行摘要、自动检查结果、待人工判断项/豁免。
