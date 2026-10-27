@@ -1159,6 +1159,27 @@ try {
     )
   }
 
+  // ---- screenshot + approved-script page review ----
+  total += 1
+  const buildPageEvidenceStep = findStep(workflowData.steps, 'build-page-evidence')
+  const visualReviewPass =
+    /^  page_review_scope:\n    type: string\n    default: "visual-script"/m.test(workflowYaml) &&
+    String(buildPageEvidenceStep?.run || '').includes('--review-scope {{ inputs.page_review_scope }}') &&
+    String(selfReviewStep?.run || '').includes('--review-scope {{ inputs.page_review_scope }}') &&
+    pageReviewLibSource.includes('PAGE_REVIEW_SYSTEM_PROMPT_VISUAL_SCRIPT') &&
+    pageReviewLibSource.includes('compactVisualEvidence') &&
+    pageEvidenceSource.includes("reviewScope === 'visual-script'") &&
+    pageEvidenceSource.includes('可见内容与已批准脚本的屏幕内容一致') &&
+    !pageEvidenceSource.includes('check-overflow.mjs') &&
+    !pageEvidenceSource.includes('check-overlap.mjs')
+  console.log(`${visualReviewPass ? 'PASS' : 'FAIL'} screenshot + approved-script page review`)
+  if (!visualReviewPass) {
+    failed += 1
+    console.error(
+      'page review must default to visual-script scope and pass the scope to build-page-evidence/page-review-ai',
+    )
+  }
+
   // ---- density is script-primary ----
   total += 1
   const scriptReviewCheckStep = findStep(workflowData.steps, 'check-self-review-script')
@@ -1559,7 +1580,7 @@ try {
   )
   const pageReviewTestOutput = `${pageReviewTest.stdout || ''}\n${pageReviewTest.stderr || ''}`
   const pageReviewToolPass =
-    pageReviewTest.status === 0 && /16\/16 page-review-ai tests passed/.test(pageReviewTestOutput)
+    pageReviewTest.status === 0 && /19\/19 page-review-ai tests passed/.test(pageReviewTestOutput)
   console.log(`${pageReviewToolPass ? 'PASS' : 'FAIL'} single-shot page review tool`)
   if (!pageReviewToolPass) {
     failed += 1

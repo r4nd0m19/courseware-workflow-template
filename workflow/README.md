@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.35.0 / 84 步（production）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.37.0 / 84 步（production）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
 
 **人工审核只有三类：壳、整份课程脚本、每一页。**
 
@@ -10,8 +10,10 @@
 
 核心变化：
 
+- **页面证据去掉视觉几何门禁（0.37.0）**：`build-page-evidence` 不再跑 `check-overflow` / `check-overlap`，版面几何交给截图 AI + 老师逐页审核；精确渲染文本/代码、quiz、概念、旁白、参考残留、截图/deck 绑定仍为确定性阻断项。整份 Alpha/Gold 的 `check-overflow` 保留。
+- **截图 + 已批准脚本页自审（0.36.0）**：`page_review_scope` 默认 `visual-script`。`build-page-evidence` 仍跑非视觉确定性检查并阻断，`page-review-ai` 只把本页截图和已批准脚本页（屏幕内容、交互设计、转场）发给模型，判断可见内容是否与脚本一致，以及裁切、重叠、拥挤、可读性、可见占位/个人信息等视觉问题；不再把 density、检查结果、概念和参考映射塞给模型。视觉自审不通过时主 agent 先改页面、重建、重截图、重跑，直到通过才进入老师逐页审核。显式传 `-i page_review_scope=evidence` 可回滚到完整证据包路径；该路径与 `density_authority=page` 配套。
 - **老师版脚本（0.35.0）**：`render-teacher-script.mjs` 从 `courseware.md` 确定性生成 `review/<lesson>/courseware.teacher.md`，只显示标题、对应目标、本屏作用、屏幕内容、一行“学生要做”摘要、旁白、转场；`review-script` gate 改为显示这份老师版。完整 `courseware.md` 仍是唯一内容源，交互设计与制作字段保留给检查工具/分镜投影，脚本批准账本仍绑定完整源文件。老师版是运行时生成物，不提交、不手改。
-- **density/复杂度前移到脚本阶段（0.34.0）**：`density_authority` 默认 `script`，`build-script-review-evidence` 生成 `density[]` 与 `complexity[]` 骨架，脚本 AI 自审判断一屏一个语义边界，以及交互/组件是否过复杂；`check-self-review-script` 用 `--script --role script --density-authority script` 强制，多语义单元或多组件必须拆屏或写 `exception` 理由。页面自审不再判断 density：`page-review-ai` 使用无 density 的输出 schema，只判断交互证据、视觉版面、组件行为、占位/个人信息。旧页面 density 逻辑保留，传 `-i density_authority=page` 可回滚。
+- **density/复杂度前移到脚本阶段（0.34.0）**：`density_authority` 默认 `script`，`build-script-review-evidence` 生成 `density[]` 与 `complexity[]` 骨架，脚本 AI 自审判断一屏一个语义边界，以及交互/组件是否过复杂；`check-self-review-script` 用 `--script --role script --density-authority script` 强制，多语义单元或多组件必须拆屏或写 `exception` 理由。页面自审不再判断 density；0.36.0 起默认只看截图 + 已批准脚本页，判断可见内容一致性、视觉问题和可见控件/占位。旧页面 density 逻辑保留，传 `-i density_authority=page` 且 `page_review_scope=evidence` 可回滚。
 - **runner 隔离（0.33.1）**：`run-workflow.mjs` 的新 run **一律生成新的 run id**，不再继承环境里的 `SPECKIT_WORKFLOW_RUN_ID`；`smoke-test.mjs` 启动时清除继承的 run id；`test-lesson-paths` 回归覆盖“继承 id 也不能复用”。页面实现 agent 不得在 workflow 内跑 `smoke-test`/其它 workflow。2026-10-22 的 S05 事故就是 smoke test 复用了 production run id、覆盖了 `04649d9c` 的 state；这不是页面内容问题。
 - **壳审核独立（0.33.0）**：新增 `courseware-shell` 工作流，只依赖壳包/风格包，**不需要 content pack**；顺序是 `validate-shell` → `review-shell` → `approve-shell`，按 `shell_slug` 写 `review/shells/<slug>/shell-approval.json`（壳包全文哈希 + gate run id）。内容工作流开头用 `check-shell-approval` 校验壳哈希和 gate run，不再重复审壳。
 - **人工审核收敛到三类（0.33.0）**：只保留 `review-shell`、`review-script`、`review-page`；`review-inputs`、`review-brief`、`review-self-study-audit`、`review-shell-art`、`review-component-plan`、`review-alpha`、`review-beta`、`gold` 全部去掉人类 gate，保留确定性/AI 内部自审与检查。
@@ -19,12 +21,12 @@
 - **单次模型页自审（0.32.0）**：`self-review-page` 从 `prompt` 步骤改为 `shell`，由 `page-review-ai.mjs` 直接发一次 HTTP 请求（Anthropic Messages 或 OpenAI Chat Completions）。证据包 JSON 和截图（`aiImage`，缺失回退 PNG）内联在请求里，模型只能返回 `submit_page_review` 结构化 JSON；它没有文件、命令或 MCP 工具，不能读仓库、跑门禁或改文件。配置由用户提供（优先项目内 `.courseware/page-review.json`，否则 `~/.config/courseware/page-review.json`，或 `COURSEWARE_REVIEW_*`；ZCode 用户可用 `zcodeConfig`/`zcodeProvider` 复用现有 provider）；`check-page-review-config` 在组件预构建/页循环前 fail-closed。没有配置或模型不支持图片时直接失败，不会退回 `zcode -p` / `claude -p` 这类 coding agent，也不会悄悄退化成纯文本判断。001 S01 实测（DeepSeek `deepseek-flash`，JSON 模式）：3 次 **6.5 / 20.6 / 13.7 s，平均 13.6 s**；旧的 coding-agent 自审为 **3 分 16.7 秒**。`check-self-review` 对真实输出通过（基于当时通过的证据包；当前 S01 重建证据会因 mascot 与 `pre`/`cover-output` 文本的真实重叠在 `check-overlap` 失败，这是页面布局问题，不是模型调用耗时）。
 - **S02 完整链路实测（2026-10-22）**：截图 4.0 s + 证据 8.2 s + 模型 13.4/7.2/5.5 s（平均 8.7 s）+ MD 1.1 s + 检查 1.2 s。自审段平均 **20.6 s**（范围约 17–26 s），含截图的完整页流程平均约 **24.6 s**。静态页规则加入后，同一 S02 证据 3 次全部 **pass**（checklist 0 = n/a；2 次保留非阻断提示，指出“先回忆却直接给答案”）；规则前同一证据曾出现 1 fail / 2 pass。
 - **静态页自审规则（0.32.0）**：页面明确声明 `watch` / `static-reading` 且有书面静态理由时，checklist 0 记 `n/a`，不因“只是看”判 fail；只有页面声称互动/学生产出证据、实际却直接给答案时才 fail。
-- **自审分层（0.22.0）**：`inputs` / `alpha` / `beta` / `gold` 改为由门禁结果与逐页自审确定性汇总，不再启动 AI 复述；`script` 自审改读一份紧凑证据包（逐屏脚本字段 + 闸门结果），不再读整份 `courseware.md`、content pack、style pack 和 registry；页自审只读证据包 + 截图，MD 由 JSON 自动渲染。**density/segmenting 自 0.34.0 起以脚本自审为唯一权威**（`density_authority=script`）：脚本自审填 `density[]` 与 `complexity[]`，页面自审不再判断 density；`density_authority=page` 保留旧的页面权威路径用于回滚。AI 自审只保留 `brief` / `script` / `component-plan` / 每页一次判断；参考适配映射每课生成一次。
+- **自审分层（0.22.0）**：`inputs` / `alpha` / `beta` / `gold` 改为由门禁结果与逐页自审确定性汇总，不再启动 AI 复述；`script` 自审改读一份紧凑证据包（逐屏脚本字段 + 闸门结果），不再读整份 `courseware.md`、content pack、style pack 和 registry；页自审默认只读截图 + 已批准脚本页（`page_review_scope=visual-script`），MD 由 JSON 自动渲染。**density/segmenting 自 0.34.0 起以脚本自审为唯一权威**（`density_authority=script`）：脚本自审填 `density[]` 与 `complexity[]`，页面自审不再判断 density；`density_authority=page` 保留旧的页面权威路径用于回滚。AI 自审只保留 `brief` / `script` / `component-plan` / 每页一次判断；参考适配映射每课生成一次。
 - **固定 1440×900 播放器（0.26.0 / 0.26.1 / 0.27.1）**：`workflow/runtime/player.html` 用 1440×900 iframe 渲染课件，再整体等比缩放到窗口；内部布局固定，浏览器缩放只改变整体大小。**0.26.1 起没有外层工具栏**，页面上只看到课件本身；**0.27.1 起读取 `#slide` 的背景色/背景图并 `cover` 到外层**，宽屏两侧显示课件自身背景，不再留天空色空白。壳内全屏按钮和 `F` 快捷键路由到播放器全屏，放大用全屏，不再提供 100% 滚动模式。`extract-shell`、`prepare-shell-site`、`check-shell --serve-preview` 都会写入 `player.html`；审核 gate 用播放器链接。直接 deck URL 留给工具和调试。
 - **AI 截图降规格（0.31.0）**：`build-screen` 在 1440×900 PNG 之外，用 CDP 从同一状态生成 **1280 宽** AI 审核图（默认 JPEG 80，`--ai-format webp` 可选），记录尺寸/哈希；证据包和页自审请求读 `aiImage`，缺失才回退 PNG。16:10 舞台实际约 1280×675；S02B 视觉像素约 -17%。PNG 继续给证据/老师。
 - **页自审风险校准（0.30.0）**：`page-review-risk.mjs` 用页面类型、组件、交互层级、density、概念和参考映射算 low/medium/high，并对照历史问题报告“跳过低风险 AI 会漏什么”。001 结果只有 S01 为 low，且 S01 有非阻断断行、medium 页有 S05/S06/S07 blocking，所以**暂不启用页级跳过 AI**。
-- **页自审并行 + 缓存（0.29.0）**：`build-page-evidence` 的快速检查并发执行，overflow/overlap/rendered-text 三个浏览器检查并发上限 2；每个检查记录 `durationMs`。001 全 16 页确定性管线 **9.86 s/页 → 5.57 s/页**。`page-review-cache.mjs` 按页面脚本/density/映射/检查摘要/截图/deck/registry 哈希缓存 AI 判断；内容不变时跳过 `self-review-page`，只刷新 `reviewedArtifacts`。缓存目录是运行时状态，不提交。
-- **页自审瘦身（0.28.0）**：页面 AI 只判断 density 语义单元、交互证据、视觉版面、新组件行为和占位/个人信息；concepts 与 referenceAdaptation 由确定性检查预填，AI 只处理未映射参考内容的增量。证据包去掉 relatedConcepts/quizKeys/overlap/screenshot metadata/script machine 全量字段，S02B 证据 9.2KB → 5.9KB，prompt 2888B → 2569B。
+- **页自审并行 + 缓存（0.29.0）**：`build-page-evidence` 的快速检查并发执行；0.37.0 起只剩 rendered-text 需要浏览器（overflow/overlap 不再跑）。001 全 16 页确定性管线 **9.86 s/页 → 5.57 s/页**。`page-review-cache.mjs` 按页面脚本/density/映射/检查摘要/截图/deck/registry 哈希缓存 AI 判断；内容不变时跳过 `self-review-page`，只刷新 `reviewedArtifacts`。缓存目录是运行时状态，不提交。
+- **页自审瘦身（0.28.0）**：页面 AI 只判断确定性检查覆盖不了的部分；concepts 与 referenceAdaptation 由确定性检查预填。0.36.0 起默认输入进一步缩为截图 + 已批准脚本页，只判断可见一致性和视觉问题。证据包去掉 relatedConcepts/quizKeys/overlap/screenshot metadata/script machine 全量字段，S02B 证据 9.2KB → 5.9KB，prompt 2888B → 2569B。
 - **渲染文本确定性对比（0.25.0）**：`check-rendered-text` 从 deck 提取初始可见的高信号字面量（标题、代码、quiz 题干/选项、表格、items、chapter topics/flow、矩阵题活动面板、概念 mustAppear），在渲染后的 `#slide.textContent` 上归一化后精确包含，缺失即阻断；长散文用 `#slide.innerText` 的 token 覆盖率做非阻断提示。页自审不再判断逐字文本。
 - **参考适配每课一次（0.24.0）**：`build-reference-adaptation` 在脚本批准、storyboard 投影后读一次参考壳源码，生成 `review/<lesson>/reference-adaptation.json`（参考内容 → 本课替换、适用页、`residue`）；页自审只读这份映射做本页增量确认。`check-reference-residue` 在渲染后的 `#slide` 文本里确定性扫描 `residue: replace` 的参考字符串，命中即失败。
 - **人工审核 = 文件地址 + 原生选择**：3 个 `gui-gate`（壳、脚本、每页）在非 TTY 运行时写哈希绑定的 pending 请求并暂停；agent 把审核文件绝对路径/课件 URL 发给老师，用 harness 原生提问 UI（ZCode/Claude Code 的 `AskUserQuestion`；Codex 的原生 user-input / approval 提示）拿到明确的 approve/reject，再用 `tools/gate-review.mjs decide` 记录，最后用 `tools/run-workflow.mjs resume` 继续。verdict 绑定 run/step/gate/digest/nonce 并一次性消费；agent 不能 `-i` 代答。
@@ -48,7 +50,7 @@
 | `workflows/courseware-production.yml` | 84 步内容生产 workflow（shell / gui-gate / command / fan-out / do-while + if；含逐页循环嵌套）；只有 `review-script` 与 `review-page` 两个人类 gate |
 | `steps/gui-gate/` | Spec Kit 自定义 gate step：非 TTY 写 pending 并暂停；TTY 退化为终端提问；校验 `verdict_input` 禁用与证据哈希 |
 | `tools/gate-review.mjs` | 人工审核助手：`show` 打印审核文件/链接/证据；`decide` 在老师明确回答后写入一次性 verdict；`status` 查看 run/gate |
-| `tools/build-page-evidence.mjs` | 汇总本页 density 信号/concepts/quiz/narration/overflow/overlap/rendered-text/参考残留/截图，生成自审 JSON 骨架；`density_authority=script` 时密度结论只作参考 |
+| `tools/build-page-evidence.mjs` | 汇总本页 density 信号/concepts/quiz/narration/rendered-text/参考残留/截图，生成自审 JSON 骨架；0.37.0 起不再跑 overflow/overlap，`density_authority=script` 时密度结论只作参考 |
 | `tools/build-self-review-inputs.mjs` / `build-script-review-evidence.mjs` / `build-self-review-{alpha,beta,gold}.mjs` | 确定性自审与脚本证据包；脚本证据包在 `density_authority=script` 时生成 density/complexity 骨架 |
 | `tools/render-self-review-md.mjs` | 从自审 JSON 渲染 Markdown（页自审不再让 AI 写 MD） |
 | `tools/render-teacher-script.mjs` | 从 `courseware.md` 生成老师版脚本：屏幕内容、旁白、转场、一行学生动作摘要；不显示交互设计与制作字段 |
@@ -87,7 +89,7 @@
 | `tools/check-script-approval.mjs` / `approval-lib.mjs` | 校验批准账本：schema、人工批准人、gate 结果与 run 状态、整份/每屏哈希、APPROVED 状态 |
 | `tools/run-workflow.mjs` | fail-closed 运行 `specify workflow run/resume`；`paused` → 退出码 3；人工 gate 打印审核文件绝对路径、链接、`gate-review.mjs show/decide` 与 `resume` 命令，内置 gate 仍打印人工恢复命令 |
 | `tools/build-narration.mjs` / `check-narration.mjs` | Edge TTS 语音生成与校验；按旁白文本 + 音色 + rate/pitch/format/provider 哈希复用 MP3，文本变化才重生成 |
-| `tools/page-review-ai.mjs` / `page-review-lib.mjs` | 单次模型页自审：证据 + 内联截图 → 一次 HTTP 请求 → 结构化 JSON；无文件/命令工具；配置由用户提供 |
+| `tools/page-review-ai.mjs` / `page-review-lib.mjs` | 单次模型页自审：默认截图 + 已批准脚本页 → 一次 HTTP 请求 → 结构化 JSON；完整证据包模式可回滚；无文件/命令工具；配置由用户提供 |
 | `tools/page-review-cache.mjs` | 页面自审缓存：内容、截图或暂存组件不变时复用 AI 判断，刷新哈希并跳过 `self-review-page` |
 | `tools/page-review-risk.mjs` | 页自审风险校准：low/medium/high + 对照历史问题估算跳过 AI 的漏判 |
 | `tools/bench-page-review.mjs` | 页自审确定性基准：证据包/截图/JSON/MD 的耗时、最慢检查与上下文大小 |
@@ -400,6 +402,7 @@ approve-script（DRAFT → APPROVED，记录脚本哈希）
 | `deck_url` | 构建后 deck 的 dev/preview URL |
 | `voice_catalog` / `narration_manifest` / `audio_dir` | Edge TTS 声线目录、manifest 与 MP3 目录 |
 | `page_count` / `baseline_dir` / `coverage_waivers` | overflow、基线、覆盖豁免 |
+| `density_authority` / `page_review_scope` | 密度权威（`script` 默认）/ 页面自审输入（`visual-script` 默认；`evidence` 回滚） |
 
 ## 运行
 
@@ -443,7 +446,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 7. `speckit.component-plan` → 复用/缺口/简报（全局纸面设计，内部自审；不单独人审）。**不在这里预建组件**；实现由页面循环在首次需要它的页面完成，组件随该页一起人审。
 8. `script-to-storyboard` → `storyboard.yml`（确定性投影）；`validate-storyboard` / parity / concepts / coverage / vocabulary / teaching / `check-review-sections` 自动门禁。storyboard 不再人审，也不再跑 AI 自审。
 9. `build-tasks` → 逐页任务（确定性生成）。tasks.md 是内部拆分，不再人审，也不再跑 AI 自审。随后 `list-missing-components` → `speckit.component-build --prebuild` 在页循环前一次性建好所有缺组件。
-10. **逐页循环**：`section-freeze-check` → `load-page-components`（本页缺哪些组件）→ 缺则 `build-missing-page-components`（`speckit.component-build --section --slides --components`）→ 暂存组件校验 → `implement-section`（写 `--deck-data`，`--no-self-review`）→ 语音 → `section-shell-build --staging` → 语音闸门 → 截图（绑定 deck 哈希）→ deck-data/baseline/concepts/quiz-keys → `build-page-evidence`（density 信号/concepts/quiz/narration/overflow/overlap/rendered/截图 + 自审骨架）→ `self-review-page`（单次模型调用：证据包 + 内联截图，填骨架；不重新判断 density；组件摘要/哈希也内联）→ `review-page` 人审（同时批准本页新组件）→ `register-staged-page-components --only … --clean` → `check-registry` → 从 registry 重建站点 → deck-data（不含 staging）→ `freeze-section`。
+10. **逐页循环**：`section-freeze-check` → `load-page-components`（本页缺哪些组件）→ 缺则 `build-missing-page-components`（`speckit.component-build --section --slides --components`）→ 暂存组件校验 → `implement-section`（写 `--deck-data`，`--no-self-review`）→ 语音 → `section-shell-build --staging` → 语音闸门 → 截图（绑定 deck 哈希）→ deck-data/baseline/concepts/quiz-keys → `build-page-evidence`（density 信号/concepts/quiz/narration/rendered/截图 + 自审骨架；不再跑 overflow/overlap）→ `self-review-page`（单次模型调用：默认本页截图 + 已批准脚本页，填骨架；不重新判断 density；失败时主 agent 先修再重跑）→ `review-page` 人审（同时批准本页新组件）→ `register-staged-page-components --only … --clean` → `check-registry` → 从 registry 重建站点 → deck-data（不含 staging）→ `freeze-section`。
 11. 全部页面批准后：`all-sections-frozen` → `alpha-shell-build` → 整份截图/基线 → `alpha-deck-data-gate` / `alpha-source-fidelity-gate` / `alpha-bundle-gate` / `alpha-shell-gate` / `alpha-shell-art-gate` / `alpha-narration-gate` / script/parity/overflow → `self-review-alpha` / `check-self-review-alpha`（确定性汇总，不再人审）。
 12. `speckit.converge` → `self-review-beta` / `check-self-review-beta`；`gold-script-gates` / `gold-parity-gate` / `final-gates` / `gold-shell-gate` / `gold-shell-art-gate` → `self-review-gold` / `check-self-review-gold`（确定性汇总，不再人审）。
 
@@ -479,7 +482,7 @@ content: internal self-reviews/checks → review-script (once) → review-page (
 - **人工 gate 只有三类**：`review-shell`（在 `courseware-shell`）、`review-script`、`review-page`。其余 `self-review-*` 是内部检查，不再弹人工 gate；`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 已移除。
 - **脚本审核看老师版**：`render-teacher-script` 在 gate 前从 `courseware.md` 生成 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行学生动作；`review-script` 的 `show_file` 指向它。完整源文件仍是唯一内容源，批准账本绑定完整 `courseware.md`。
 - **壳审核先于内容包**：壳工作流不依赖 `content_pack`/`lesson_slug`，只依赖壳包；通过后写 `review/shells/<shell_slug>/shell-approval.json`（壳包全文哈希 + gate run）。内容工作流开头 `check-shell-approval` 校验，壳改一个字节即失效。
-- **页面自审不是 coding agent**：`self-review-page` 是 `shell` 步骤，调用 `page-review-ai.mjs` 发一次 HTTP 请求；模型只拿到证据 JSON 和截图，只能返回 `submit_page_review` 结构化 JSON，没有文件/命令/MCP 工具。它不能读 `courseware.md`、跑 `check-overlap` 或修改页面。
+- **页面自审不是 coding agent**：`self-review-page` 是 `shell` 步骤，调用 `page-review-ai.mjs` 发一次 HTTP 请求；模型默认只拿到本页截图和已批准脚本页，只能返回 `submit_page_review` 结构化 JSON，没有文件/命令/MCP 工具。它不能读 `courseware.md`、跑 `check-overlap` 或修改页面。
 - **模型由用户配置**：优先读项目内 `.courseware/page-review.json`（已 gitignore，适合 Windows/WSL 共用），否则读 `~/.config/courseware/page-review.json`；也支持 `COURSEWARE_REVIEW_CONFIG`、`COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。`api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。模型必须支持图片输入；不支持时请求直接失败，不会退化成纯文本。
 - **配置预检**：`check-page-review-config` 在逐页循环前运行；缺配置时整次运行在开始制作页面前失败，不会做到一半才报错。
 
@@ -498,12 +501,12 @@ content: internal self-reviews/checks → review-script (once) → review-page (
 
 - self-review 写 `review/self-review-<stage>.json/.md`（schema：`workflow/schemas/self-review.schema.json`；模板：`preset/templates/self-review-template.md`）。
 - `check-self-review` 要求：`verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。
-- **每页只跑一次页面自审**：`speckit.implement` 在工作流中带 `--no-self-review`，只实现页面；组件自审并入页面自审。页循环先运行 `build-page-evidence`，把 density 信号、concepts、quiz、narration、overflow、overlap、rendered-check 和截图元数据汇总成一个 JSON；`page-review-ai.mjs` 再把这个 JSON、截图和暂存组件摘要/哈希一起发给模型，一次写完判断字段。`density_authority=script` 时，页面骨架的 density 只携带脚本阶段已通过的结论作参考，页面模型不重新判断它。
+- **每页只跑一次页面视觉自审**：`speckit.implement` 在工作流中带 `--no-self-review`，只实现页面；组件自审并入页面自审。页循环先运行 `build-page-evidence` 跑确定性检查并生成骨架；`page-review-ai.mjs` 默认只把本页截图和已批准脚本页发给模型，判断可见内容是否与脚本一致、排版是否清晰，一次写完判断字段。`page_review_scope=evidence` 可回滚到完整证据包。视觉自审不通过时主 agent 先改页面、重建、重截图、重跑，直到通过才请老师审核。
 - **自审绑定确切字节**：每份自审的 `reviewedArtifacts` 记录被审文件的 SHA-256；`check-self-review` 重算并比对，文件一变即 `stale review` 失败。改稿后必须重新自审，不能只改哈希。
 - **参考适配（页自审必填）**：每课先生成一次映射（`review/<lesson>/reference-adaptation.json`），页自审只读映射、证据包和截图，发现未映射的参考课可见内容才在 `referenceAdaptation` 写增量。单次模型没有文件工具，不再每页读参考源码；`check-self-review --require-reference-adaptation` 要求该字段非空，渲染页面不得残留参考课内容。
-- **标题前缀 / 重叠 / 截图新鲜度**：`check-script` 拒绝制作前缀标题；页循环的 `check-overlap` 拒绝文字与人物/插画相交；`build-screen --deck` + `check-rendered-section --deck` 保证截图来自当前 deck。
+- **标题前缀 / 截图新鲜度**：`check-script` 拒绝制作前缀标题；0.37.0 起页循环不再跑 overflow/overlap，版面几何由截图 AI + 老师判断；`build-screen --deck` + `check-rendered-section --deck` 保证截图来自当前 deck。全文 Alpha/Gold 仍跑 `check-overflow`。
 - **逐屏密度/复杂度闸门（脚本阶段，0.34.0）**：`density_authority=script`（默认）时，`check-self-review-script` 必须带 `--script --role script --density-authority`，并为每屏写 `density`（`semanticUnits`）和 `complexity`（`signals`）。先跑 `density-report.mjs` 得到客观信号（contentRefs、表格行列、代码行、要点数、旁白句数、组件数/新组件数、互动层级等）。默认一屏一个语义边界；超过 1 个单元必须拆页，或标 `exception` 并写明理由（仅限并列对比、同一规则多例、复习整合）。组件数或新/扩展组件数超过 1 也必须拆屏或写 `exception` 理由；`verdict: fail` 直接阻断。信号与当前脚本/分镜不一致也会失败。显式传 `-i density_authority=page` 才回到旧的页面 density 权威路径；同一 run 不会两套同时强制。
-- **静态页规则**：页面明确声明 `watch` / `static-reading` 且有书面静态理由时，checklist 0 记 `n/a`，不因“只是看”判 fail；只有页面声称互动/学生产出证据、实际却直接给答案时才 fail。
+- **静态页规则（`page_review_scope=evidence` 回滚模式）**：页面明确声明 `watch` / `static-reading` 且有书面静态理由时，checklist 0 记 `n/a`；只有页面声称互动/学生产出证据、实际却直接给答案时才 fail。默认 `visual-script` 不判断交互是否产出证据，只判断截图可见内容与脚本一致。
 - **内部自审阶段**：`inputs`、`brief`、`script`、`component-plan`、`components`、`storyboard`、`tasks`、`section-<id>`、`alpha`、`beta`、`gold`。`density` 在 `script`（0.34.0 默认）或 `section-<id>`（legacy `density_authority=page`）与 `alpha` 强制；其余阶段只强制 `reviewedArtifacts`。只有 `script` 与 `section-<id>` 有人工 gate；壳由 `courseware-shell` 负责。
 - **插画**：`check-shell-art` 做 provenance 检查；插画直接出现在每页截图里，由 `review-page` 一并审核，不再单独 gate。
 
@@ -529,7 +532,7 @@ content: internal self-reviews/checks → review-script (once) → review-page (
 
 - `specify preset add` / `workflow add` 在 Claude Code 与 Codex 两个 integration 实测安装成功。
 - 一键安装 `node workflow/install.mjs --project … --integration …` 实测 exit 0。
-- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过、脚本阶段 density+complexity 通过/缺 complexity/多组件/例外、页面 authority 回滚、老师版脚本不含交互设计/制作字段）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、逐页清单（含“多屏合并成一个 section”被拒绝，防止绕过逐页人工审核）、截图列表、`next-section`、`approve-script`、`check-script-approval`（批准通过、缺账本、批准后编辑、伪造 `reject` gate、DRAFT 状态、paused run 均拒绝）、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration），workflow 逐页人工审核 gate 静态检查（`review-page` 位于每页实现与自审之后，消息带课件 URL、附本页自审文件；resume guard 位于实现/自审之前），3 个人工 gate（`review-shell`/`review-script`/`review-page`）全部为 `gui-gate` 且无 `verdict_input` 的静态检查，壳批准账本（真实 gate run 通过、篡改壳文件后拒绝），占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 132/132 通过；模板仓库 127/127 通过（2 项壳检查 SKIP））。
+- `smoke-test` 覆盖 schema、coverage、vocabulary（含 `kind: generated` 未入 core 时拒绝、入 core 后通过）、teaching、self-review（含 `stale review`、缺少 density、信号不一致、单屏多语义单元未拆页、exception 带理由通过、脚本阶段 density+complexity 通过/缺 complexity/多组件/例外、页面 authority 回滚、老师版脚本不含交互设计/制作字段）、style pack 验证/冻结/冻结哈希校验、脚本、组件包/注册表/staging、组件计划、逐页清单（含“多屏合并成一个 section”被拒绝，防止绕过逐页人工审核）、截图列表、`next-section`、`approve-script`、`check-script-approval`（批准通过、缺账本、批准后编辑、伪造 `reject` gate、DRAFT 状态、paused run 均拒绝）、`freeze-section`、`check-section-freeze`、`reopen-section`；并包含壳插画 fail-closed：空 art manifest 时 `prepare-shell-site` 与 `build-shell-site` 均 exit 1（项目没有 `shells/branch-choice` 时该组检查标记 SKIP，适配只含 workflow 的模板仓库），harness 选择检查（`integration` 输入默认 `auto`、无硬编码 integration），workflow 逐页人工审核 gate 静态检查（`review-page` 位于每页实现与自审之后，消息带课件 URL、附本页自审文件；resume guard 位于实现/自审之前），3 个人工 gate（`review-shell`/`review-script`/`review-page`）全部为 `gui-gate` 且无 `verdict_input` 的静态检查，壳批准账本（真实 gate run 通过、篡改壳文件后拒绝），占位预览 fixture 检查（30 页标题带“占位”、4 音色、32 个音频文件的哈希与时长），以及生产装配隔离检查（`prepare-shell-site` 不复制 `preview-audio/` / `preview-data.json`，无本课旁白时写入空清单而非占位语音；完整仓库 133/133 通过；模板仓库 128/128 通过（2 项壳检查 SKIP））。
 - 人工审核端到端实测（`tools/test-gui-gate.mjs`）：非 TTY 运行 exit 3，包装器打印审核文件绝对路径与 `gate-review.mjs show/decide`；pending 绑定 show/review 角色与哈希；`gate-review show` 打印审核文件与 options；`gate-review decide` 记录 `source: chat` / `decidedBy: teacher` 的 verdict；`run-workflow.mjs resume` 后 run `completed`，verdict 与 pending 均标记消费。
 - 逐页 gate resume 实测（`tools/test-gui-gate-resume.mjs`）：嵌套 `do-while → if` 中，gate 前的步骤每次执行都会改写证据；首次运行写 pending 后暂停，老师批准并 resume 后，`check-pending-gui-gate.mjs` 认出同一 run 的 pending gate，跳过 gate 前重建，原始 verdict 被消费，run `completed`，证据只被改写 1 次、没有第二个 pending。该用例防止 Spec Kit 重跑父 body 时自审 `reviewedAt` 变化导致批准失效。上述两个用例在 Spec Kit 1.0.10（WSL）与 1.2.2（Windows）各跑一遍，均通过；两个平台全量 smoke 均为 92/92。
 - Windows 兼容修复实测：`fs.cpSync` 的 filter 收到 `\\?\` 前缀路径，`path.relative` 因此把祖先目录（如 `staging`）当成相对路径的一部分，注册组件时只复制了 `component.json`；现在统一去掉长路径前缀并按“目标必须在源内”失败关闭。包装器非交互分支改用管道 stdin（不是 NUL），避免 Python `isatty()` 在 Windows 上误判为交互式而卡在终端 gate。

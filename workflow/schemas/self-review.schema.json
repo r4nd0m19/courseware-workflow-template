@@ -400,6 +400,13 @@
             "script",
             "page"
           ]
+        },
+        "reviewScope": {
+          "type": "string",
+          "enum": [
+            "visual-script",
+            "evidence"
+          ]
         }
       }
     }

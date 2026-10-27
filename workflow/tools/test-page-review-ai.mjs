@@ -337,6 +337,41 @@ await test('dry run builds one request with one output tool and inline image', a
   assert.ok(request.requestBytes > request.promptBytes)
 })
 
+await test('visual-script scope sends the approved script page, not evidence checks', async () => {
+  const requestOut = path.join(tmp, 'request-visual.json')
+  const result = await runTool(
+    baseArgs(freshSkeleton('visual'), [
+      '--base-url', 'https://example.invalid',
+      '--density-authority', 'script',
+      '--review-scope', 'visual-script',
+      '--dry-run',
+      '--request-out', requestOut,
+    ]),
+  )
+  assert.equal(result.code, 0, result.stderr)
+  const request = readJson(requestOut)
+  assert.equal(request.reviewScope, 'visual-script')
+  assert.match(request.system, /approved courseware script page/i)
+  assert.match(request.userText, /Approved script page/)
+  assert.match(request.userText, /屏幕内容/)
+  assert.doesNotMatch(request.userText, /"checks"/)
+  assert.doesNotMatch(request.userText, /"density"/)
+  assert.equal(request.tool.input_schema.properties.density, undefined)
+})
+
+await test('visual-script scope rejects the legacy page density authority', async () => {
+  const result = await runTool(
+    baseArgs(freshSkeleton('visual-page'), [
+      '--base-url', 'https://example.invalid',
+      '--density-authority', 'page',
+      '--review-scope', 'visual-script',
+      '--dry-run',
+    ]),
+  )
+  assert.equal(result.code, 2)
+  assert.match(result.stderr, /requires --density-authority script/)
+})
+
 await test('Anthropic request/response is a single tool-forced call', async () => {
   const seen = []
   await withServer(
@@ -406,6 +441,57 @@ await test('blocking issues force fail and fixed is always false', async () => {
   assert.ok(reviewJson.issues.some((issue) => /强制改为 fail/.test(issue.description)))
   const check = await runNode(checkTool, [review])
   assert.equal(check.code, 1)
+})
+
+
+await test('visual-script scope fills and passes the page checklist', async () => {
+  const mock = path.join(tmp, 'mock-visual-pass.json')
+  fs.writeFileSync(
+    mock,
+    JSON.stringify(
+      anthropicResponse({
+        checklist: [
+          { index: 0, status: 'pass' },
+          { index: 1, status: 'pass' },
+          { index: 2, status: 'pass' },
+          { index: 3, status: 'pass' },
+        ],
+        issues: [],
+        verdict: 'pass',
+      }),
+    ),
+  )
+  const review = freshSkeleton('visual-pass')
+  const visualSkeleton = readJson(review)
+  visualSkeleton.density[0].semanticUnits = [
+    { label: 'script unit', evidence: 'decided at script stage' },
+  ]
+  visualSkeleton.density[0].verdict = 'pass'
+  visualSkeleton.checklist = [
+    { item: '可见内容与已批准脚本的屏幕内容一致（无缺失、无多余、文字/代码正确）', status: 'n/a' },
+    { item: '版式清晰：无裁切、溢出、重叠、拥挤或误导性阅读顺序', status: 'n/a' },
+    { item: '可见控件与初始状态与脚本的交互设计一致（仅截图可判断的部分）', status: 'n/a' },
+    { item: '无占位内容、个人信息或参考课残留', status: 'n/a' },
+  ]
+  fs.writeFileSync(review, JSON.stringify(visualSkeleton, null, 2))
+  const result = await runTool(
+    baseArgs(review, [
+      '--mock-response', mock,
+      '--density-authority', 'script',
+      '--review-scope', 'visual-script',
+    ]),
+  )
+  assert.equal(result.code, 0, result.stderr)
+  const reviewJson = readJson(review)
+  assert.equal(reviewJson.reviewMeta.reviewScope, 'visual-script')
+  assert.equal(reviewJson.checklist.length, 4)
+  const check = await runNode(checkTool, [
+    review,
+    '--role', 'page',
+    '--density-authority', 'script',
+    '--require-reference-adaptation',
+  ])
+  assert.equal(check.code, 0, check.stderr)
 })
 
 await test('script density authority preserves density and skips page density review', async () => {
