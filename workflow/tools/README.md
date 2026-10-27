@@ -235,7 +235,21 @@ node workflow/tools/render-self-review-md.mjs review/<slug>/self-review-page-S02
 node workflow/tools/render-teacher-script.mjs specs/<slug>/courseware.md \
   --out review/<slug>/courseware.teacher.md
 
-# 参考适配（0.24.0）：每课一次映射 + 每页确定性残留扫描
+# 插画简报 / 参考适配（0.39.0）：紧凑证据 + 单次模型调用
+node workflow/tools/build-art-brief-evidence.mjs --lesson-slug <slug> --lesson "<title>" \
+  --script specs/<slug>/courseware.md --shell shells/<id> \
+  --out review/<slug>/art-brief-evidence.json
+node workflow/tools/single-shot-generate.mjs --mode art-brief \
+  --evidence review/<slug>/art-brief-evidence.json --out specs/<slug>/art-prompts.json
+node workflow/tools/build-reference-adaptation-evidence.mjs --lesson-slug <slug> --lesson "<title>" \
+  --script specs/<slug>/courseware.md --storyboard specs/<slug>/storyboard.yml \
+  --shell shells/<id> --concepts specs/<slug>/concepts.yml --content <content-pack.json> \
+  --out review/<slug>/reference-adaptation-evidence.json
+node workflow/tools/single-shot-generate.mjs --mode reference-adaptation \
+  --evidence review/<slug>/reference-adaptation-evidence.json \
+  --out review/<slug>/reference-adaptation.json --md review/<slug>/reference-adaptation.md
+
+# 参考适配（0.24.0）：每页确定性残留扫描
 node workflow/tools/check-reference-adaptation.mjs \
   review/<slug>/reference-adaptation.json \
   --storyboard specs/<slug>/storyboard.yml --script specs/<slug>/courseware.md \
