@@ -10,6 +10,8 @@ $ARGUMENTS
 
 > 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`--approval` 用 `$COURSEWARE_SCRIPT_APPROVAL`。workflow 会设置这些变量，并通过 `$ARGUMENTS` 传 `--lesson-slug <slug>`。
 
+> **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，只生成产物；跳过本文件的 Self-review 与 Human Review（人工审核）两节，不要读取 `workflow/tools` 源码、不要额外跑门禁套件或临时脚本、不要写 `review.md`。自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
+
 ## Outline
 
 1. 前置条件：`spec.md` 已获人工 `approve`；内容包、风格包 manifest 与 `.specify/memory/constitution.md` 可读。
@@ -33,7 +35,7 @@ $ARGUMENTS
    - 参考没有、库里也没有：标为 `new`，写 `component-briefs/<id>.md`，走 brief → build → review → core。
    - 本阶段允许写 `componentPlan: [{id, status: reference-verbatim|existing|extend|new, brief}]` 表达需求，但**不得在页面里发明组件**；脚本中引用的所有组件最终必须来自参考源码、风格包或已注册组件。
 7. 不允许 TODO/TBD/待定/占位文本。
-8. 运行闸门：
+8. 运行闸门（**工作流模式 `--no-self-review` 跳过本节**；`validate-script-draft` / `validate-concepts` / `self-study-audit` / `validate-script` 由 workflow 执行）：
    ```bash
    node workflow/tools/check-script.mjs courseware.md <content-pack.json> <style-pack-manifest.json> [registry/index.json]
    node workflow/tools/script-to-storyboard.mjs courseware.md --out storyboard.yml --draft
@@ -43,14 +45,14 @@ $ARGUMENTS
    投影出的 `storyboard.yml` 只用于校验逐页清单；正式分镜仍由 `speckit.plan` 在脚本批准后生成。失败项先修复；不得靠删除内容或降低 required 通过。
 9. 输出：`courseware.md`、`review-sections.yml` 路径、屏数、页数、目标/误区覆盖摘要、检查结果。
 
-## Self-review（强制，人工审核前）
+## Self-review（仅非 workflow 模式，人工审核前）
 
 - 按 `specify preset resolve self-review-template` 解析到的模板 写 `$COURSEWARE_REVIEW_DIR/self-review-script.json` 和 `.md`。
 - 必须运行 `check-script.mjs` 且 `verdict` 为 `pass`；逐屏检查屏幕内容/旁白分离、交互反馈完整、无占位符。
 - 有 blocking issue 时先修复并重跑；修不了就停止，不得请求人工审核。
 - 只有自审 pass 后才进入 Human Review；不得自行把脚本标成 APPROVED。
 
-## Human Review（强制）
+## Human Review（仅非 workflow 模式）
 
 - 按 `specify preset resolve review-template` 解析到的模板 写 `review.md`，产物为 `courseware.md` + `review-sections.yml` + 自审结果。
 - 主动提出审核请求：逐屏屏幕内容、交互设计、旁白、误区反馈、拆页建议、逐页清单、自动检查结果。

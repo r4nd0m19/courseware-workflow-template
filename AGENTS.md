@@ -18,6 +18,7 @@
   5. 运行 `node workflow/tools/run-workflow.mjs resume <run_id>`，把输出继续处理到下一个 gate 或完成。不要直接调用 `specify workflow resume`，不要传 `-i`。
 - 内置 gate（输出里没有 `Review file:` / `Gate options:`）或老师显式在交互式终端运行时，才走终端回答；`node workflow/tools/run-workflow.mjs resume <run_id>` 仍是统一恢复入口。
 - 非交互运行不需要额外加 `</dev/null`；包装器已把 stdin 置空。交互式恢复时保留 TTY，gate 才会显示选项。
+- 完整工作流可能运行 20 分钟以上。不要把它放后台再用 `sleep` 轮询；用 harness 的长超时前台调用（例如 1800000ms）或 harness 自带的后台任务通知。`sleep` 轮询不会加速流程，只会产生大量无效工具调用。
 
 ### 对老师说话（硬要求）
 
@@ -131,12 +132,13 @@ node workflow/tools/check-registry.mjs ...
 node workflow/tools/smoke-test.mjs
 ```
 
-- 自审（self-review）可以修安全的小问题，但不得把脚本/截图标成人工 APPROVED；人工审核点必须留给人。**页面自审是例外**：0.32.0 起它是单次模型调用，没有文件/命令工具，不能修任何东西；它报 blocking 就失败，由主 agent 修复后重跑页面。
-- 0.22.0 起 `self-review-inputs` / `self-review-alpha` / `self-review-beta` / `self-review-gold` 是确定性 shell 步骤（从门禁结果与逐页自审汇总），不要当成 AI 自审去手写或改判；`self-review-script` / `self-review-component-plan` 仍是 AI 判断步骤，证据包与骨架由工具生成。**`self-review-page` 自 0.32.0 起不是 coding agent 步骤**，而是 `page-review-ai.mjs` 的单次 HTTP 模型调用。
+- 自审（self-review）不得把脚本/截图标成人工 APPROVED；人工审核点必须留给人。0.32.0 起页面自审、0.38.0 起 brief/script/component-plan 自审都是单次模型调用，没有文件/命令工具，不能修任何东西；自审报 blocking 就失败，由主 agent 修复后重跑。
+- 0.22.0 起 `self-review-inputs` / `self-review-alpha` / `self-review-beta` / `self-review-gold` 是确定性 shell 步骤（从门禁结果与逐页自审汇总），不要当成 AI 自审去手写或改判；`self-review-script` / `self-review-component-plan` 仍是 AI 判断步骤（0.38.0 起为单次文本模型调用），证据包与骨架由工具生成。**`self-review-page` 自 0.32.0 起不是 coding agent 步骤**，而是 `page-review-ai.mjs` 的单次 HTTP 模型调用。
+- 0.38.0 起 workflow 的 command 步骤不再重复做自审/人工审核：`speckit.specify` / `speckit.script` / `speckit.self-study-audit` / `speckit.component-plan` 收到 `--no-self-review` 时只生成产物，不读门禁源码、不跑额外检查、不写 review.md、不请求人工审核；自审、校验和 gate 由 workflow 统一步骤负责。`self-review-brief` / `self-review-script` / `self-review-component-plan` 改为 `review-ai.mjs` 的单次文本模型调用（无工具、无文件访问），不再走 coding agent。workflow 87 个顶层步骤；preset 0.3.11。
 - 0.37.0 起页面证据不再跑 `check-overflow` / `check-overlap`：版面几何由截图 AI 和老师逐页审核判断；精确渲染文本、quiz 答案位置、概念 mustAppear、旁白音频、参考残留和截图/deck 绑定仍保留为确定性门禁。整份 Alpha/Gold 的 `check-overflow` 仍在，防止整课溢出回归。不要因为删了两个几何检查就把非视觉门禁也删掉。
 - 0.36.0 起页面自审默认 **`page_review_scope=visual-script`**：AI 只收到本页截图和已批准的脚本页（屏幕内容、交互设计、转场），判断可见内容是否与脚本一致，以及排版/裁切/重叠/可读性/可见占位或个人信息等视觉问题；不再把 density、确定性检查结果、概念和参考映射塞给模型。确定性页面门禁仍照常运行并阻断（精确文本、quiz、概念、旁白、参考残留、截图/deck 绑定；0.37.0 起不再包含 overflow/overlap）；AI 通过后才进入 `review-page` 人工审核。AI 发现问题时由主 agent 修改页面、重建、重截图，再跑同一视觉自审，直到通过，不要先请老师审核。旧的完整证据包路径保留：显式传 `-i page_review_scope=evidence` 可回滚；该路径与页面 density 权威（`density_authority=page`）配套。
 - 0.35.0 起老师审核脚本看**老师版**：`render-teacher-script` 从 `courseware.md` 确定性生成 `review/<lesson>/courseware.teacher.md`，只含标题、对应目标、本屏作用、屏幕内容、一行“学生要做”摘要、旁白、转场；`review-script` gate 的 `show_file` 指向这份。交互设计和制作字段继续留在 `courseware.md`（唯一内容源，检查工具/分镜投影依赖），不要从源文件删除。老师版是自动生成物，不手改；脚本批准账本仍绑定完整 `courseware.md`，源文件任何编辑都会使批准失效。
-- 0.34.0 起 density/segmenting 与交互/组件复杂度以**脚本自审为唯一权威**（`density_authority` 默认 `script`）：`build-script-review-evidence` 生成 `density[]` 与 `complexity[]` 骨架，`self-review-script` 在脚本阶段判断一屏一个语义边界、交互/组件是否过复杂；`check-self-review-script` 用 `--script --role script --density-authority script` 强制。多语义单元或多组件必须拆屏，或标 `exception` 并写明理由；有问题先改脚本，不要留到页面阶段。页面自审不再判断 density（`page-review-ai` 使用无 density 的输出 schema），只判断交互证据、视觉版面、组件行为、占位/个人信息。旧的页面 density 代码保留用于回滚：显式传 `-i density_authority=page` 才恢复页面唯一权威；不要同时启用两套权威。Alpha/Gold 仍继承脚本阶段已通过的 density 结论。
+- 0.34.0 起 density/segmenting 与交互/组件复杂度以**脚本自审为唯一权威**（`density_authority` 默认 `script`）：`build-script-review-evidence` 生成 `density[]` 与 `complexity[]` 骨架，`self-review-script` 在脚本阶段判断一屏一个语义边界、交互/组件是否过复杂（0.38.0 起由 review-ai 单次判断，不能改文件）；`check-self-review-script` 用 `--script --role script --density-authority script` 强制。多语义单元或多组件必须拆屏，或标 `exception` 并写明理由；有问题先改脚本，不要留到页面阶段。页面自审不再判断 density（`page-review-ai` 使用无 density 的输出 schema），只判断交互证据、视觉版面、组件行为、占位/个人信息。旧的页面 density 代码保留用于回滚：显式传 `-i density_authority=page` 才恢复页面唯一权威；不要同时启用两套权威。Alpha/Gold 仍继承脚本阶段已通过的 density 结论。
 - 0.23.0 的“density 以页面自审为唯一权威”已被 0.34.0 取代，仅作为历史说明保留；不要按 0.23.0 的规则让脚本自审跳过 density。
 - 0.24.0 起参考适配每课生成一次 `review/<lesson>/reference-adaptation.json`（`residue: replace|allow`），页自审只读映射做增量确认；`check-reference-residue` 会从渲染后的 `#slide` 文本扫描 `replace` 字符串。不要每页重读 `shells/<id>/source/lesson.js`，也不要把通用 C++ 语法标成 `replace`。
 - 0.25.0 起页自审不再判断“渲染文本逐字一致”：`check-rendered-text` 对初始可见的高信号字面量做确定性阻断，长散文只做非阻断覆盖率提示。动态隐藏的后续题目/面板/检查点留给页交互审核；不要为了通过检查把隐藏内容塞进初始 DOM。新增 `blank` 组件时，要在 `check-rendered-text.mjs` 的 `collectBlocking` 里登记它初始可见的高信号 props（标题之外），否则只会做标题级检查。

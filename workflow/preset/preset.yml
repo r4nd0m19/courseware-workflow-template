@@ -3,7 +3,7 @@ schema_version: "1.0"
 preset:
   id: "courseware"
   name: "Courseware Workflow"
-  version: "0.3.10"
+  version: "0.3.11"
   description: "信奥互动课件工作流：UbD 教学简报（含核心概念台账）、人类可读课件脚本（整份一次审）、概念覆盖阻断闸门、逐页渲染审核、组件复用与按需生成、分镜投影、内容覆盖闸门、无滚动条硬门禁"
   author: "courseware"
   license: "private"

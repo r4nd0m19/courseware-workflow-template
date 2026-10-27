@@ -1220,6 +1220,28 @@ try {
     )
   }
 
+  // ---- single-shot script/brief/component reviews ----
+  total += 1
+  const reviewAiSteps = ['self-review-brief', 'self-review-script', 'self-review-component-plan']
+    .map((id) => findStep(workflowData.steps, id))
+  const noSelfReviewSteps = ['brief', 'script', 'self-study-audit', 'component-plan']
+    .map((id) => findStep(workflowData.steps, id))
+  const singleShotReviewsPass =
+    Boolean(findStep(workflowData.steps, 'check-review-ai-config')) &&
+    Boolean(findStep(workflowData.steps, 'build-brief-review-evidence')) &&
+    Boolean(findStep(workflowData.steps, 'build-component-plan-review-evidence')) &&
+    reviewAiSteps.every(
+      (step) => step?.type === 'shell' && String(step.run || '').includes('review-ai.mjs'),
+    ) &&
+    noSelfReviewSteps.every((step) => String(step?.input?.args || '').includes('--no-self-review'))
+  console.log(`${singleShotReviewsPass ? 'PASS' : 'FAIL'} single-shot brief/script/component reviews`)
+  if (!singleShotReviewsPass) {
+    failed += 1
+    console.error(
+      'brief/script/component-plan must run as single-shot review-ai steps, with command steps receiving --no-self-review',
+    )
+  }
+
   // ---- shell review gate ----
   total += 1
   const hasShellPreviewStep =
@@ -1586,6 +1608,23 @@ try {
     failed += 1
     console.error(pageReviewTestOutput.trimEnd())
     console.error('page-review-ai.mjs must pass its Anthropic/OpenAI/fallback/fail-closed tests')
+  }
+
+  // ---- single-shot text review tool ----
+  total += 1
+  const reviewAiTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-review-ai.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const reviewAiTestOutput = `${reviewAiTest.stdout || ''}\n${reviewAiTest.stderr || ''}`
+  const reviewAiToolPass =
+    reviewAiTest.status === 0 && /3\/3 review-ai tests passed/.test(reviewAiTestOutput)
+  console.log(`${reviewAiToolPass ? 'PASS' : 'FAIL'} single-shot text review tool`)
+  if (!reviewAiToolPass) {
+    failed += 1
+    console.error(reviewAiTestOutput.trimEnd())
+    console.error('review-ai.mjs must merge brief/script/component-plan reviews without a coding agent')
   }
 
   // ---- page review cache round-trip ----
