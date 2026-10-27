@@ -1263,6 +1263,25 @@ try {
     )
   }
 
+  // ---- compact script input + repair brief ----
+  total += 1
+  const scriptInputStep = findStep(workflowData.steps, 'build-script-input')
+  const scriptGenerationStep = findStep(workflowData.steps, 'script')
+  const scriptReviewCheckStep2 = findStep(workflowData.steps, 'check-self-review-script')
+  const scriptInputPass =
+    scriptInputStep?.type === 'shell' &&
+    String(scriptInputStep.run || '').includes('build-script-input.mjs') &&
+    String(scriptGenerationStep?.input?.args || '').includes('--input review/{{ inputs.lesson_slug }}/script-input.json') &&
+    String(scriptReviewCheckStep2?.run || '').includes('--fix-brief') &&
+    String(scriptReviewCheckStep2?.run || '').includes('script-review-fix.md')
+  console.log(`${scriptInputPass ? 'PASS' : 'FAIL'} compact script input + repair brief`)
+  if (!scriptInputPass) {
+    failed += 1
+    console.error(
+      'script generation must receive a compact --input package and the script review check must write a repair brief',
+    )
+  }
+
   // ---- shell review gate ----
   total += 1
   const hasShellPreviewStep =

@@ -10,7 +10,7 @@ $ARGUMENTS
 
 > 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`--approval` 用 `$COURSEWARE_SCRIPT_APPROVAL`。workflow 会设置这些变量，并通过 `$ARGUMENTS` 传 `--lesson-slug <slug>`。
 
-> **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，只生成产物；跳过本文件的 Self-review 与 Human Review（人工审核）两节，不要读取 `workflow/tools` 源码、不要额外跑门禁套件或临时脚本、不要写 `review.md`。自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
+> **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，优先读取 `--input <script-input.json>` 指定的紧凑输入包。包里已经包含 spec、content items、concepts、style vocabulary、registry、模板、输出路径、规则和已有脚本；不要 `ls`/`cat`/`grep` 仓库，不要读取 `workflow/tools` 源码，不要额外跑门禁套件或临时脚本，不要写 `review.md`。只按 `outputs` 写 `courseware.md` 和 `review-sections.yml`；自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
 
 ## Outline
 

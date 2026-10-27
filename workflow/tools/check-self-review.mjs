@@ -13,6 +13,7 @@ const options = {
   slides: null,
   root: process.cwd(),
   concepts: '',
+  fixBrief: '',
   role: '',
   densityAuthority: 'page',
   requireReferenceAdaptation: false,
@@ -34,6 +35,9 @@ for (let i = 0; i < args.length; i += 1) {
     i += 1
   } else if (arg === '--concepts') {
     options.concepts = args[i + 1] || ''
+    i += 1
+  } else if (arg === '--fix-brief') {
+    options.fixBrief = args[i + 1] || ''
     i += 1
   } else if (arg === '--role') {
     options.role = args[i + 1] || ''
@@ -73,6 +77,7 @@ Options:
   --density-authority <script|page>
                               script = enforce density/complexity at script review;
                               page = enforce density at rendered page review (legacy)
+  --fix-brief <file>          write a repair checklist when this review fails
   --concepts <file>           require a per-concept verdict for the concept ledger
   --require-reference-adaptation
                               require a non-empty referenceAdaptation string (page reviews)
@@ -351,6 +356,30 @@ if (options.concepts) {
     const missing = required.filter((concept) => !entries.has(concept.id))
     conceptSummary = `; concepts: ${required.length - missing.length}/${required.length}`
   }
+}
+
+if (problems.length && options.fixBrief) {
+  const lines = [
+    '# 脚本自审未通过：修复清单',
+    '',
+    `- 审核文件：${file}`,
+    `- 脚本：${options.script || '(unknown)'}`,
+    '',
+    '先修改 `courseware.md` 或对应产物，再重新生成证据和自审。不要直接重跑旧审核，也不要把脚本标成 APPROVED。',
+    '',
+    '## Blocking 问题',
+    '',
+    ...problems.map((problem) => `- ${problem}`),
+    '',
+    '## 修复后',
+    '',
+    '重跑 `build-script-review-evidence` → `review-ai --mode script` → `check-self-review`。',
+    '',
+  ]
+  fs.mkdirSync(path.dirname(path.resolve(options.fixBrief)), { recursive: true })
+  fs.writeFileSync(path.resolve(options.fixBrief), `${lines.join('\n')}\n`)
+} else if (options.fixBrief && fs.existsSync(path.resolve(options.fixBrief))) {
+  fs.rmSync(path.resolve(options.fixBrief))
 }
 
 if (problems.length) fail(`self-review ${file}`, problems)
