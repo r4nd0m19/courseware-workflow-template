@@ -1046,7 +1046,8 @@ try {
   const referenceMapStep = findStep(workflowData.steps, 'build-reference-adaptation')
   const referenceCheckStep = findStep(workflowData.steps, 'check-reference-adaptation')
   const referenceAdaptationPass =
-    referenceMapStep?.type === 'prompt' &&
+    referenceMapStep?.type === 'shell' &&
+    String(referenceMapStep.run || '').includes('single-shot-generate.mjs') &&
     referenceCheckStep?.type === 'shell' &&
     String(referenceCheckStep.run || '').includes('check-reference-adaptation.mjs')
   console.log(
@@ -1239,6 +1240,26 @@ try {
     failed += 1
     console.error(
       'brief/script/component-plan must run as single-shot review-ai steps, with command steps receiving --no-self-review',
+    )
+  }
+
+  // ---- single-shot art/reference steps ----
+  total += 1
+  const artBriefStep = findStep(workflowData.steps, 'shell-art-brief')
+  const referenceAdaptationStep = findStep(workflowData.steps, 'build-reference-adaptation')
+  const singleShotGeneratePass =
+    Boolean(findStep(workflowData.steps, 'build-art-brief-evidence')) &&
+    Boolean(findStep(workflowData.steps, 'build-reference-adaptation-evidence')) &&
+    artBriefStep?.type === 'shell' &&
+    String(artBriefStep.run || '').includes('single-shot-generate.mjs') &&
+    referenceAdaptationStep?.type === 'shell' &&
+    String(referenceAdaptationStep.run || '').includes('single-shot-generate.mjs') &&
+    fs.existsSync(path.join(root, 'tools/single-shot-generate.mjs'))
+  console.log(`${singleShotGeneratePass ? 'PASS' : 'FAIL'} single-shot art/reference generation`)
+  if (!singleShotGeneratePass) {
+    failed += 1
+    console.error(
+      'shell-art-brief and build-reference-adaptation must be single-shot shell steps, not coding-agent prompts',
     )
   }
 
@@ -1625,6 +1646,23 @@ try {
     failed += 1
     console.error(reviewAiTestOutput.trimEnd())
     console.error('review-ai.mjs must merge brief/script/component-plan reviews without a coding agent')
+  }
+
+  // ---- single-shot art/reference generator ----
+  total += 1
+  const generateTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-single-shot-generate.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const generateTestOutput = `${generateTest.stdout || ''}\n${generateTest.stderr || ''}`
+  const generateToolPass =
+    generateTest.status === 0 && /3\/3 single-shot-generate tests passed/.test(generateTestOutput)
+  console.log(`${generateToolPass ? 'PASS' : 'FAIL'} single-shot art/reference generator`)
+  if (!generateToolPass) {
+    failed += 1
+    console.error(generateTestOutput.trimEnd())
+    console.error('single-shot-generate.mjs must produce art prompts and reference adaptation JSON')
   }
 
   // ---- page review cache round-trip ----

@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.38.0"
+  version: "0.39.0"
   author: "courseware"
   description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 教学简报 → 人类可读脚本（整份一次审）→ 概念/自学/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
 
@@ -334,22 +334,14 @@ steps:
   # build must use its own generated variants; this stage writes the lesson's
   # prompts, generates (or reuses) the images, and gates their provenance.
   # `prepare-shell-site` and `build-shell-site` are fail-closed on missing art.
+  - id: build-art-brief-evidence
+    type: shell
+    run: "node workflow/tools/build-art-brief-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --shell {{ inputs.shell }} --out review/{{ inputs.lesson_slug }}/art-brief-evidence.json"
+
   - id: shell-art-brief
-    type: prompt
-    integration: "{{ inputs.integration }}"
-    prompt: |
-      Write the per-lesson illustration prompt file ({{ inputs.art_prompts }}) for shell
-      "{{ inputs.shell }}". Read the shell package (shell.json, reference crops), the approved
-      courseware.md, storyboard.yml, spec.md, content pack and component plan.
-      For every slot in shell.assets.illustrations, write one prompt that:
-      - describes a character clearly DIFFERENT from the shell's reference crop: change the face,
-        hairstyle, outfit colors and one accessory;
-      - ties the character and its props to this lesson's subject ({{ inputs.lesson }});
-      - keeps the same blocky pixel-art style and palette family, full body, plain white background;
-      - forbids text, watermark, border and drop shadow, and forbids copying the reference exactly.
-      Write valid JSON: { "schemaVersion": "1.0", "lesson": "{{ inputs.lesson_slug }}",
-      "prompts": { "<slot>": "<prompt>" } }. Cover every slot; no TODO/TBD.
-      Do not generate images yet. Do not edit the shell package.
+    type: shell
+    timeout: 300
+    run: "node workflow/tools/single-shot-generate.mjs --mode art-brief --evidence review/{{ inputs.lesson_slug }}/art-brief-evidence.json --out {{ inputs.art_prompts }}"
 
   - id: build-shell-art
     type: shell
@@ -428,32 +420,14 @@ steps:
   # One reference adaptation map per lesson. It is generated after the
   # storyboard exists and before the page loop, so every page review can read
   # the same mapping instead of re-reading shells/<id>/source/lesson.js.
+  - id: build-reference-adaptation-evidence
+    type: shell
+    run: "node workflow/tools/build-reference-adaptation-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --shell {{ inputs.shell }} --concepts {{ inputs.concepts }} --content {{ inputs.content_pack }} --out review/{{ inputs.lesson_slug }}/reference-adaptation-evidence.json"
+
   - id: build-reference-adaptation
-    type: prompt
-    integration: "{{ inputs.integration }}"
-    prompt: |
-      Build the per-lesson reference adaptation map (stage: reference-adaptation).
-      Read the approved courseware.md ({{ inputs.courseware_script }}), the projected
-      storyboard.yml ({{ inputs.storyboard }}), the shell package ({{ inputs.shell }}:
-      shell.json, source/lesson.js, reference/), concepts.yml ({{ inputs.concepts }})
-      and the content pack ({{ inputs.content_pack }}).
-      Identify every visible item of the reference lesson — titles, leads, questions,
-      options, code, table cells, labels, example values, character props and images —
-      and map it to this lesson's equivalent. Write
-      review/{{ inputs.lesson_slug }}/reference-adaptation.json per
-      workflow/schemas/reference-adaptation.schema.json and a readable
-      review/{{ inputs.lesson_slug }}/reference-adaptation.md table.
-      Rules:
-      - Use stable ids RA01, RA02, …
-      - `pages` lists the lesson slide ids where the replacement appears.
-      - `residue: "replace"` for reference-specific content that must not appear;
-        `residue: "allow"` only for generic C++ syntax or shell chrome that may remain.
-      - Fill `lessonText` with the exact visible replacement when it is a literal
-        string; the deterministic residue check will require it.
-      - Put reference content intentionally not carried over in `unmapped` with a
-        reason; mark it `residue: "replace"` if seeing it in the lesson is residue.
-      - Do not edit the shell, the script or the deck.
-      Verdict: write the files; do not request a human review here.
+    type: shell
+    timeout: 300
+    run: "node workflow/tools/single-shot-generate.mjs --mode reference-adaptation --evidence review/{{ inputs.lesson_slug }}/reference-adaptation-evidence.json --out review/{{ inputs.lesson_slug }}/reference-adaptation.json --md review/{{ inputs.lesson_slug }}/reference-adaptation.md"
 
   - id: check-reference-adaptation
     type: shell
