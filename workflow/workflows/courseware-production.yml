@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.39.0"
+  version: "0.40.0"
   author: "courseware"
   description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 教学简报 → 人类可读脚本（整份一次审）→ 概念/自学/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
 
@@ -231,11 +231,17 @@ steps:
   # review is the whole courseware script below; do not add a separate gate.
 
   # ---------- courseware script (human-readable source of truth) ----------
+  # Workflow mode: the generation agent reads only this compact input package,
+  # not the repository or the gate implementations.
+  - id: build-script-input
+    type: shell
+    run: "node workflow/tools/build-script-input.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --review-sections {{ inputs.review_sections }} --content {{ inputs.content_pack }} --concepts {{ inputs.concepts }} --style {{ inputs.style_pack }} --style-full {{ inputs.style_pack_full }} --registry {{ inputs.component_registry }} --out review/{{ inputs.lesson_slug }}/script-input.json"
+
   - id: script
     command: speckit.script
     integration: "{{ inputs.integration }}"
     input:
-      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
+      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }} --input review/{{ inputs.lesson_slug }}/script-input.json --no-self-review"
 
   - id: validate-script-draft
     type: shell
@@ -297,7 +303,7 @@ steps:
 
   - id: check-self-review-script
     type: shell
-    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --script {{ inputs.courseware_script }} --role script --density-authority {{ inputs.density_authority }} --concepts {{ inputs.concepts }}"
+    run: "node workflow/tools/check-self-review.mjs review/{{ inputs.lesson_slug }}/self-review-script.json --script {{ inputs.courseware_script }} --role script --density-authority {{ inputs.density_authority }} --concepts {{ inputs.concepts }} --fix-brief review/{{ inputs.lesson_slug }}/script-review-fix.md"
 
   # The teacher reviews the lesson, not the production metadata. Render a
   # deterministic view with screen content, narration, transition and a

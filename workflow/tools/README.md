@@ -195,6 +195,13 @@ node workflow/tools/build-self-review-inputs.mjs --lesson-slug <slug> \
   --shell-ok true --shell-review review/shells/<slug>/shell-preview.md \
   --out review/<slug>/self-review-inputs.json --md review/<slug>/self-review-inputs.md
 
+# script 生成：紧凑输入包（workflow 的 speckit.script 只读这一个 JSON）
+node workflow/tools/build-script-input.mjs --lesson-slug <slug> --lesson "<title>" \
+  --script specs/<slug>/courseware.md --review-sections specs/<slug>/review-sections.yml \
+  --content <content-pack.json> --concepts specs/<slug>/concepts.yml \
+  --style <style-pack.manifest.json> --style-full <style-pack.full.json> \
+  --out review/<slug>/script-input.json
+
 # script：紧凑逐屏证据包 + density/complexity 自审骨架（AI 只填判断字段）
 node workflow/tools/build-script-review-evidence.mjs --lesson-slug <slug> \
   --script specs/<slug>/courseware.md --storyboard specs/<slug>/storyboard.yml \
@@ -391,6 +398,7 @@ node workflow/tools/check-self-review.mjs review/self-review-script.json \
 - `--concepts` 要求每个在范围内的概念都有一条 `concepts` 记录（`conceptId`、`verdict: pass`、`evidence`、`slideIds`）；缺条目、`gap` 或引用范围外页面都会失败。
 - `--script` / `--storyboard` 同时启用 density 对照；`--slides` 限定逐页范围。`--role script --density-authority script` 还要求 `complexity[]`，且 `components/newComponents > 1` 必须有 `exception` 理由。
 - `--role page --density-authority script` 只检查页面判断字段（交互证据、视觉版面、组件行为、占位/个人信息），不强制 density。
+- `--fix-brief <file>` 在失败时写修复清单；workflow 的脚本检查写 `review/<slug>/script-review-fix.md`，主 agent 先修脚本再重跑。
 - 自审模板在 `workflow/preset/templates/self-review-template.md`。
 - 每个 human gate 前都应先跑这个检查；未通过不得请求人工审核。
 

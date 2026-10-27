@@ -4,11 +4,12 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`courseware-production` `0.39.0`（89 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
-- preset：`courseware` `0.3.11`
-- 模板版本：`0.21.0`（2026-10-27）
+- 工作流版本：`courseware-production` `0.40.0`（90 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
+- preset：`courseware` `0.3.12`
+- 模板版本：`0.22.0`（2026-10-27）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
 - 脚本审核：`review-script` 显示自动生成的老师版 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行“学生要做”摘要；交互设计与制作字段保留在 `courseware.md` 供工具使用，脚本批准账本仍绑定完整源文件。
+- 脚本生成：`build-script-input` 生成紧凑输入包（spec/content/concepts/style/registry/模板/规则/输出路径），`speckit.script` 只读 `--input`；自审失败写 `script-review-fix.md`，先修脚本再重跑。
 - 插画简报/参考适配：`build-art-brief-evidence` / `build-reference-adaptation-evidence` + `single-shot-generate.mjs`，单次模型调用，不再走 coding agent。
 - 自审性能：`speckit.specify` / `speckit.script` / `speckit.self-study-audit` / `speckit.component-plan` 在 workflow 里带 `--no-self-review`，只生成产物；`self-review-brief` / `self-review-script` / `self-review-component-plan` 改为 `review-ai.mjs` 的单次文本模型调用，不再走 coding agent。
 - 页面审核：默认 `page_review_scope=visual-script`，AI 只拿本页截图和已批准脚本页，判断可见内容是否与脚本一致、排版是否有问题；0.37.0 起页面证据不再跑 overflow/overlap（交给截图 AI + 老师），精确文本/quiz/概念/旁白/参考残留/截图绑定仍阻断。视觉自审通过后才进入老师逐页审核；`page_review_scope=evidence` 可回滚到完整证据包。
@@ -144,9 +145,9 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 
 ```bash
 specify workflow info courseware-shell        # 应显示 0.1.0、3 steps
-specify workflow info courseware-production   # 应显示 0.39.0、89 steps
+specify workflow info courseware-production   # 应显示 0.40.0、90 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 完整仓库 137/137；模板仓库 132/132（2 项壳检查 SKIP）
+node workflow/tools/smoke-test.mjs            # 完整仓库 138/138；模板仓库 133/133（2 项壳检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
 
