@@ -56,12 +56,23 @@ const referenceAdaptationPath = opt(
   path.join('review', lessonSlug, 'reference-adaptation.json'),
 )
 const densityAuthority = opt('--density-authority', 'page')
+const reviewScope = opt('--review-scope', 'evidence')
 const scriptReviewPath = opt(
   '--script-review',
   path.join('review', lessonSlug, 'self-review-script.json'),
 )
 if (!['script', 'page'].includes(densityAuthority)) {
   console.error(`FAIL page evidence — --density-authority must be script or page, got ${densityAuthority}`)
+  process.exit(2)
+}
+if (!['evidence', 'visual-script'].includes(reviewScope)) {
+  console.error(`FAIL page evidence — --review-scope must be evidence or visual-script, got ${reviewScope}`)
+  process.exit(2)
+}
+if (reviewScope === 'visual-script' && densityAuthority === 'page') {
+  console.error(
+    'FAIL page evidence — --review-scope visual-script requires --density-authority script',
+  )
   process.exit(2)
 }
 
@@ -77,7 +88,7 @@ if (
   !url
 ) {
   console.error(
-    'usage: node build-page-evidence.mjs --lesson-slug <slug> --script <courseware.md> --content <content-pack.json> --storyboard <storyboard.yml> --sections <review-sections.yml> --section <id> --deck <deck.json> --screenshots <dir> --url <deck-url> [--concepts <file>] [--narration <file>] [--audio-root <dir>] [--approval <script-approval.json>] [--out <file>] [--review-json <file>] [--review-md <file>] [--manual]',
+    'usage: node build-page-evidence.mjs --lesson-slug <slug> --script <courseware.md> --content <content-pack.json> --storyboard <storyboard.yml> --sections <review-sections.yml> --section <id> --deck <deck.json> --screenshots <dir> --url <deck-url> [--concepts <file>] [--narration <file>] [--audio-root <dir>] [--approval <script-approval.json>] [--review-scope evidence|visual-script] [--density-authority script|page] [--out <file>] [--review-json <file>] [--review-md <file>] [--manual]',
   )
   process.exit(2)
 }
@@ -229,8 +240,8 @@ if (fs.existsSync(referenceAdaptationPath)) {
   }
 }
 
-// Independent checks run in parallel. The browser checks are capped at two
-// concurrent Chromium processes; the fast Node checks can all run together.
+// Independent checks run in parallel. Only rendered-text needs a browser now;
+// the fast Node checks can all run together.
 const fastTasks = [
   ['density', () => run('density-report.mjs', [scriptPath, storyboardPath, '--slides', slideIds, '--json'])],
   [
@@ -281,31 +292,10 @@ const fastTasks = [
       ]),
   ],
 ]
+// Rendered text still needs a browser for exact high-signal literals. Visual
+// geometry (overflow/overlap) is judged from the screenshot by the page AI and
+// the teacher; the whole-deck Alpha gate still runs check-overflow.
 const browserTasks = [
-  [
-    'overflow',
-    () =>
-      run('check-overflow.mjs', [
-        url,
-        '--start',
-        String(start),
-        '--pages',
-        String(section.slides.length),
-      ]),
-  ],
-  [
-    'overlap',
-    () =>
-      run('check-overlap.mjs', [
-        url,
-        '--slides',
-        slideIds,
-        '--storyboard',
-        storyboardPath,
-        '--json',
-        ...(manual ? ['--manual'] : []),
-      ]),
-  ],
   [
     'rendered-text',
     () =>
@@ -329,7 +319,7 @@ const browserTasks = [
 ]
 const [fastResults, browserResults] = await Promise.all([
   mapLimit(fastTasks, fastTasks.length, async ([key, fn]) => [key, await fn()]),
-  mapLimit(browserTasks, 2, async ([key, fn]) => [key, await fn()]),
+  mapLimit(browserTasks, 1, async ([key, fn]) => [key, await fn()]),
 ])
 const checksByKey = Object.fromEntries([...fastResults, ...browserResults])
 if (referenceMapCheck) checksByKey['reference-map'] = referenceMapCheck
@@ -339,8 +329,6 @@ const checks = [
   'concepts',
   'quiz',
   'narration',
-  'overflow',
-  'overlap',
   'rendered-section',
   'rendered-text',
   'reference-map',
@@ -432,6 +420,7 @@ const evidence = {
   schemaVersion: '1.0',
   lessonSlug,
   densityAuthority,
+  reviewScope,
   section: {
     id: section.id,
     title: section.title,
@@ -506,6 +495,35 @@ const densityEntries = (Array.isArray(densityJson?.slides) ? densityJson.slides 
     }
   },
 )
+const pageChecklist =
+  reviewScope === 'visual-script'
+    ? [
+        {
+          item: '可见内容与已批准脚本的屏幕内容一致（无缺失、无多余、文字/代码正确）',
+          status: 'n/a',
+        },
+        {
+          item: '版式清晰：无裁切、溢出、重叠、拥挤或误导性阅读顺序',
+          status: 'n/a',
+        },
+        {
+          item: '可见控件与初始状态与脚本的交互设计一致（仅截图可判断的部分）',
+          status: 'n/a',
+        },
+        { item: '无占位内容、个人信息或参考课残留', status: 'n/a' },
+      ]
+    : [
+        { item: 'interaction produces the declared evidence (not just watch/next)', status: 'n/a' },
+        {
+          item: 'visual layout and interaction are understandable; no obvious crowding or misread',
+          status: 'n/a',
+        },
+        {
+          item: 'staged component behavior matches its brief (only if components are listed)',
+          status: 'n/a',
+        },
+        { item: 'no placeholder, no personal data', status: 'n/a' },
+      ]
 const skeleton = {
   stage: `page-${sectionId}`,
   artifactPaths: reviewedArtifacts.map((artifact) => artifact.path),
@@ -520,18 +538,7 @@ const skeleton = {
     status: check.status,
     notes: check.summary,
   })),
-  checklist: [
-    { item: 'interaction produces the declared evidence (not just watch/next)', status: 'n/a' },
-    {
-      item: 'visual layout and interaction are understandable; no obvious crowding or misread',
-      status: 'n/a',
-    },
-    {
-      item: 'staged component behavior matches its brief (only if components are listed)',
-      status: 'n/a',
-    },
-    { item: 'no placeholder, no personal data', status: 'n/a' },
-  ],
+  checklist: pageChecklist,
   issues: [],
   referenceAdaptation: referenceAdaptationSummary,
   verdict: 'fail',

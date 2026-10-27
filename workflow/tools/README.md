@@ -116,6 +116,7 @@ node workflow/tools/check-overflow.mjs http://127.0.0.1:5173 --script courseware
 - 任何溢出 → `exit 1`；必须拆页或精简，不能滚动/裁切。
 - 需要 Playwright Chromium；默认路径 `~/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome`，可用 `CHROME_PATH` 覆盖。
 - 默认只检查当前页；`--pages N` 用 `ArrowRight` 翻页检查。
+- 0.37.0 起页面证据不再调用它；版面几何交给截图 AI + 老师，整份 Alpha/Gold 仍用。
 
 ## 5. W2 逐屏构建/截图
 
@@ -251,14 +252,16 @@ node workflow/tools/workflow-timing.mjs --run <run-id>
 `bench-page-review` 不调用 AI，只测确定性部分；`promptBytes` 由新的单次请求 prompt 构造器
 （`page-review-lib.mjs`）估算。真正的 `self-review-page` 耗时用 `workflow-timing` 从真实 run 的
 `log.jsonl` 读。基准不是门禁，失败项只记录状态。
-`build-page-evidence` 内部并行跑快速检查，overflow/overlap/rendered-text 并发上限 2；证据包
-的 `checks[].durationMs` 可直接用于定位最慢检查。
+`build-page-evidence` 内部并行跑快速检查；0.37.0 起只剩 rendered-text 需要浏览器，overflow/overlap
+不再进入页面证据。证据包的 `checks[].durationMs` 可直接用于定位最慢检查。
 
 ## 9A-1. 单次模型页自审（0.32.0）
 
 页面自审不再走 coding agent。`page-review-ai.mjs` 读取 `build-page-evidence` 的 JSON，把
 `aiImage`（缺失回退 PNG）以 base64 内联，只发一次模型请求，要求模型返回一个
-`submit_page_review` 结构化对象；没有文件、命令、MCP 工具，也不会有 agent 循环。
+`submit_page_review` 结构化对象；没有文件、命令、MCP 工具，也不会有 agent 循环。默认
+`--review-scope visual-script` 只把本页截图和已批准脚本页发给模型，判断可见内容是否与脚本一致、
+排版是否清晰；`--review-scope evidence` 保留旧的完整证据包路径。
 
 ```bash
 # 1) 配置预检（工作流在页循环前自动跑）
@@ -269,17 +272,17 @@ node workflow/tools/page-review-ai.mjs \
   --lesson-slug <slug> --section S02B \
   --evidence review/<slug>/page-evidence-S02B.json \
   --review-json review/<slug>/self-review-page-S02B.json \
+  --density-authority script --review-scope visual-script \
   --dry-run --request-out /tmp/page-review-request.json
 
 # 3) 真实调用；工作流里的正式命令还会带
 #    --component-staging registry/staging --unregistered <id,id>
-#    --density-authority script（默认；页面只判断渲染结果，不重新判 density）
 node workflow/tools/page-review-ai.mjs \
   --lesson-slug <slug> --section S02B \
   --evidence review/<slug>/page-evidence-S02B.json \
   --review-json review/<slug>/self-review-page-S02B.json \
   --component-staging registry/staging --unregistered matrix-fill \
-  --density-authority script
+  --density-authority script --review-scope visual-script
 ```
 
 配置优先读项目内 `.courseware/page-review.json`（已 gitignore），否则读 `~/.config/courseware/page-review.json`；也可用 `COURSEWARE_REVIEW_CONFIG`：
@@ -301,8 +304,8 @@ node workflow/tools/page-review-ai.mjs \
 - 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。
 - `structuredOutput`：默认 `tool`（forced tool call）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`。DeepSeek 的 Anthropic 兼容端点可能返回 DSML 文本而不是标准 `tool_use`，工具检测到后会**自动重试一次 JSON 模式**；也可以直接写 `"structuredOutput": "json"` 避免这次重试。
 - `maxTokens` 默认 **8192**：推理模型可能把几千 token 花在 thinking 上，4096 会在输出前被截断。工具在 `stop_reason: max_tokens` 时会直接提示增大 `maxTokens`，不会写半成品。
-- 静态页规则：页面明确声明 `watch` / `static-reading` 且有书面静态理由时，checklist 0（交互是否产出声明证据）记 `n/a`，不因“只是看”判 fail；只有页面声称互动/学生产出证据、实际却直接给答案时才 fail。S02 同一证据 3 次验证全部 pass（2 次保留非阻断提示）。
-- `density_authority=page` 时工具允许模型填 `density`；`density_authority=script` 时页面模型不输出 density，`density` 由脚本阶段结论保留。两种模式都只允许模型填 `checklist` / `issues` / `referenceAdaptation` / `verdict`；`signals`、`concepts`、`automatedChecks`、`reviewedArtifacts` 由工具保留/合并。模型声称 `fixed: true` 也会被强制改成 `false`。
+- 默认 `visual-script`：模型只拿本页截图和已批准脚本页（`screenContent` / `interactionDesign` / `transition`），判断可见内容是否与脚本一致，以及裁切、重叠、拥挤、可读性、可见占位/个人信息等视觉问题；不接收 density、确定性检查结果、概念或参考映射。非视觉确定性检查仍由 `build-page-evidence` 跑并阻断；0.37.0 起页面证据不再跑 overflow/overlap。`evidence` 模式保留旧的完整证据包和静态页规则。
+- `density_authority=page` 只在 `evidence` 模式下有效；`visual-script` 要求 `density_authority=script`（脚本阶段已判定 density）。两种模式都只允许模型填 `checklist` / `issues` / `referenceAdaptation` / `verdict`；`signals`、`concepts`、`automatedChecks`、`reviewedArtifacts` 由工具保留/合并。模型声称 `fixed: true` 也会被强制改成 `false`。
 - 失败时不会写半成品：schema 不合法、缺截图、HTTP 错误都退出非 0；原始模型输出写到 `review/<slug>/page-review-raw-<section>.json` 方便排查。
 - `--zcode-config <provider_config.json> --zcode-provider <id>` 可以直接复用 ZCode 已配置的 Anthropic 兼容 provider/model/key，key 不打印、不落盘。也可以把这两个字段写进 `page-review.json`：`"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 是候选路径数组，Windows 用 `~`、WSL 用 `/mnt/c/...`，谁存在用谁。
 - 回归测试：`node workflow/tools/test-page-review-ai.mjs`（本地 mock server，不调用真实模型）。
@@ -332,7 +335,7 @@ node workflow/tools/page-review-cache.mjs --mode check \
 node workflow/tools/page-review-cache.mjs --mode store ... --review-json ...
 ```
 
-- 键由页面脚本、density 信号、脚本阶段 density 结论（`density_authority=script` 时）、参考映射、检查摘要、PNG 与 `aiImage` 哈希、deck slide、registry 和暂存组件文件哈希组成。**换模型或改 prompt 不会自动让缓存失效**；需要重新判断时删掉 `review/<slug>/page-review-cache/` 下对应缓存。
+- 键由页面脚本、density 信号、脚本阶段 density 结论（`density_authority=script` 时）、参考映射、检查摘要、`reviewScope`、PNG 与 `aiImage` 哈希、deck slide、registry 和暂存组件文件哈希组成。**换模型或改 prompt 不会自动让缓存失效**；需要重新判断时删掉 `review/<slug>/page-review-cache/` 下对应缓存。
 - `check` 命中时把上次 AI 判断字段（含 `referenceAdaptation` 增量）合并到新骨架，刷新 `reviewedArtifacts` 和暂存组件哈希，工作流跳过 `self-review-page`；`reviewMeta.cached` 标记为 `true`。
 - `store` 在 `check-self-review-page` 通过后写入缓存；缓存目录是运行时状态，不提交。
 

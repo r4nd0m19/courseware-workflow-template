@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.35.0"
+  version: "0.37.0"
   author: "courseware"
   description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 教学简报 → 人类可读脚本（整份一次审）→ 概念/自学/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
 
@@ -131,6 +131,10 @@ inputs:
     type: string
     default: "script"
     prompt: "Density authority: script (default; review before implementation) or page (legacy; rendered page review)"
+  page_review_scope:
+    type: string
+    default: "visual-script"
+    prompt: "Page review scope: visual-script (screenshot + approved script page) or evidence (legacy full bundle)"
   baseline_dir:
     type: string
     default: ""
@@ -722,7 +726,7 @@ steps:
               # one JSON instead of re-running commands/reading every file.
               - id: build-page-evidence
                 type: shell
-                run: "node workflow/tools/build-page-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --deck {{ inputs.deck_data }} --screenshots screenshots/{{ inputs.lesson_slug }} --url \"{{ inputs.deck_url }}\" --concepts {{ inputs.concepts }} --narration {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --reference-source \"{{ inputs.shell }}/source/lesson.js\" --reference-adaptation review/{{ inputs.lesson_slug }}/reference-adaptation.json --density-authority {{ inputs.density_authority }} --script-review review/{{ inputs.lesson_slug }}/self-review-script.json --out review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"
+                run: "node workflow/tools/build-page-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --deck {{ inputs.deck_data }} --screenshots screenshots/{{ inputs.lesson_slug }} --url \"{{ inputs.deck_url }}\" --concepts {{ inputs.concepts }} --narration {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }} --reference-source \"{{ inputs.shell }}/source/lesson.js\" --reference-adaptation review/{{ inputs.lesson_slug }}/reference-adaptation.json --density-authority {{ inputs.density_authority }} --review-scope {{ inputs.page_review_scope }} --script-review review/{{ inputs.lesson_slug }}/self-review-script.json --out review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json"
 
               - id: page-review-cache
                 type: shell
@@ -741,7 +745,7 @@ steps:
                   - id: self-review-page
                     type: shell
                     timeout: 600
-                    run: "node workflow/tools/page-review-ai.mjs --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --density-authority {{ inputs.density_authority }} --component-staging {{ inputs.component_staging }} --unregistered \"{{ steps.load-page-components.output.data.unregistered | join(',') }}\""
+                    run: "node workflow/tools/page-review-ai.mjs --lesson-slug {{ inputs.lesson_slug }} --section {{ steps.advance_section.output.data.section.id }} --evidence review/{{ inputs.lesson_slug }}/page-evidence-{{ steps.advance_section.output.data.section.id }}.json --review-json review/{{ inputs.lesson_slug }}/self-review-page-{{ steps.advance_section.output.data.section.id }}.json --density-authority {{ inputs.density_authority }} --review-scope {{ inputs.page_review_scope }} --component-staging {{ inputs.component_staging }} --unregistered \"{{ steps.load-page-components.output.data.unregistered | join(',') }}\""
 
               - id: render-page-review
                 type: shell

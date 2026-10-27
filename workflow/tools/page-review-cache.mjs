@@ -60,6 +60,7 @@ function keyFor(evidence, staged) {
     format: CACHE_FORMAT,
     section,
     densityAuthority: evidence.densityAuthority || 'page',
+    reviewScope: evidence.reviewScope || 'evidence',
     scriptSlides: evidence.scriptSlides || [],
     density: evidence.density || null,
     // Only script-authority density is an input to the page review. Under page

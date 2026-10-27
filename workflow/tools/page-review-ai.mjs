@@ -82,6 +82,7 @@ if (!checkConfig && (!evidencePath || !reviewJsonPath)) {
       'options: --config <file> --api <anthropic-messages|openai-chat> --base-url <url> --model <id>\n' +
       '         --api-key-env <name> --api-key-file <file> --max-tokens <n> --timeout-ms <n> --max-attempts <n>\n' +
       '         --structured-output <tool|json> --image-detail <auto|low|high> --auth <x-api-key|bearer>\n' +
+      '         --density-authority <script|page> --review-scope <evidence|visual-script>\n' +
       '         --zcode-config <provider_config.json> --zcode-provider <provider-id>\n' +
       '         --component-staging <dir> --unregistered <id,id> --dry-run --request-out <file>\n' +
       '         --mock-response <provider-response.json> --json\n' +
@@ -242,6 +243,13 @@ const imageDetail = opt('--image-detail') || fileConfig.imageDetail || 'auto'
 const densityAuthority = opt('--density-authority', 'page')
 if (!['script', 'page'].includes(densityAuthority)) {
   fail(`--density-authority must be script or page, got ${densityAuthority}`, 2)
+}
+const reviewScope = opt('--review-scope', 'evidence')
+if (!['evidence', 'visual-script'].includes(reviewScope)) {
+  fail(`--review-scope must be evidence or visual-script, got ${reviewScope}`, 2)
+}
+if (reviewScope === 'visual-script' && densityAuthority === 'page') {
+  fail('--review-scope visual-script requires --density-authority script; use evidence for the legacy page-density path', 2)
 }
 
 function resolveKeyFile(value) {
@@ -405,6 +413,7 @@ const prompt = buildPageReviewPrompt({
   components: components.summaries,
   structuredOutput,
   densityAuthority,
+  reviewScope,
 })
 const promptSha256 = fileSha256FromString(prompt.promptText)
 const evidenceSha256 = fileSha256(evidencePath)
@@ -433,6 +442,7 @@ function requestPreview() {
     model,
     structuredOutput,
     densityAuthority,
+    reviewScope,
     key: apiKey ? apiKeySource : '(missing)',
     promptBytes,
     requestBytes: Buffer.byteLength(JSON.stringify(body), 'utf8'),
@@ -664,6 +674,7 @@ const meta = {
   model,
   baseUrlHost,
   densityAuthority,
+  reviewScope,
   structuredOutput: modelResult.structuredOutput || structuredOutput,
   durationMs: Math.round(modelResult.durationMs || 0),
   attempts: modelResult.attempts ?? 0,
@@ -709,6 +720,7 @@ const summary = {
   model,
   api,
   densityAuthority,
+  reviewScope,
   durationMs: meta.durationMs,
   attempts: meta.attempts,
   usage: meta.usage,

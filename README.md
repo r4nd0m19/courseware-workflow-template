@@ -4,11 +4,12 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`courseware-production` `0.35.0`（84 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
+- 工作流版本：`courseware-production` `0.37.0`（84 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
 - preset：`courseware` `0.3.10`
-- 模板版本：`0.17.0`（2026-10-26）
+- 模板版本：`0.19.0`（2026-10-27）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
 - 脚本审核：`review-script` 显示自动生成的老师版 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行“学生要做”摘要；交互设计与制作字段保留在 `courseware.md` 供工具使用，脚本批准账本仍绑定完整源文件。
+- 页面审核：默认 `page_review_scope=visual-script`，AI 只拿本页截图和已批准脚本页，判断可见内容是否与脚本一致、排版是否有问题；0.37.0 起页面证据不再跑 overflow/overlap（交给截图 AI + 老师），精确文本/quiz/概念/旁白/参考残留/截图绑定仍阻断。视觉自审通过后才进入老师逐页审核；`page_review_scope=evidence` 可回滚到完整证据包。
 - 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；**density 与交互/组件复杂度在脚本自审阶段判定**（`density_authority=script` 默认），页面自审不再判断 density；`density_authority=page` 保留旧路径用于回滚。参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。页面自审是**单次模型调用**（证据 + 内联截图 → 结构化 JSON，无文件/命令工具），模型/端点/key 由用户配置。
 - 播放器：`player.html` 固定 1440×900 画布、整体缩放；无外层工具栏，页面上只看到课件本身；宽屏两侧用课件自身背景延伸，不再留天空色空白；浏览器缩放不再重排，审核链接使用播放器。
 - 许可：private（对外发布前需确认 preset 许可与素材授权）
@@ -141,9 +142,9 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 
 ```bash
 specify workflow info courseware-shell        # 应显示 0.1.0、3 steps
-specify workflow info courseware-production   # 应显示 0.35.0、84 steps
+specify workflow info courseware-production   # 应显示 0.37.0、84 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 完整仓库 132/132；模板仓库 127/127（2 项壳检查 SKIP）
+node workflow/tools/smoke-test.mjs            # 完整仓库 133/133；模板仓库 128/128（2 项壳检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
 
