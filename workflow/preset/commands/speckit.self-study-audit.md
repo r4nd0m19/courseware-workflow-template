@@ -10,6 +10,8 @@ $ARGUMENTS
 
 > **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，只生成产物；跳过本文件的 Human Review（人工审核）节，不要读取 `workflow/tools` 源码、不要额外跑门禁套件或临时脚本、不要写 `review.md`。自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
 
+> **生产 workflow 0.43.0 起不再调用本命令**：自学审核由 `generate-self-study-audit.mjs` 生成结构化判断、校验并渲染补充/新增页提案。本命令保留给手动或非 workflow 使用；不要让 workflow 回退到它。
+
 ## 目的
 
 参考课件常常是**教师课堂讲授**用的：老师会口头补充、追问、给答案，屏幕只呈现提示和局部内容。直接把它做成学生自学课件，会出现「看得见结论、看不见推理」「有练习、没答案」「有动画、没解释」等缺口。

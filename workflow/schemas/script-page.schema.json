@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/script-page.schema.json",
+  "title": "Structured courseware script page",
+  "description": "One model-generated page body. The approved outline owns id/title/objective/components; this page owns visible content and prose.",
+  "type": "object",
+  "required": ["id", "title", "screenContent", "interactionDesign", "narration", "transition"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+    "title": { "type": "string", "minLength": 1 },
+    "screenContent": { "type": "string", "minLength": 1 },
+    "interactionDesign": { "$ref": "#/definitions/interactionDesign" },
+    "narration": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "transition": { "type": "string", "minLength": 1 }
+  },
+  "definitions": {
+    "interactionDesign": {
+      "type": "object",
+      "required": [
+        "attempt",
+        "learningAction",
+        "contentDemand",
+        "evidence",
+        "learningFunction",
+        "level",
+        "initialState",
+        "studentAction",
+        "accessibility",
+        "staticAlternative"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attempt": { "type": "string", "minLength": 1 },
+        "learningAction": {
+          "type": "string",
+          "enum": ["observe", "locate", "label", "predict", "trace", "convert", "classify", "construct", "modify", "explain"]
+        },
+        "contentDemand": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "string", "minLength": 1 },
+        "learningFunction": { "type": "string", "minLength": 1 },
+        "level": {
+          "type": "string",
+          "enum": ["watch", "answer", "modify", "construct", "explain"]
+        },
+        "initialState": { "type": "string", "minLength": 1 },
+        "studentAction": { "type": "string", "minLength": 1 },
+        "successFeedback": { "type": "string", "minLength": 1 },
+        "errorFeedback": { "type": "string", "minLength": 1 },
+        "completion": { "type": "string", "minLength": 1 },
+        "reset": { "type": "string", "minLength": 1 },
+        "accessibility": { "type": "string", "minLength": 1 },
+        "staticAlternative": { "type": "string", "minLength": 1 },
+        "whyStatic": { "type": "string", "minLength": 1 },
+        "misconception": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "level": { "const": "watch" } } },
+          "then": {
+            "required": ["whyStatic"],
+            "properties": { "learningAction": { "const": "observe" } }
+          },
+          "else": {
+            "required": ["successFeedback", "errorFeedback", "completion", "reset"],
+            "not": { "required": ["whyStatic"] }
+          }
+        }
+      ]
+    }
+  }
+}

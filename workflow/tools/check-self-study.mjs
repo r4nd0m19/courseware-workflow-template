@@ -177,6 +177,19 @@ if (budget.decision !== expectedDecision) {
   errors.push(`pageBudget.decision must be ${expectedDecision}`)
 }
 
+const addedIds = new Set()
+for (const addition of data.pageAdditions || []) {
+  if (slideSet.has(addition.id)) errors.push(`page addition ${addition.id} already exists in the script`)
+  if (addedIds.has(addition.id)) errors.push(`duplicate page addition ${addition.id}`)
+  addedIds.add(addition.id)
+  if (!gapIds.has(addition.gapId)) errors.push(`page addition ${addition.id}: unknown gap ${addition.gapId}`)
+}
+for (const addition of data.pageAdditions || []) {
+  if (!slideSet.has(addition.afterSlide) && !addedIds.has(addition.afterSlide)) {
+    errors.push(`page addition ${addition.id}: afterSlide ${addition.afterSlide} does not exist`)
+  }
+}
+
 // Supplements: every blocking gap must have one; every supplement must point
 // back to a gap and use the mandated label.
 const supplementIds = new Set()
@@ -185,7 +198,7 @@ for (const supplement of data.supplements || []) {
   supplementIds.add(supplement.id)
   if (!gapIds.has(supplement.gapId)) errors.push(`supplement ${supplement.id}: unknown gap ${supplement.gapId}`)
   for (const id of supplement.targetSlides || []) {
-    if (slideSet.size && !slideSet.has(id)) errors.push(`supplement ${supplement.id}: unknown slide ${id}`)
+    if (slideSet.size && !slideSet.has(id) && !addedIds.has(id)) errors.push(`supplement ${supplement.id}: unknown slide ${id}`)
   }
 }
 if (data.verdict === 'insufficient') {
@@ -199,13 +212,16 @@ for (const id of (data.contentPack?.unreferenced || [])) {
   errors.push(`required content item ${id} is not referenced by the script`)
 }
 
-// A proposal is required whenever supplements exist. It must be the full
-// script (no slides deleted) plus one labelled, delimited block per supplement.
+// A proposal is required whenever supplements or new pages exist. It must be
+// the full script (no slides deleted), contain the new pages, and carry one
+// labelled, delimited block per supplement.
 const supplements = data.supplements || []
-if (supplements.length && !proposalPath) {
-  errors.push('supplements exist but --proposal was not provided; write courseware.self-study.md')
+const pageAdditions = budget.proposed !== budget.current
+const needsProposal = supplements.length > 0 || pageAdditions
+if (needsProposal && !proposalPath) {
+  errors.push('supplements or new pages exist but --proposal was not provided; write courseware.self-study.md')
 }
-if (proposalPath && supplements.length) {
+if (proposalPath && needsProposal) {
   if (!fs.existsSync(proposalPath)) {
     errors.push(`proposal not found: ${proposalPath}`)
   } else {
@@ -214,6 +230,13 @@ if (proposalPath && supplements.length) {
     const proposalSlides = [...proposal.matchAll(/^##\s+(S\d+[A-Z]?)\s*·/gm)].map((m) => m[1])
     for (const id of slideIds) {
       if (!proposalSlides.includes(id)) errors.push(`proposal removed or renamed slide ${id}`)
+    }
+    if (new Set(proposalSlides).size !== proposalSlides.length) errors.push('proposal contains duplicate slide ids')
+    if (proposalSlides.length !== budget.proposed) {
+      errors.push(`proposal has ${proposalSlides.length} slides but pageBudget.proposed is ${budget.proposed}`)
+    }
+    for (const addition of data.pageAdditions || []) {
+      if (!proposalSlides.includes(addition.id)) errors.push(`proposal is missing page addition ${addition.id}`)
     }
     for (const supplement of supplements) {
       const open = `<!-- self-study-supplement:${supplement.id} -->`

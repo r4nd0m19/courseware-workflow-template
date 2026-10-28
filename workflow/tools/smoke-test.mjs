@@ -1225,8 +1225,11 @@ try {
   total += 1
   const reviewAiSteps = ['self-review-brief', 'self-review-script', 'self-review-component-plan']
     .map((id) => findStep(workflowData.steps, id))
-  const noSelfReviewSteps = ['brief', 'script', 'self-study-audit', 'component-plan']
+  const noSelfReviewSteps = ['component-plan']
     .map((id) => findStep(workflowData.steps, id))
+  const structuredBriefStep = findStep(workflowData.steps, 'brief')
+  const structuredScriptStep = findStep(workflowData.steps, 'script')
+  const structuredSelfStudyStep = findStep(workflowData.steps, 'self-study-audit')
   const singleShotReviewsPass =
     Boolean(findStep(workflowData.steps, 'check-review-ai-config')) &&
     Boolean(findStep(workflowData.steps, 'build-brief-review-evidence')) &&
@@ -1234,12 +1237,18 @@ try {
     reviewAiSteps.every(
       (step) => step?.type === 'shell' && String(step.run || '').includes('review-ai.mjs'),
     ) &&
+    structuredBriefStep?.type === 'shell' &&
+    String(structuredBriefStep.run || '').includes('generate-brief.mjs') &&
+    structuredScriptStep?.type === 'shell' &&
+    String(structuredScriptStep.run || '').includes('generate-courseware-script.mjs') &&
+    structuredSelfStudyStep?.type === 'shell' &&
+    String(structuredSelfStudyStep.run || '').includes('generate-self-study-audit.mjs') &&
     noSelfReviewSteps.every((step) => String(step?.input?.args || '').includes('--no-self-review'))
   console.log(`${singleShotReviewsPass ? 'PASS' : 'FAIL'} single-shot brief/script/component reviews`)
   if (!singleShotReviewsPass) {
     failed += 1
     console.error(
-      'brief/script/component-plan must run as single-shot review-ai steps, with command steps receiving --no-self-review',
+      'brief/script/component-plan must run as single-shot steps, with remaining command steps receiving --no-self-review',
     )
   }
 
@@ -1271,14 +1280,35 @@ try {
   const scriptInputPass =
     scriptInputStep?.type === 'shell' &&
     String(scriptInputStep.run || '').includes('build-script-input.mjs') &&
-    String(scriptGenerationStep?.input?.args || '').includes('--input review/{{ inputs.lesson_slug }}/script-input.json') &&
+    scriptGenerationStep?.type === 'shell' &&
+    String(scriptGenerationStep.run || '').includes('generate-courseware-script.mjs') &&
+    String(scriptGenerationStep.run || '').includes('--input review/{{ inputs.lesson_slug }}/script-input.json') &&
+    !String(scriptGenerationStep.command || '').includes('speckit.script') &&
     String(scriptReviewCheckStep2?.run || '').includes('--fix-brief') &&
     String(scriptReviewCheckStep2?.run || '').includes('script-review-fix.md')
   console.log(`${scriptInputPass ? 'PASS' : 'FAIL'} compact script input + repair brief`)
   if (!scriptInputPass) {
     failed += 1
     console.error(
-      'script generation must receive a compact --input package and the script review check must write a repair brief',
+      'script must be a shell step that generates from the compact --input package, not a coding-agent command; the script review check must write a repair brief',
+    )
+  }
+
+  // ---- page implementation is a single-shot shell step ----
+  total += 1
+  const implementStep = findStep(workflowData.steps, 'implement-section')
+  const implementSingleShot =
+    Boolean(findStep(workflowData.steps, 'build-page-deck-evidence')) &&
+    Boolean(findStep(workflowData.steps, 'apply-page-deck')) &&
+    implementStep?.type === 'shell' &&
+    String(implementStep.run || '').includes('single-shot-generate.mjs') &&
+    String(implementStep.run || '').includes('--mode page-deck') &&
+    !String(implementStep.command || '').includes('speckit.implement')
+  console.log(`${implementSingleShot ? 'PASS' : 'FAIL'} page implementation is single-shot deck JSON`)
+  if (!implementSingleShot) {
+    failed += 1
+    console.error(
+      'implement-section must build deck evidence, call single-shot-generate --mode page-deck, and apply the validated slide; it must not invoke a coding agent',
     )
   }
 
@@ -1667,6 +1697,75 @@ try {
     console.error('review-ai.mjs must merge brief/script/component-plan reviews without a coding agent')
   }
 
+  // ---- single-shot page deck implementation ----
+  total += 1
+  const pageDeckTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-page-deck.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const pageDeckOutput = `${pageDeckTest.stdout || ''}\n${pageDeckTest.stderr || ''}`
+  const pageDeckToolPass =
+    pageDeckTest.status === 0 && /OK page deck generator \+ applier/.test(pageDeckOutput)
+  console.log(`${pageDeckToolPass ? 'PASS' : 'FAIL'} single-shot page deck implementation`)
+  if (!pageDeckToolPass) {
+    failed += 1
+    console.error(pageDeckOutput.trimEnd())
+    console.error('page deck generation must return one slide and apply-page-deck must validate/write it')
+  }
+
+  // ---- structured courseware script generation ----
+  total += 1
+  const scriptGenerationTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-script-generation.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const scriptGenerationOutput = `${scriptGenerationTest.stdout || ''}\n${scriptGenerationTest.stderr || ''}`
+  const scriptGenerationToolPass =
+    scriptGenerationTest.status === 0 &&
+    /PASS structured courseware script generation \+ page repair/.test(scriptGenerationOutput)
+  console.log(`${scriptGenerationToolPass ? 'PASS' : 'FAIL'} structured courseware script generation`)
+  if (!scriptGenerationToolPass) {
+    failed += 1
+    console.error(scriptGenerationOutput.trimEnd())
+    console.error('script generation must render courseware.md from outline/page JSON and repair invalid pages')
+  }
+
+  // ---- structured teaching brief ----
+  total += 1
+  const briefTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-brief-generation.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const briefOutput = `${briefTest.stdout || ''}\n${briefTest.stderr || ''}`
+  const briefToolPass =
+    briefTest.status === 0 && /PASS structured teaching brief generation/.test(briefOutput)
+  console.log(`${briefToolPass ? 'PASS' : 'FAIL'} structured teaching brief generation`)
+  if (!briefToolPass) {
+    failed += 1
+    console.error(briefOutput.trimEnd())
+    console.error('brief generation must render spec.md and concepts.yml from structured JSON')
+  }
+
+  // ---- structured self-study audit ----
+  total += 1
+  const selfStudyTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-self-study-generation.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const selfStudyOutput = `${selfStudyTest.stdout || ''}\n${selfStudyTest.stderr || ''}`
+  const selfStudyToolPass =
+    selfStudyTest.status === 0 && /PASS structured self-study audit \+ proposal insertion/.test(selfStudyOutput)
+  console.log(`${selfStudyToolPass ? 'PASS' : 'FAIL'} structured self-study audit`)
+  if (!selfStudyToolPass) {
+    failed += 1
+    console.error(selfStudyOutput.trimEnd())
+    console.error('self-study audit must generate judgments, pass check-self-study and insert proposal blocks')
+  }
+
   // ---- single-shot art/reference generator ----
   total += 1
   const generateTest = spawnSync(
@@ -1676,7 +1775,7 @@ try {
   )
   const generateTestOutput = `${generateTest.stdout || ''}\n${generateTest.stderr || ''}`
   const generateToolPass =
-    generateTest.status === 0 && /3\/3 single-shot-generate tests passed/.test(generateTestOutput)
+    generateTest.status === 0 && /4\/4 single-shot-generate tests passed/.test(generateTestOutput)
   console.log(`${generateToolPass ? 'PASS' : 'FAIL'} single-shot art/reference generator`)
   if (!generateToolPass) {
     failed += 1

@@ -107,6 +107,40 @@ test('reference adaptation fills metadata and validates entries', () => {
   assert.equal(data.entries[0].id, 'RA01')
 })
 
+test('script outline and page modes pass structured JSON through', () => {
+  const outlineEvidence = write('script-outline-evidence.json', {
+    lessonSlug: 'smoke',
+    lesson: '测试课',
+    content: [],
+    concepts: [],
+    style: { components: [], layouts: [] },
+    registry: { components: [] },
+    rules: [],
+  })
+  const outlineResponse = mock({ lesson: 'smoke', title: '测试课', pages: [] })
+  const outlineOut = path.join(tmp, 'script-outline.json')
+  const outlineResult = run([
+    '--mode', 'script-outline', '--evidence', outlineEvidence, '--out', outlineOut,
+    '--api', 'anthropic-messages', '--model', 'mock', '--mock-response', outlineResponse,
+  ])
+  assert.equal(outlineResult.status, 0, outlineResult.stderr)
+  assert.equal(JSON.parse(fs.readFileSync(outlineOut, 'utf8')).title, '测试课')
+
+  const pageEvidence = write('script-page-evidence.json', {
+    lessonSlug: 'smoke',
+    lesson: '测试课',
+    page: { id: 'S01', title: '测试页' },
+  })
+  const pageResponse = mock({ id: 'S01', title: '测试页', narration: ['旁白'] })
+  const pageOut = path.join(tmp, 'script-page.json')
+  const pageResult = run([
+    '--mode', 'script-page', '--evidence', pageEvidence, '--out', pageOut,
+    '--api', 'anthropic-messages', '--model', 'mock', '--mock-response', pageResponse,
+  ])
+  assert.equal(pageResult.status, 0, pageResult.stderr)
+  assert.equal(JSON.parse(fs.readFileSync(pageOut, 'utf8')).id, 'S01')
+})
+
 if (failed) {
   console.error(`${failed}/${total} single-shot-generate tests failed`)
   process.exit(1)

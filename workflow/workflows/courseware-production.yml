@@ -3,9 +3,9 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.40.0"
+  version: "0.43.0"
   author: "courseware"
-  description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 教学简报 → 人类可读脚本（整份一次审）→ 概念/自学/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
+  description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 结构化教学简报 → 结构化脚本生成 → 人类可读脚本（整份一次审）→ 概念/结构化自学审核/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
 
 requires:
   speckit_version: ">=1.0.0"
@@ -201,11 +201,12 @@ steps:
     run: "node workflow/tools/review-ai.mjs --check-config"
 
   # ---------- teaching brief ----------
+  # One structured model call returns the UbD brief; Node renders spec.md and
+  # concepts.yml deterministically. No coding agent reads the repository.
   - id: brief
-    command: speckit.specify
-    integration: "{{ inputs.integration }}"
-    input:
-      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
+    type: shell
+    timeout: 300
+    run: "node workflow/tools/generate-brief.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --concepts {{ inputs.concepts }} --constitution .specify/memory/constitution.md --review-dir review/{{ inputs.lesson_slug }}"
 
   # The concept ledger is authored with the brief. Validate its schema and
   # source refs here, before any page exists; the slide-level coverage gate
@@ -231,17 +232,17 @@ steps:
   # review is the whole courseware script below; do not add a separate gate.
 
   # ---------- courseware script (human-readable source of truth) ----------
-  # Workflow mode: the generation agent reads only this compact input package,
-  # not the repository or the gate implementations.
+  # The model only returns outline/page JSON. This shell tool owns the loop,
+  # validation, page repair and the final courseware.md / review-sections.yml
+  # render. The model has no repository-reading or file-editing tools.
   - id: build-script-input
     type: shell
     run: "node workflow/tools/build-script-input.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --review-sections {{ inputs.review_sections }} --content {{ inputs.content_pack }} --concepts {{ inputs.concepts }} --style {{ inputs.style_pack }} --style-full {{ inputs.style_pack_full }} --registry {{ inputs.component_registry }} --out review/{{ inputs.lesson_slug }}/script-input.json"
 
   - id: script
-    command: speckit.script
-    integration: "{{ inputs.integration }}"
-    input:
-      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }} --input review/{{ inputs.lesson_slug }}/script-input.json --no-self-review"
+    type: shell
+    timeout: 1800
+    run: "node workflow/tools/generate-courseware-script.mjs --input review/{{ inputs.lesson_slug }}/script-input.json --out {{ inputs.courseware_script }} --sections {{ inputs.review_sections }} --outline review/{{ inputs.lesson_slug }}/script-outline.json --pages-dir review/{{ inputs.lesson_slug }}/script-pages --report review/{{ inputs.lesson_slug }}/script-generation.json"
 
   - id: validate-script-draft
     type: shell
@@ -258,10 +259,9 @@ steps:
   # script review. It reports gaps and writes a separate proposal; it must not
   # edit courseware.md or expand the page count on its own.
   - id: self-study-audit
-    command: speckit.self-study-audit
-    integration: "{{ inputs.integration }}"
-    input:
-      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
+    type: shell
+    timeout: 300
+    run: "node workflow/tools/generate-self-study-audit.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --registry {{ inputs.component_registry }} --concepts {{ inputs.concepts }} --review-dir review/{{ inputs.lesson_slug }} --out review/{{ inputs.lesson_slug }}/self-study-audit.json --md review/{{ inputs.lesson_slug }}/self-study-audit.md --raw review/{{ inputs.lesson_slug }}/self-study-audit-generation.json --report review/{{ inputs.lesson_slug }}/self-study-generation.json"
 
   - id: check-self-study
     type: shell
@@ -271,7 +271,7 @@ steps:
   # below is the teacher's first content review and sees the final text.
   - id: apply-self-study-audit
     type: shell
-    run: "node workflow/tools/apply-self-study-audit.mjs --audit review/{{ inputs.lesson_slug }}/self-study-audit.json --script {{ inputs.courseware_script }} --approved-by \"{{ inputs.approver }}\" --record review/{{ inputs.lesson_slug }}/self-study-apply.json"
+    run: "node workflow/tools/apply-self-study-audit.mjs --audit review/{{ inputs.lesson_slug }}/self-study-audit.json --script {{ inputs.courseware_script }} --sections {{ inputs.review_sections }} --approved-by \"{{ inputs.approver }}\" --record review/{{ inputs.lesson_slug }}/self-study-apply.json"
 
   - id: validate-script
     type: shell
@@ -573,11 +573,20 @@ steps:
               # The site is rebuilt from the shell package after every section:
               # build-shell-site runs the art provenance gate, assembles the deck,
               # injects the component bundle/host, and verifies the rendered site.
+              - id: build-page-deck-evidence
+                type: shell
+                run: "node workflow/tools/build-page-deck-evidence.mjs --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --storyboard {{ inputs.storyboard }} --sections {{ inputs.review_sections }} --section {{ steps.advance_section.output.data.section.id }} --deck {{ inputs.deck_data }} --shell {{ inputs.shell }} --registry {{ inputs.component_registry }} --staging {{ inputs.component_staging }} --out review/{{ inputs.lesson_slug }}/page-deck-evidence-{{ steps.advance_section.output.data.section.id }}.json"
+
+              # Single-shot deck implementation: the model returns one slide;
+              # apply-page-deck.mjs validates it and is the only writer.
               - id: implement-section
-                command: speckit.implement
-                integration: "{{ inputs.integration }}"
-                input:
-                  args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --sections {{ inputs.review_sections }} --storyboard {{ inputs.storyboard }} --deck-data {{ inputs.deck_data }} --staging {{ inputs.component_staging }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
+                type: shell
+                timeout: 300
+                run: "node workflow/tools/single-shot-generate.mjs --mode page-deck --evidence review/{{ inputs.lesson_slug }}/page-deck-evidence-{{ steps.advance_section.output.data.section.id }}.json --out review/{{ inputs.lesson_slug }}/page-deck-{{ steps.advance_section.output.data.section.id }}.json"
+
+              - id: apply-page-deck
+                type: shell
+                run: "node workflow/tools/apply-page-deck.mjs --deck {{ inputs.deck_data }} --evidence review/{{ inputs.lesson_slug }}/page-deck-evidence-{{ steps.advance_section.output.data.section.id }}.json --slide-json review/{{ inputs.lesson_slug }}/page-deck-{{ steps.advance_section.output.data.section.id }}.json"
 
               # Refresh narration after implementation in case the section script
               # changed. Existing MP3s are reused when their spoken text is unchanged.

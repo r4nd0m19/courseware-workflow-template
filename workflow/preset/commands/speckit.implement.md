@@ -13,6 +13,7 @@ $ARGUMENTS
 > 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`screenshots/` 路径用 `$COURSEWARE_SCREENSHOTS_DIR/...`，`--approval` 用 `$COURSEWARE_SCRIPT_APPROVAL`，`--approvals` 用 `$COURSEWARE_PAGE_APPROVALS`；站点输出用 `site/<lesson_slug>`，不要写死 `prototype/shell-site`。workflow 会设置这些变量，并通过 `$ARGUMENTS` 传 `--lesson-slug <slug>`。
 
 - **逐页模式（工作流默认）**：参数含 `--section <id>`。只实现/修改该页，渲染该页，提交老师审核；上一页未 `approve` 不得继续。
+- **工作流模式（`--no-build`）**：只编辑 `--deck-data` 指定的 deck；跳过站点构建、语音生成、截图、页面门禁、自审和人工审核。`section-shell-build` / `build-section-narration` / `build-section-screens` / `build-page-evidence` / `self-review-page` 由 `courseware-production` workflow 的后续 shell 步骤执行。不要在命令内运行 `build-shell-site` / `build-narration` / `build-screen` / `check-deck-data` / `check-rendered-section` / `check-overflow`。
 - **整份模式（仅手动兜底）**：参数不含 `--section`。实现全部 `APPROVED` 屏；仍需按 `review-sections.yml` 逐页自审和人工审核，不得跳过页 gate。正常生产必须由 `courseware-production` workflow 驱动；`build-screen` / `check-rendered-section` / `freeze-section` 在 workflow 外会 fail closed，不要用整份模式绕过页 gate（调试/测试才加 `--manual`）。
 - **数据文件**：参数可含 `--deck-data <path>`，工作流默认传 `specs/<lesson>/deck.json`；本命令只写这个文件，不得另起 deck 数据文件。
 - **不要在 workflow 内启动其它 workflow 或跑 smoke-test**：本命令只实现当前页；不要运行 `smoke-test.mjs`、`run-workflow.mjs`、`specify workflow run/resume`。这些命令会继承当前 `SPECKIT_WORKFLOW_RUN_ID`，可能覆盖正在运行的 run（2026-10-22 的 S05 事故）。测试由人工/独立终端在 workflow 外运行。
@@ -61,12 +62,12 @@ node workflow/tools/check-script-approval.mjs courseware.md
    - 本页需要但既未注册、又不在暂存区的组件：立即停止，先运行 `speckit.component-build --section <id> --slides <ids> --components <ids>`；不得在 deck.json 里硬编码实现。
    - 不得新增 `html`、`innerHTML`、`style`、`on*` 等字段；不得在数据里写 `<script>`/`javascript:`。
    - 图片只引用本地资产；含个人信息的安装截图不得进入课件。
-5. 组件与语音：
+5. 组件与语音（**工作流模式 `--no-build` 跳过**；语音由 workflow 的 `build-section-narration` 负责）：
    - 自定义组件要么已注册为 `core`，要么已由本页的 `speckit.component-build` 放进 `--staging` 指定目录；两者都由 `sync-deck-components.mjs` 进入 bundle。本页暂存组件随页面一起审核，页面通过后由工作流注册。
    - 语音由 `build-narration.mjs` 生成 manifest；`build-shell-site.mjs` 注入站点；不得手写假音频/空旁白。
    - 目录（outline）由参考外壳从 deck 自动生成；语音选择/播放由外壳顶栏驱动。不得另写一套目录或播放器。
 6. `contentRefs` 中的 required 项必须在页面上真实可见/可操作；不得用装饰或旁白假装覆盖。
-7. 重建并运行技术闸门（本页）：
+7. 重建并运行技术闸门（**工作流模式 `--no-build` 跳过**；这些门禁由 workflow 的 `section-shell-build` / `build-screen` / `build-page-evidence` 负责）：
    ```bash
    node workflow/tools/build-shell-site.mjs --script courseware.md --shell <shell-dir> --deck <deck.json> \
      --art <art-dir>/art-manifest.json --narration <narration.json> --audio-dir <audio-dir> \
