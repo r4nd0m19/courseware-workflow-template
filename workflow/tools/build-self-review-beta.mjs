@@ -49,6 +49,43 @@ if (!reportExists) {
   })
 }
 
+const RESOLVED_STATUS = /^(waived|fixed|closed|已修复|已关闭|关闭|完成)/i
+const OPEN_STATUS = /^(open|未关闭|待处理)/i
+
+// Structured reports put the status in the last table cell. Check it before
+// falling back to prose scanning, so a decision that happens to contain
+// "完成" cannot hide an open blocker.
+function rowCells(line) {
+  const cells = []
+  let current = ''
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (char === '\\' && line[index + 1] === '|') {
+      current += '|'
+      index += 1
+    } else if (char === '|') {
+      cells.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  cells.push(current.trim())
+  return cells.slice(1, -1)
+}
+function rowIsResolved(line) {
+  const content = rowCells(line)
+  const status = content[content.length - 1] || ''
+  if (RESOLVED_STATUS.test(status)) return true
+  if (OPEN_STATUS.test(status)) return false
+  return /已修复|fixed|closed|waived|关闭|完成/i.test(line)
+}
+function structuredSeverity(line) {
+  const content = rowCells(line)
+  const second = (content[1] || '').toLowerCase()
+  return /^(blocker|major|minor)$/.test(second) ? second : ''
+}
+
 const unresolved = []
 if (reportExists) {
   for (const [index, line] of report.split(/\r?\n/).entries()) {
@@ -56,8 +93,16 @@ if (reportExists) {
     // Only scan table rows. Prose such as "没有未修复的 blocker" must not be
     // mistaken for an unresolved row.
     if (!trimmed.startsWith('|')) continue
+    const severity = structuredSeverity(trimmed)
+    if (severity) {
+      if (severity !== 'blocker') continue
+      if (rowIsResolved(trimmed)) continue
+      unresolved.push(`line ${index + 1}: ${trimmed}`)
+      continue
+    }
+    // Legacy free-form reports: keep the old broad scan.
     if (!/\bblocker\b/i.test(trimmed) && !/未修复|未关闭/.test(trimmed)) continue
-    if (/已修复|fixed|closed|waived|关闭|完成/i.test(trimmed)) continue
+    if (rowIsResolved(trimmed)) continue
     unresolved.push(`line ${index + 1}: ${trimmed}`)
   }
 }
@@ -70,7 +115,8 @@ for (const line of unresolved) {
   issues.push({ description: line, severity: 'blocking', fixed: false })
 }
 
-const hasTrialEvidence = /试课|试用|trial|学生|课堂/i.test(report)
+const hasTrialEvidence = /试用反馈[：:]\s*已提供/.test(report) ||
+  (/试课|试用|trial|学生|课堂/i.test(report) && !/试用反馈[：:]\s*未提供/.test(report))
 const hasIssueTable = /严重|severity/i.test(report) && /负责人|owner/i.test(report)
 checklist.push({
   item: '收敛报告存在，问题有证据、分级和归属',

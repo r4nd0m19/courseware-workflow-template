@@ -8,6 +8,9 @@ description: 先检索组件库，再决定复用/扩展/新建；为每个缺�
 $ARGUMENTS
 ```
 
+
+> **生产 workflow 0.43.0 起不再调用本命令**：`component-plan` 步骤已改为 `generate-component-plan.mjs`（结构化复用检索/缺口/简报，Node 渲染并跑 `check-component-plan`）。本命令只保留给手动或非 workflow 使用；不要让 workflow 回退到它。
+
 ## 审批闸门（必须最先运行）
 
 ```bash

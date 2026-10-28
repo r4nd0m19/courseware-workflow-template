@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/reference-extract.schema.json",
+  "title": "Reference-verbatim extraction manifest",
+  "description": "Declares exact reference source files, hashes, JS functions and CSS selectors to copy into a component package. The adapter/tests/stories live in an authored template directory.",
+  "type": "object",
+  "required": ["id", "shell", "source", "hashes", "templateDir", "adapter", "selectors", "functions"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "shell": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "required": ["js", "css"],
+      "additionalProperties": false,
+      "properties": {
+        "js": { "type": "string", "minLength": 1 },
+        "css": { "type": "string", "minLength": 1 },
+        "html": { "type": "string", "minLength": 1 }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "required": ["js", "css"],
+      "additionalProperties": false,
+      "properties": {
+        "js": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "css": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "html": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "templateDir": { "type": "string", "minLength": 1 },
+    "adapter": { "type": "string", "minLength": 1 },
+    "selectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "functions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" }
+    },
+    "markupSelector": { "type": "string", "minLength": 1 }
+  }
+}

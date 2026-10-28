@@ -8,6 +8,7 @@ import { parseScript } from './script-lib.mjs'
 import { assertScriptApproved } from './approval-lib.mjs'
 import { readSectionManifest } from './section-lib.mjs'
 import { readData } from './lib.mjs'
+import { relativeReferenceExtract } from './reference-extract-lib.mjs'
 
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
@@ -78,10 +79,12 @@ const components = missing.map((id) => {
       (bySlide.get(slideId)?.components || []).includes(id),
     ),
   )
+  const extract = relativeReferenceExtract(scriptPath, id)
   return {
     id,
     section: section ? section.id : null,
     slides: section ? section.slides : [],
+    ...(extract ? { mode: 'reference-verbatim', extract } : {}),
   }
 })
 
@@ -91,6 +94,9 @@ console.log(
       ids: components.map((component) => component.id),
       needsPrebuild: components.length > 0,
       components,
+      referenceVerbatim: components
+        .filter((component) => component.extract)
+        .map((component) => ({ id: component.id, extract: component.extract })),
       staging: path.relative(process.cwd(), path.resolve(stagingDir)),
     },
     null,

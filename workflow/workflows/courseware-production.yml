@@ -3,9 +3,9 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.43.0"
+  version: "0.44.0"
   author: "courseware"
-  description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 结构化教学简报 → 结构化脚本生成 → 人类可读脚本（整份一次审）→ 概念/结构化自学审核/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/Beta/Gold 汇总"
+  description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 结构化教学简报 → 结构化脚本生成 → 人类可读脚本（整份一次审）→ 概念/结构化自学审核/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/结构化 Beta/Gold 汇总"
 
 requires:
   speckit_version: ">=1.0.0"
@@ -18,7 +18,7 @@ inputs:
   integration:
     type: string
     default: "auto"
-    prompt: "Coding-agent integration for command/prompt steps (auto = project default; use codex or claude to select)"
+    prompt: "Legacy harness integration input (0.44.0 production has no command/prompt steps; kept for compatibility)"
   approver:
     type: string
     default: "teacher"
@@ -375,11 +375,13 @@ steps:
     run: "node workflow/tools/check-narration.mjs {{ inputs.courseware_script }} {{ inputs.narration_manifest }} --audio-root {{ inputs.audio_dir }}"
 
   # ---------- component reuse / generation ----------
+  # The model returns reuse search + gaps + brief Markdown. Node validates the
+  # declarations, renders component-plan.md, writes briefs, then runs
+  # check-component-plan before the self-review.
   - id: component-plan
-    command: speckit.component-plan
-    integration: "{{ inputs.integration }}"
-    input:
-      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
+    type: shell
+    timeout: 600
+    run: "node workflow/tools/generate-component-plan.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --style {{ inputs.style_pack }} --registry {{ inputs.component_registry }} --approval review/{{ inputs.lesson_slug }}/script-approval.json --review-dir review/{{ inputs.lesson_slug }}"
 
   - id: validate-component-plan
     type: shell
@@ -495,10 +497,9 @@ steps:
     condition: "{{ steps.list-missing-components.output.data.needsPrebuild }}"
     then:
       - id: build-all-missing-components
-        command: speckit.component-build
-        integration: "{{ inputs.integration }}"
-        input:
-          args: "--prebuild --components {{ steps.list-missing-components.output.data.ids | join(',') }} --staging {{ inputs.component_staging }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
+        type: shell
+        timeout: 1800
+        run: "node workflow/tools/generate-components.mjs --components {{ steps.list-missing-components.output.data.ids | join(',') }} --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --brief-dir specs/{{ inputs.lesson_slug }}/component-briefs --registry {{ inputs.component_registry }} --style {{ inputs.style_pack }} --style-full {{ inputs.style_pack_full }} --staging {{ inputs.component_staging }} --project-root . --max-attempts 2"
 
   # ---------- page-by-page implementation + rendered review ----------
   # One whole-script gate above; from here each page is implemented, rendered,
@@ -553,10 +554,9 @@ steps:
                 condition: "{{ steps.load-page-components.output.data.buildRequired }}"
                 then:
                   - id: build-missing-page-components
-                    command: speckit.component-build
-                    integration: "{{ inputs.integration }}"
-                    input:
-                      args: "{{ inputs.lesson }} --section {{ steps.advance_section.output.data.section.id }} --slides {{ steps.advance_section.output.data.section.slides | join(',') }} --components {{ steps.load-page-components.output.data.missing | join(',') }} --staging {{ inputs.component_staging }} --lesson-slug {{ inputs.lesson_slug }} --no-self-review"
+                    type: shell
+                    timeout: 1800
+                    run: "node workflow/tools/generate-components.mjs --components {{ steps.load-page-components.output.data.missing | join(',') }} --lesson-slug {{ inputs.lesson_slug }} --script {{ inputs.courseware_script }} --brief-dir specs/{{ inputs.lesson_slug }}/component-briefs --registry {{ inputs.component_registry }} --style {{ inputs.style_pack }} --style-full {{ inputs.style_pack_full }} --staging {{ inputs.component_staging }} --project-root . --max-attempts 2"
 
               - id: check-page-components
                 type: if
@@ -815,10 +815,8 @@ steps:
 
   # ---------- beta / gold ----------
   - id: converge
-    command: speckit.converge
-    integration: "{{ inputs.integration }}"
-    input:
-      args: "{{ inputs.lesson }} --lesson-slug {{ inputs.lesson_slug }}"
+    type: shell
+    run: "node workflow/tools/generate-converge-report.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --sections {{ inputs.review_sections }} --approvals review/{{ inputs.lesson_slug }}/page-approvals.json --alpha review/{{ inputs.lesson_slug }}/self-review-alpha.json --screenshots screenshots/{{ inputs.lesson_slug }} --review-dir review/{{ inputs.lesson_slug }} --trial-feedback review/{{ inputs.lesson_slug }}/trial-feedback.md --out review/{{ inputs.lesson_slug }}/converge-report.md"
 
   - id: self-review-beta
     type: shell

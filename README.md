@@ -4,12 +4,13 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
 
-- 工作流版本：`courseware-production` `0.43.0`（90 个顶层步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
-- preset：`courseware` `0.3.13`
+- 工作流版本：`courseware-production` `0.44.0`（90 个顶层步骤，0 个 command/prompt 步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
+- preset：`courseware` `0.3.14`
 - 模板版本：`0.24.0`（2026-10-28）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
 - 脚本审核：`review-script` 显示自动生成的老师版 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行“学生要做”摘要；交互设计与制作字段保留在 `courseware.md` 供工具使用，脚本批准账本仍绑定完整源文件。
 - 页面实现：`build-page-deck-evidence` + `single-shot-generate --mode page-deck` + `apply-page-deck`；模型只返回一页 slide JSON，Node 校验后写 deck，不再由 coding agent 构建/截图。
+- Beta 收敛（0.44.0）：`generate-converge-report.mjs` 读取 Alpha/批准/截图/`review/<lesson>/trial-feedback.md`，有试用反馈时一次无工具模型调用只返回 findings/verdict/followUps；没有反馈时直接生成空报告，不调用模型。报告不修改已批准内容，未关闭 blocker 由 Beta 确定性扫描拦下。
 - 脚本生成：`build-script-input` → `generate-courseware-script`（大纲 JSON → 逐页 page JSON → 校验/局部重试）→ `render-courseware-md` + `render-review-sections`；生产 workflow 的 `script` 步骤是 shell，不再调用 `speckit.script`。
 - 教学简报 / 自学审核：`generate-brief` 渲染 `spec.md` + `concepts.yml`；`generate-self-study-audit` 生成 rubric/缺口/补充或新增页判断，Node 生成 `self-study-audit.json` + 报告 + `courseware.self-study.md`，并用 `check-self-study` 校验；新增页会同步 `review-sections.yml`。`brief` / `self-study-audit` 步骤不再调用 coding agent。
 - 脚本生成：`build-script-input` 生成紧凑输入包（spec/content/concepts/style/registry/模板/规则/输出路径）；结构化生成器只接收这个包，不读仓库。

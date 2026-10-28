@@ -8,7 +8,7 @@
 node workflow/tools/smoke-test.mjs
 ```
 
-覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、structured brief/script/self-study generation、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
+覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、structured brief/script/self-study/component plan/component generation/reference-verbatim routing/convergence triage、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
 
 ## 0B. 壳批准（先于内容包）
 
@@ -230,6 +230,45 @@ node workflow/tools/apply-self-study-audit.mjs --audit review/<slug>/self-study-
   --script specs/<slug>/courseware.md --proposal specs/<slug>/courseware.self-study.md \
   --sections specs/<slug>/review-sections.yml --record review/<slug>/self-study-apply.json
 
+# component files（0.43.0：金标准验收 + 单次模型闭环）
+node workflow/tools/component-package-to-files.mjs \
+  --package registry/components/code-anatomy --out review/component-files/code-anatomy.json
+node workflow/tools/build-component-evidence.mjs --component code-anatomy \
+  --brief specs/<slug>/component-briefs/code-anatomy.md --mode extend \
+  --registry registry/index.json --style shells/<shell>/style-pack.manifest.json \
+  --exemplar code-anatomy --out review/component-files/evidence.json
+node workflow/tools/apply-component-files.mjs \
+  --files review/component-files/code-anatomy.json --staging registry/staging \
+  --project-root . --force
+# 模型生成时加 --generate-baselines --sanitize-provenance
+# 模型生成包没有基线时：--generate-baselines
+node workflow/tools/run-component-checks.mjs --package registry/staging/code-anatomy --project-root .
+
+# 结构化组件生成（0.43.0；默认 files = 每个文件一次模型调用，单请求只发一次，外层循环修复；workflow 已改用 generate-components）
+node workflow/tools/generate-component.mjs --component code-anatomy \
+  --brief specs/<slug>/component-briefs/code-anatomy.md --mode extend \
+  --strategy files \
+  --registry registry/index.json --style shells/<shell>/style-pack.manifest.json \
+  --exemplar code-anatomy --staging registry/staging --project-root . --force
+node workflow/tools/check-component-corpus.mjs --project-root .
+
+# reference-verbatim：按 manifest 逐字节提取参考函数/CSS/HTML（模型不参与）
+node workflow/tools/extract-reference-component.mjs --extract <reference-extract.json> \
+  --out registry/staging/<id> --project-root . --force
+
+# 组件测试沙箱（bubblewrap；隐藏仓库/密钥，断网）
+node workflow/tools/run-component-checks.mjs --package registry/staging/<id> \
+  --project-root . --sandbox
+# 缺失基线截图（同样可加 --sandbox）
+node workflow/tools/capture-component-baselines.mjs --package registry/staging/<id> \
+  --project-root . --only-missing --sandbox
+
+# 组件计划（0.43.0）：结构化复用检索/缺口/简报，Node 渲染并跑 check-component-plan
+node workflow/tools/generate-component-plan.mjs --lesson-slug <slug> --lesson "<title>" \
+  --script specs/<slug>/courseware.md --style <style-pack.manifest.json> \
+  --registry registry/index.json --approval review/<slug>/script-approval.json \
+  --review-dir review/<slug>
+
 # script：紧凑逐屏证据包 + density/complexity 自审骨架（AI 只填判断字段）
 node workflow/tools/build-script-review-evidence.mjs --lesson-slug <slug> \
   --script specs/<slug>/courseware.md --storyboard specs/<slug>/storyboard.yml \
@@ -261,6 +300,20 @@ node workflow/tools/review-ai.mjs --mode component-plan \
 node workflow/tools/build-self-review-alpha.mjs ...
 node workflow/tools/build-self-review-beta.mjs ...
 node workflow/tools/build-self-review-gold.mjs ...
+
+# reference-verbatim 自动路由（0.44.0）：manifest 放 specs/<lesson>/reference-extracts/<id>.json
+# list-missing-components / list-section-components 标记，generate-components 自动提取
+
+# converge（0.44.0）：Alpha/批准/截图/试用反馈 → 无工具模型 findings JSON
+# → Node 渲染 converge-report.md；不修改已批准内容
+# 没有 review/<slug>/trial-feedback.md 时直接生成空报告，不调用模型
+node workflow/tools/generate-converge-report.mjs --lesson-slug <slug> \
+  --lesson "<title>" --script specs/<slug>/courseware.md \
+  --sections specs/<slug>/review-sections.yml \
+  --approvals review/<slug>/page-approvals.json \
+  --alpha review/<slug>/self-review-alpha.json \
+  --screenshots screenshots/<slug> --review-dir review/<slug> \
+  --trial-feedback review/<slug>/trial-feedback.md
 
 # 任意自审 JSON → Markdown（页自审在 AI 填完后自动渲染）
 node workflow/tools/render-self-review-md.mjs review/<slug>/self-review-page-S02B.json \

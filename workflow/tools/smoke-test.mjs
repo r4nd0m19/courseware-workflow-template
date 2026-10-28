@@ -924,14 +924,17 @@ try {
     /^  integration:\n    type: string\n    default: "auto"/m.test(workflowYaml)
   const hasHardcodedIntegration = /integration:\s*"(?:claude|codex|zcode)"/.test(workflowYaml)
   const harnessPass =
-    hasIntegrationInput && missingIntegration.length === 0 && !hasHardcodedIntegration
+    hasIntegrationInput &&
+    dispatchSteps.length === 0 &&
+    missingIntegration.length === 0 &&
+    !hasHardcodedIntegration
   console.log(
     `${harnessPass ? 'PASS' : 'FAIL'} workflow integration input (${integrationExpressions}/${dispatchSteps.length} dispatch steps)`,
   )
   if (!harnessPass) {
     failed += 1
     console.error(
-      `workflow must declare an integration input defaulting to auto and use it for every command/prompt step (missing: ${missingIntegration.map((step) => step.id).join(', ') || 'none'})`,
+      `production workflow must not dispatch command/prompt agents; found: ${dispatchSteps.map((step) => step.id).join(', ') || 'none'}`,
     )
   }
 
@@ -1225,11 +1228,11 @@ try {
   total += 1
   const reviewAiSteps = ['self-review-brief', 'self-review-script', 'self-review-component-plan']
     .map((id) => findStep(workflowData.steps, id))
-  const noSelfReviewSteps = ['component-plan']
-    .map((id) => findStep(workflowData.steps, id))
+  const structuredComponentPlanStep = findStep(workflowData.steps, 'component-plan')
   const structuredBriefStep = findStep(workflowData.steps, 'brief')
   const structuredScriptStep = findStep(workflowData.steps, 'script')
   const structuredSelfStudyStep = findStep(workflowData.steps, 'self-study-audit')
+  const structuredConvergeStep = findStep(workflowData.steps, 'converge')
   const singleShotReviewsPass =
     Boolean(findStep(workflowData.steps, 'check-review-ai-config')) &&
     Boolean(findStep(workflowData.steps, 'build-brief-review-evidence')) &&
@@ -1243,12 +1246,15 @@ try {
     String(structuredScriptStep.run || '').includes('generate-courseware-script.mjs') &&
     structuredSelfStudyStep?.type === 'shell' &&
     String(structuredSelfStudyStep.run || '').includes('generate-self-study-audit.mjs') &&
-    noSelfReviewSteps.every((step) => String(step?.input?.args || '').includes('--no-self-review'))
-  console.log(`${singleShotReviewsPass ? 'PASS' : 'FAIL'} single-shot brief/script/component reviews`)
+    structuredComponentPlanStep?.type === 'shell' &&
+    String(structuredComponentPlanStep.run || '').includes('generate-component-plan.mjs') &&
+    structuredConvergeStep?.type === 'shell' &&
+    String(structuredConvergeStep.run || '').includes('generate-converge-report.mjs')
+  console.log(`${singleShotReviewsPass ? 'PASS' : 'FAIL'} single-shot brief/script/component/converge steps`)
   if (!singleShotReviewsPass) {
     failed += 1
     console.error(
-      'brief/script/component-plan must run as single-shot steps, with remaining command steps receiving --no-self-review',
+      'brief/script/component-plan/converge must run as single-shot shell steps, not coding-agent commands',
     )
   }
 
@@ -1764,6 +1770,148 @@ try {
     failed += 1
     console.error(selfStudyOutput.trimEnd())
     console.error('self-study audit must generate judgments, pass check-self-study and insert proposal blocks')
+  }
+
+  // ---- structured component files ----
+  total += 1
+  const componentFilesTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-component-files.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const componentFilesOutput = `${componentFilesTest.stdout || ''}\n${componentFilesTest.stderr || ''}`
+  const componentFilesPass =
+    componentFilesTest.status === 0 &&
+    /PASS structured component files golden round-trip/.test(componentFilesOutput)
+  console.log(`${componentFilesPass ? 'PASS' : 'FAIL'} structured component files`)
+  if (!componentFilesPass) {
+    failed += 1
+    console.error(componentFilesOutput.trimEnd())
+    console.error('component files must round-trip an existing package through apply and run package/tests')
+  }
+
+  // ---- structured component generation ----
+  total += 1
+  const componentGenerationTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-component-generation.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const componentGenerationOutput = `${componentGenerationTest.stdout || ''}\n${componentGenerationTest.stderr || ''}`
+  const componentGenerationPass =
+    componentGenerationTest.status === 0 &&
+    /PASS structured component generation with mock files/.test(componentGenerationOutput)
+  console.log(`${componentGenerationPass ? 'PASS' : 'FAIL'} structured component generation`)
+  if (!componentGenerationPass) {
+    failed += 1
+    console.error(componentGenerationOutput.trimEnd())
+    console.error('component generation must apply a mock file bundle, capture baselines, run tests and repair a failed attempt')
+  }
+
+  // ---- structured component build workflow steps ----
+  total += 1
+  const prebuildStep = findStep(workflowData.steps, 'build-all-missing-components')
+  const pageBuildStep = findStep(workflowData.steps, 'build-missing-page-components')
+  const componentBuildPass =
+    prebuildStep?.type === 'shell' &&
+    String(prebuildStep.run || '').includes('generate-components.mjs') &&
+    pageBuildStep?.type === 'shell' &&
+    String(pageBuildStep.run || '').includes('generate-components.mjs') &&
+    !String(prebuildStep.command || '').includes('speckit.component-build') &&
+    !String(pageBuildStep.command || '').includes('speckit.component-build')
+  console.log(`${componentBuildPass ? 'PASS' : 'FAIL'} structured component build workflow`)
+  if (!componentBuildPass) {
+    failed += 1
+    console.error('component prebuild and per-page build must call generate-components.mjs, not speckit.component-build')
+  }
+
+  // ---- structured component batch generation ----
+  total += 1
+  const componentBatchTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-generate-components.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const componentBatchOutput = `${componentBatchTest.stdout || ''}\n${componentBatchTest.stderr || ''}`
+  const componentBatchPass =
+    componentBatchTest.status === 0 &&
+    /PASS structured component batch generation/.test(componentBatchOutput)
+  console.log(`${componentBatchPass ? 'PASS' : 'FAIL'} structured component batch generation`)
+  if (!componentBatchPass) {
+    failed += 1
+    console.error(componentBatchOutput.trimEnd())
+    console.error('generate-components.mjs must resolve briefs and build the requested component set')
+  }
+
+  // ---- structured component plan ----
+  total += 1
+  const componentPlanTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-component-plan-generation.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const componentPlanOutput = `${componentPlanTest.stdout || ''}\n${componentPlanTest.stderr || ''}`
+  const componentPlanPass =
+    componentPlanTest.status === 0 &&
+    /PASS structured component plan generation/.test(componentPlanOutput)
+  console.log(`${componentPlanPass ? 'PASS' : 'FAIL'} structured component plan generation`)
+  if (!componentPlanPass) {
+    failed += 1
+    console.error(componentPlanOutput.trimEnd())
+    console.error('component plan must render reuse/gaps/mapping and write gated briefs')
+  }
+
+  // ---- component test sandbox ----
+  total += 1
+  const sandboxTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-component-sandbox.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const sandboxOutput = `${sandboxTest.stdout || ''}\n${sandboxTest.stderr || ''}`
+  const sandboxPass =
+    sandboxTest.status === 0 && /(PASS component test sandbox|SKIP component sandbox)/.test(sandboxOutput)
+  console.log(`${sandboxPass ? 'PASS' : 'FAIL'} component test sandbox`)
+  if (!sandboxPass) {
+    failed += 1
+    console.error(sandboxOutput.trimEnd())
+    console.error('sandboxed component tests must hide the repository or skip when bwrap is unavailable')
+  }
+
+  // ---- reference-verbatim extraction ----
+  total += 1
+  const referenceExtractTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-reference-extraction.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const referenceExtractOutput = `${referenceExtractTest.stdout || ''}\n${referenceExtractTest.stderr || ''}`
+  const referenceExtractPass =
+    referenceExtractTest.status === 0 &&
+    /PASS deterministic reference-verbatim extraction/.test(referenceExtractOutput) &&
+    /PASS automatic reference-verbatim routing/.test(referenceExtractOutput)
+  console.log(`${referenceExtractPass ? 'PASS' : 'FAIL'} reference-verbatim extraction`)
+  if (!referenceExtractPass) {
+    failed += 1
+    console.error(referenceExtractOutput.trimEnd())
+    console.error('reference-verbatim extraction must copy exact functions/CSS/HTML after hash verification and auto-route manifests into component builds')
+  }
+
+  // ---- structured Beta convergence ----
+  total += 1
+  const convergeTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-converge-generation.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const convergeOutput = `${convergeTest.stdout || ''}\n${convergeTest.stderr || ''}`
+  const convergePass =
+    convergeTest.status === 0 && /PASS structured convergence triage/.test(convergeOutput)
+  console.log(`${convergePass ? 'PASS' : 'FAIL'} structured convergence triage`)
+  if (!convergePass) {
+    failed += 1
+    console.error(convergeOutput.trimEnd())
+    console.error('converge must triage trial evidence into a report and let Beta stop on an open blocker')
   }
 
   // ---- single-shot art/reference generator ----

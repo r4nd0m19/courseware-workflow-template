@@ -8,6 +8,9 @@ description: 按已批准简报实现新组件；默认只做当前页需要的�
 $ARGUMENTS
 ```
 
+
+> **生产 workflow 0.43.0 起不再调用本命令**：`build-all-missing-components` / `build-missing-page-components` 已改为 `generate-components.mjs`（结构化文件包 + 包检查/测试/基线）。本命令只保留给手动或非 workflow 使用；不要让 workflow 回退到它。
+
 ## 审批闸门（必须最先运行）
 
 ```bash
