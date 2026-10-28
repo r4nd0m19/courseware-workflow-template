@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/converge-generation.schema.json",
+  "title": "Structured convergence triage",
+  "description": "Model-authored trial-feedback triage for the Beta convergence stage. The model has no tools; it only classifies evidence it was given. Node renders converge-report.md and the deterministic Beta self-review reads that report.",
+  "type": "object",
+  "required": ["lesson", "summary", "verdict", "findings", "followUps"],
+  "additionalProperties": false,
+  "properties": {
+    "lesson": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "verdict": { "type": "string", "enum": ["ready", "blocked"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "area", "source", "evidence", "decision", "owner", "status", "reopen"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^C[0-9]{1,3}$" },
+          "severity": { "type": "string", "enum": ["blocker", "major", "minor"] },
+          "area": {
+            "type": "string",
+            "enum": ["content", "interaction", "visual", "narration", "component", "accessibility", "other"]
+          },
+          "source": {
+            "type": "string",
+            "enum": ["trial-feedback", "alpha", "approval", "workflow"]
+          },
+          "slideId": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+          "evidence": { "type": "string", "minLength": 1 },
+          "decision": { "type": "string", "minLength": 1 },
+          "owner": {
+            "type": "string",
+            "enum": ["page", "component", "content", "teacher", "workflow"]
+          },
+          "status": { "type": "string", "enum": ["open", "waived"] },
+          "waiverReason": { "type": "string", "minLength": 1 },
+          "reopen": { "type": "boolean" }
+        }
+      }
+    },
+    "followUps": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

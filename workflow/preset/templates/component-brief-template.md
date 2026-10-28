@@ -59,6 +59,7 @@
 > 先证明与参考课件同源，再谈实现。不允许凭截图“重画”一个近似组件。
 
 - 参考文件与哈希（CSS/JS/HTML 片段）：
+- 逐字节直拷时，extraction manifest 放在 `specs/<lesson>/reference-extracts/<id>.json`（`list-missing-components` / `generate-components` 会自动发现）：
 - 复用的 DOM 结构（选择器 + 行号/片段）：
 - 复用的 CSS 规则 / tokens：
 - 动画与过渡（`@keyframes`、transition、APNG 帧数、`prefers-reduced-motion`）：

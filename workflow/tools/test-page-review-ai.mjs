@@ -17,6 +17,8 @@ const tool = path.join(toolsDir, 'page-review-ai.mjs')
 const cacheTool = path.join(toolsDir, 'page-review-cache.mjs')
 const checkTool = path.join(toolsDir, 'check-self-review.mjs')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'courseware-page-review-ai-'))
+const emptyConfig = path.join(tmp, 'empty-config.json')
+fs.writeFileSync(emptyConfig, '{}\n')
 const stagingName = `staging-test-${process.pid}`
 const stagingDir = path.join(root, 'registry', stagingName)
 
@@ -148,6 +150,9 @@ function cleanEnv(extra = {}) {
     if (key.startsWith('COURSEWARE_REVIEW_')) delete env[key]
   }
   delete env.TEST_REVIEW_KEY
+  // Keep the developer's .courseware/page-review.json out of unit tests;
+  // tests that exercise config resolution pass --config explicitly.
+  env.COURSEWARE_REVIEW_CONFIG = emptyConfig
   return { ...env, ...extra }
 }
 

@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/component-plan-generation.schema.json",
+  "title": "Structured component plan",
+  "description": "Model-authored component reuse search, gaps and briefs. Node renders component-plan.md and writes briefs, then runs check-component-plan.",
+  "type": "object",
+  "required": ["lesson", "reuseSearch", "gaps", "mapping", "risks", "nonGoals", "briefs"],
+  "additionalProperties": false,
+  "properties": {
+    "lesson": { "type": "string", "minLength": 1 },
+    "reuseSearch": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slideId", "demand", "registry"],
+        "additionalProperties": false,
+        "properties": {
+          "slideId": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+          "demand": { "type": "string", "minLength": 1 },
+          "reference": {
+            "type": "object",
+            "required": ["type", "source", "canCopy"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string", "minLength": 1 },
+              "selector": { "type": "string" },
+              "source": { "type": "string", "minLength": 1 },
+              "hash": { "type": "string" },
+              "canCopy": { "type": "boolean" },
+              "notes": { "type": "string" }
+            }
+          },
+          "registry": {
+            "type": "object",
+            "required": ["query", "matches"],
+            "additionalProperties": false,
+            "properties": {
+              "query": { "type": "string", "minLength": 1 },
+              "tags": { "type": "string" },
+              "level": { "type": "string", "enum": ["watch", "answer", "modify", "construct", "explain"] },
+              "matches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "satisfied", "reason"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "version": { "type": "string" },
+                    "satisfied": { "type": "boolean" },
+                    "reason": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "slideIds", "learningAction", "level", "whyExisting", "decision", "brief"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "slideIds": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+            "uniqueItems": true
+          },
+          "learningAction": { "type": "string", "minLength": 1 },
+          "level": { "type": "string", "enum": ["watch", "answer", "modify", "construct", "explain"] },
+          "whyExisting": { "type": "string", "minLength": 1 },
+          "decision": { "type": "string", "enum": ["new", "extend"] },
+          "brief": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "mapping": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slideId", "demand", "component", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "slideId": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+          "demand": { "type": "string", "minLength": 1 },
+          "component": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "enum": ["reference-verbatim", "registry", "style-pack", "new", "extend"] }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "nonGoals": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "briefs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "markdown"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "markdown": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

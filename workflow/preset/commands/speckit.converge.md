@@ -1,5 +1,5 @@
 ---
-description: Beta 收敛：把试课反馈与遗留问题变成有证据、有归属的修复清单，并完成安全修复。
+description: Beta 收敛：把试课/课堂反馈变成有证据、有归属的只读收敛报告（手动回退入口）。
 ---
 
 ## User Input
@@ -8,42 +8,52 @@ description: Beta 收敛：把试课反馈与遗留问题变成有证据、有�
 $ARGUMENTS
 ```
 
-> 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`--approvals` 用 `$COURSEWARE_PAGE_APPROVALS`。workflow 会设置这些变量，并通过 `$ARGUMENTS` 传 `--lesson-slug <slug>`。
+> 生产工作流的 `converge` 步骤已经改为 shell 步骤，直接运行
+> `workflow/tools/generate-converge-report.mjs`；本命令只保留为手动回退入口。
+> 多课件项目：`review/` 路径用 `$COURSEWARE_REVIEW_DIR/...`，`--approvals` 用
+> `$COURSEWARE_PAGE_APPROVALS`。workflow 会设置这些变量，并通过 `$ARGUMENTS`
+> 传 `--lesson-slug <slug>`。
 
-## Outline
+## 结构化收敛
 
-1. 前置条件：
-   - Alpha 已获人工 `approve`。
-   - 已读取 `$COURSEWARE_PAGE_APPROVALS`、`$COURSEWARE_REVIEW_DIR/self-review-alpha.md`、逐屏截图、闸门结果和试课记录。
-   - 所有已批准页仍通过 `check-section-freeze`；若脚本已被改动，先停止并说明。
-2. 收集问题：试课/教师反馈、Alpha 截图与基线差异、未关闭的自动检查、旁白试听问题、组件缺陷。每条问题必须有证据（屏号、截图、日志或原话），不得凭印象新增。
-3. 分级与归属：
-   - `blocker`：内容错误、交互反馈错误、源码保真失败、溢出、无法播放、无障碍阻断。
-   - `major`：教学效果明显受损、错误反馈缺失、组件行为与简报不符。
-   - `minor`：文案、节奏、非阻断的视觉偏差。
-   - 每条写明归属页/屏、修复方向、是否需要重开页、负责人。
-4. 修复规则：
-   - 只改与问题直接相关的脚本/`deck data`/组件；不得顺手重构已批准内容。
-   - 已批准页的脚本必须变化时，先运行
-     `node workflow/tools/reopen-section.mjs --sections review-sections.yml --id <section> --reason "<why>"`，
-     按顺序重开该页及其后所有页，再重走实现、渲染、自审、人工审核、冻结。
-   - 参考 CSS/JS 逐字节副本不得修改；视觉问题只能改脚本/组件或回到风格包 M0。
-   - 组件缺口退回 `speckit.component-plan`（补简报）→ 在首次使用它的页面 `speckit.component-build` → 随页面人工审核 → 注册 → `sync-deck-components`；不得在页面里临时实现。
-   - 不得删除 required 内容、不得降低闸门、不得手写音频或旁白占位。
-5. 修复后重跑受影响闸门（至少包含相关页的 deck-data、source-fidelity、overflow、baseline、script、parity、narration；整份再跑 script/parity）。失败项必须修复或记录为带理由的 waiver，不能静默忽略。
-6. 写 `$COURSEWARE_REVIEW_DIR/converge-report.md`：
-   - 结论（是否建议进入 Beta）、修复摘要、重开的页。
-   - 问题表：`ID / 严重级 / 页·屏 / 证据 / 决定 / 负责人 / 状态`。
-   - 已修复与未修复清单（未修复必须有 waiver 或后续动作）。
-   - 受影响闸门的命令与结果。
-7. 不做：不修改审核结论，不跳过逐页审核。
+1. 确认 Alpha 已通过，且以下文件存在：
+   - `$COURSEWARE_REVIEW_DIR/self-review-alpha.json`
+   - `$COURSEWARE_PAGE_APPROVALS`
+   - 逐页截图目录
+   - 可选的 `$COURSEWARE_REVIEW_DIR/trial-feedback.md`（老师/试课反馈原文）
+2. 运行结构化收敛工具，不要自己读仓库后手写报告：
+
+   ```bash
+   node workflow/tools/generate-converge-report.mjs \
+     --lesson-slug <lesson-slug> \
+     --lesson "<lesson title>" \
+     --script <courseware.md> \
+     --sections <review-sections.yml> \
+     --approvals "$COURSEWARE_PAGE_APPROVALS" \
+     --alpha "$COURSEWARE_REVIEW_DIR/self-review-alpha.json" \
+     --screenshots <screenshots-dir> \
+     --review-dir "$COURSEWARE_REVIEW_DIR" \
+     --trial-feedback "$COURSEWARE_REVIEW_DIR/trial-feedback.md"
+   ```
+
+   工具会把 Alpha 证据、试用反馈和截图清单交给一次无工具模型调用，模型只返回
+   `findings`/`verdict`/`followUps` JSON；Node 校验后确定性渲染
+   `$COURSEWARE_REVIEW_DIR/converge-report.md`。
+3. 工具**不修改**已批准的 `courseware.md`、`deck.json`、组件或审核账本：
+   任何修改都会使脚本/截图批准哈希失效。报告里的 blocker 由随后的
+   `build-self-review-beta.mjs` 判定为失败，必须走正常的重开页流程。
+4. 不要把 blocker 改写成已修复、关闭或豁免，除非老师明确给出豁免理由并在
+   `trial-feedback.md` 中记录。
+5. 不做：不修改审核结论，不跳过逐页审核，不手写 verdict 或批准账本。
 
 ## 输出
 
 - `$COURSEWARE_REVIEW_DIR/converge-report.md`
-- 本轮修改的脚本/`deck data`/组件与重开的页
-- 闸门结果与仍需人工处理的问题
+- `$COURSEWARE_REVIEW_DIR/converge-generation.json`（模型原始判断）
+- `$COURSEWARE_REVIEW_DIR/converge-generation-report.json`（尝试次数与摘要）
 
 ## 说明
 
-本命令只产出收敛报告与安全修复；工作流随后运行 `self-review-beta` / `check-self-review-beta`（确定性汇总），不再有人工 beta gate。
+工作流随后运行 `self-review-beta` / `check-self-review-beta`（确定性汇总），
+不再有人工 beta gate。`ready` 只表示没有未关闭的 blocker；major/minor 仍会在
+报告的后续动作里保留。

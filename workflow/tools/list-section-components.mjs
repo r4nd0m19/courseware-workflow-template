@@ -8,6 +8,7 @@ import { parseScript } from './script-lib.mjs'
 import { assertScriptApproved } from './approval-lib.mjs'
 import { readSectionManifest, sectionById } from './section-lib.mjs'
 import { readData } from './lib.mjs'
+import { relativeReferenceExtract } from './reference-extract-lib.mjs'
 
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
@@ -109,6 +110,9 @@ if (stagedList.length) parts.push(`本页已有暂存：${stagedList.join(', ')}
 if (registeredList.length) parts.push(`复用已注册：${registeredList.join(', ')}`)
 if (!parts.length) parts.push('本页无组件')
 
+const referenceVerbatim = missing
+  .map((id) => ({ id, extract: relativeReferenceExtract(scriptPath, id) }))
+  .filter((entry) => entry.extract)
 const data = {
   section: sectionId,
   slides: section.slides,
@@ -117,6 +121,7 @@ const data = {
   staged: stagedList,
   unregistered,
   missing,
+  referenceVerbatim,
   // Build only what is absent; validate and review whenever anything is unregistered.
   buildRequired: missing.length > 0,
   needsWork: unregistered.length > 0,
