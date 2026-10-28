@@ -106,6 +106,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 - `specs/<lesson>/spec.md`：教学简报（UbD）。
 - `specs/<lesson>/concepts.yml`：核心概念台账；每个概念的术语、定义、`mustAppear` 短语必须真正出现在引入页的屏幕内容里。只写在旁白或代码声明里不算。
 - `specs/<lesson>/courseware.md`：人类可读课件脚本，整份一次人工审核；交互设计与制作字段保留在这里供工具使用。
+- `review/<lesson>/script-outline.json` / `script-pages/` / `script-generation.json`：结构化脚本生成的运行时中间产物；模型只返回 JSON，`generate-courseware-script.mjs` 负责校验、局部重试和渲染。不要手改。
 - `review/<lesson>/courseware.teacher.md`：老师审核版脚本，由 `render-teacher-script` 自动生成（屏幕内容、旁白、转场、一行学生动作），不手改、不提交。
 - `specs/<lesson>/storyboard.yml`：从 `courseware.md` 投影出的分镜，不应手工改。
 - `specs/<lesson>/deck.json`：声明式 deck；只允许 `type` / `component` / `props` 等数据字段，禁止 `style`、`className`、`html`、`innerHTML`、`on*`。
@@ -134,6 +135,9 @@ node workflow/tools/smoke-test.mjs
 
 - 自审（self-review）不得把脚本/截图标成人工 APPROVED；人工审核点必须留给人。0.32.0 起页面自审、0.38.0 起 brief/script/component-plan 自审都是单次模型调用，没有文件/命令工具，不能修任何东西；自审报 blocking 就失败，由主 agent 修复后重跑。
 - 0.22.0 起 `self-review-inputs` / `self-review-alpha` / `self-review-beta` / `self-review-gold` 是确定性 shell 步骤（从门禁结果与逐页自审汇总），不要当成 AI 自审去手写或改判；`self-review-script` / `self-review-component-plan` 仍是 AI 判断步骤（0.38.0 起为单次文本模型调用），证据包与骨架由工具生成。**`self-review-page` 自 0.32.0 起不是 coding agent 步骤**，而是 `page-review-ai.mjs` 的单次 HTTP 模型调用。
+- 0.43.0 起教学简报和自学审核改为**单次结构化生成**：`generate-brief.mjs` 返回结构化 UbD 简报，Node 渲染 `spec.md` + `concepts.yml`；`generate-self-study-audit.mjs` 返回 rubric/目标/逐屏/缺口/补充判断，Node 补哈希、页数预算和定界块，生成 `self-study-audit.json`、报告和 `courseware.self-study.md`，并先用 `check-self-study` 校验。模型无工具、不能读仓库或写文件；支持原位补充和新增页，新增页会同步 `review-sections.yml`。workflow 90 个顶层步骤；preset 0.3.13。
+- 0.42.0 起脚本生成改为**单次结构化生成**：`build-script-input` 提供紧凑输入；`generate-courseware-script.mjs` 先生成脚本大纲 JSON，再逐页生成 page JSON，由 Node 校验内容覆盖、概念、标题、组件和交互字段，失败只重试当前页；`render-courseware-md.mjs` / `render-review-sections.mjs` 确定性渲染 `courseware.md` 与 `review-sections.yml`。生产 workflow 的 `script` 步骤是 shell，不再调用 `speckit.script` coding agent；模型无工具、不能读仓库或写文件。workflow 90 个顶层步骤；preset 0.3.13。
+- 0.41.0 起页面实现改为**单次结构化 deck 生成**：`build-page-deck-evidence` 提供脚本页、storyboard、壳的原生 slide 模板、组件 props schema、当前 deck/meta；`single-shot-generate --mode page-deck` 只返回一页 slide JSON；`apply-page-deck` 校验 id/title/type/component/props 和禁用字段后写入 `deck.json`。生产 workflow 不再用 `speckit.implement` coding agent；构建、语音、截图、门禁仍由 workflow shell 步骤执行。workflow 90 个顶层步骤；preset 0.3.13。
 - 0.40.0 起 `speckit.script` 使用紧凑输入包：`build-script-input` 把 spec、content items、concepts、style vocabulary、registry、模板、输出路径、规则和已有脚本写成 `review/<lesson>/script-input.json`；workflow 把 `--input` 传给脚本命令，脚本 agent 只读这个包，不再探索仓库或读门禁源码。脚本自审失败时 `check-self-review-script --fix-brief` 写 `review/<lesson>/script-review-fix.md`；主 agent 必须先按清单修 `courseware.md`，再重跑 `build-script-review-evidence` → `review-ai` → `check-self-review`，不要直接重跑旧审核。workflow 90 个顶层步骤；preset 0.3.12。
 - 0.39.0 起 `shell-art-brief` / `build-reference-adaptation` 也改为单次模型调用：先由 `build-art-brief-evidence` / `build-reference-adaptation-evidence` 生成紧凑证据，再由 `single-shot-generate.mjs` 一次请求写 JSON；不再让 coding agent 读整份参考源码后自行探索。workflow 89 个顶层步骤。
 - 0.38.0 起 workflow 的 command 步骤不再重复做自审/人工审核：`speckit.specify` / `speckit.script` / `speckit.self-study-audit` / `speckit.component-plan` 收到 `--no-self-review` 时只生成产物，不读门禁源码、不跑额外检查、不写 review.md、不请求人工审核；自审、校验和 gate 由 workflow 统一步骤负责。`self-review-brief` / `self-review-script` / `self-review-component-plan` 改为 `review-ai.mjs` 的单次文本模型调用（无工具、无文件访问），不再走 coding agent。workflow 87 个顶层步骤；preset 0.3.11。
@@ -172,6 +176,8 @@ node workflow/tools/smoke-test.mjs
 ## 不要做的事
 
 - 不要把 `paused` 当成成功，不要手动运行 `approve-script.mjs`，不要让 agent 代替老师回答 gate；不要在老师回答前调用 `gate-review.mjs decide`，不要用 `-i` 或手写 verdict 绕过。
+- 不要把教学简报或自学审核改回 coding agent：`brief` / `self-study-audit` 步骤必须是 `generate-brief.mjs` / `generate-self-study-audit.mjs` shell 步骤，不要恢复 `command: speckit.specify` / `command: speckit.self-study-audit`。结构化自学审核支持 `newSlides` 新增页；新增页必须由 `apply-self-study-audit` 同步 `review-sections.yml`，不要让模型直接重写 `courseware.md`。
+- 不要把脚本生成改回 coding agent：`courseware-production` 的 `script` 步骤必须是 `generate-courseware-script.mjs` shell 步骤，不要恢复 `command: speckit.script`，也不要让模型直接写 `courseware.md`。
 - 不要把页自审改回 coding agent：不要用 `prompt` 步骤、`zcode -p`、`claude -p` 或 `codex exec` 跑 `self-review-page`，也不要给页面审核模型 Bash/文件/编辑工具。页自审只能走 `page-review-ai.mjs` 的单次 HTTP 调用。
 - 不要为了单页改壳渲染器、壳 CSS 或 `deck.json` 结构；退回组件阶段或页面设计阶段解决。
 - 不要手画参考组件；参考已有的交互按源码逐字节复制，参考没有的走 component-plan → brief → build → review → core。

@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { readData } from './lib.mjs'
+import { parseScript } from './script-lib.mjs'
 
 const args = process.argv.slice(2)
 function opt(name, fallback = '') {
@@ -21,9 +22,10 @@ const scriptPath = opt('--script')
 const proposalPath = opt('--proposal') || (scriptPath ? path.join(path.dirname(path.resolve(scriptPath)), 'courseware.self-study.md') : '')
 const approvedBy = opt('--approved-by', 'teacher')
 const recordPath = opt('--record', 'review/self-study-apply.json')
+const sectionsPath = opt('--sections')
 const backupPath = opt('--backup', 'review/courseware.before-self-study.md')
 if (!auditPath || !scriptPath) {
-  console.error('usage: node apply-self-study-audit.mjs --audit <review/self-study-audit.json> --script <courseware.md> [--proposal <courseware.self-study.md>] [--approved-by <name>] [--record review/self-study-apply.json] [--backup review/courseware.before-self-study.md]')
+  console.error('usage: node apply-self-study-audit.mjs --audit <review/self-study-audit.json> --script <courseware.md> [--proposal <courseware.self-study.md>] [--sections <review-sections.yml>] [--approved-by <name>] [--record review/self-study-apply.json] [--backup review/courseware.before-self-study.md]')
   process.exit(2)
 }
 
@@ -49,6 +51,7 @@ if (audit.script?.sha256 && audit.script.sha256 !== currentSha) {
 }
 
 const supplements = audit.supplements || []
+const pageAdditions = Number(audit.pageBudget?.proposed || 0) !== Number(audit.pageBudget?.current || 0)
 const record = {
   schemaVersion: '1.0',
   lesson: audit.lesson,
@@ -64,12 +67,13 @@ const record = {
   appliedAt: new Date().toISOString(),
 }
 
-if (supplements.length) {
-  if (!proposalPath || !fs.existsSync(proposalPath)) fail('supplements exist but the proposal file is missing')
+if (supplements.length || pageAdditions) {
+  if (!proposalPath || !fs.existsSync(proposalPath)) fail('supplements or new pages exist but the proposal file is missing')
+  if (pageAdditions && !sectionsPath) fail('new pages require --sections <review-sections.yml> so the page loop can review them')
   const proposal = fs.readFileSync(proposalPath)
   const proposalSha = sha256(proposal)
   if (proposalSha === currentSha) {
-    fail('supplements exist but the proposal is identical to the script; nothing would be added')
+    fail('supplements or new pages exist but the proposal is identical to the script; nothing would be added')
   }
   fs.mkdirSync(path.dirname(backupPath), { recursive: true })
   fs.writeFileSync(backupPath, original)
@@ -81,6 +85,28 @@ if (supplements.length) {
   record.proposalSha256 = proposalSha
   record.appliedSha256 = proposalSha
   record.backup = path.resolve(backupPath)
+
+  if (sectionsPath && pageAdditions) {
+    const parsed = parseScript(scriptPath)
+    const lines = [
+      '# 逐页渲染审核清单',
+      '#',
+      '# 由 apply-self-study-audit.mjs 从应用后的 courseware.md 重新生成（自学补充新增页）。',
+      '# 每个 section 恰好一屏。',
+      'schemaVersion: "1.0"',
+      'sections:',
+    ]
+    for (const slide of parsed.slides) {
+      lines.push(`  - id: ${slide.id}`)
+      lines.push(`    title: ${JSON.stringify(slide.headingTitle)}`)
+      lines.push(`    slides: [${slide.id}]`)
+    }
+    const sectionsText = `${lines.join('\n')}\n`
+    fs.mkdirSync(path.dirname(path.resolve(sectionsPath)), { recursive: true })
+    fs.writeFileSync(path.resolve(sectionsPath), sectionsText)
+    record.reviewSections = path.resolve(sectionsPath)
+    record.reviewSectionsSha256 = sha256(Buffer.from(sectionsText))
+  }
 }
 
 fs.mkdirSync(path.dirname(recordPath), { recursive: true })

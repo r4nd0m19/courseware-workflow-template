@@ -1,0 +1,658 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/self-study-audit-generation.schema.json",
+  "title": "Model-authored self-study audit judgments",
+  "description": "Judgment fields for the self-study audit. Node supplies hashes, counts, page budget, labels and the proposal render; newSlides carry complete pages for genuine page additions.",
+  "type": "object",
+  "required": [
+    "rubric",
+    "objectives",
+    "screens",
+    "gaps",
+    "supplements",
+    "verdict",
+    "newSlides"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "rubric": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "verdict",
+          "evidence"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "objectives",
+              "prerequisites",
+              "explanation",
+              "worked-examples",
+              "practice",
+              "feedback",
+              "misconceptions",
+              "navigation",
+              "accessibility",
+              "self-regulation"
+            ]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "gap",
+              "n/a"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "objectives": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "explanation",
+          "workedExample",
+          "practice",
+          "feedback",
+          "slides"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "explanation": {
+            "type": "boolean"
+          },
+          "workedExample": {
+            "type": "boolean"
+          },
+          "practice": {
+            "type": "boolean"
+          },
+          "feedback": {
+            "type": "boolean"
+          },
+          "slides": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "objectiveIds",
+          "status",
+          "gapIds"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^S[0-9]+[A-Z]?$"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "explain",
+              "demonstrate",
+              "practice",
+              "assess",
+              "integrate",
+              "summary",
+              "other"
+            ]
+          },
+          "objectiveIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "sufficient",
+              "gap",
+              "waived",
+              "n/a"
+            ]
+          },
+          "gapIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^G[0-9]{2,}$"
+            },
+            "uniqueItems": true
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "dimension",
+          "slideIds",
+          "summary",
+          "evidence",
+          "proposal",
+          "basis",
+          "pageImpact"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^G[0-9]{2,}$"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "blocking",
+              "recommended",
+              "info"
+            ]
+          },
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "objectives",
+              "prerequisites",
+              "explanation",
+              "worked-examples",
+              "practice",
+              "feedback",
+              "misconceptions",
+              "navigation",
+              "accessibility",
+              "self-regulation"
+            ]
+          },
+          "slideIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "objectiveIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pageImpact": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "supplements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "gapId",
+          "type",
+          "targetSlides",
+          "basis",
+          "summary",
+          "placement",
+          "content"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^G[0-9]{2,}-[a-z0-9-]+$"
+          },
+          "gapId": {
+            "type": "string",
+            "pattern": "^G[0-9]{2,}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "explanation",
+              "prerequisite",
+              "worked-example",
+              "check",
+              "feedback",
+              "transition"
+            ]
+          },
+          "targetSlides": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "screen-content",
+              "interaction-design",
+              "narration",
+              "transition",
+              "after-slide"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "sufficient",
+        "insufficient"
+      ]
+    },
+    "newSlides": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/newSlide"
+      }
+    }
+  },
+  "definitions": {
+    "interactionDesign": {
+      "type": "object",
+      "required": [
+        "attempt",
+        "learningAction",
+        "contentDemand",
+        "evidence",
+        "learningFunction",
+        "level",
+        "initialState",
+        "studentAction",
+        "accessibility",
+        "staticAlternative"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attempt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "learningAction": {
+          "type": "string",
+          "enum": [
+            "observe",
+            "locate",
+            "label",
+            "predict",
+            "trace",
+            "convert",
+            "classify",
+            "construct",
+            "modify",
+            "explain"
+          ]
+        },
+        "contentDemand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "learningFunction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "watch",
+            "answer",
+            "modify",
+            "construct",
+            "explain"
+          ]
+        },
+        "initialState": {
+          "type": "string",
+          "minLength": 1
+        },
+        "studentAction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "successFeedback": {
+          "type": "string",
+          "minLength": 1
+        },
+        "errorFeedback": {
+          "type": "string",
+          "minLength": 1
+        },
+        "completion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessibility": {
+          "type": "string",
+          "minLength": 1
+        },
+        "staticAlternative": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whyStatic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "misconception": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "watch"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "whyStatic"
+            ],
+            "properties": {
+              "learningAction": {
+                "const": "observe"
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "successFeedback",
+              "errorFeedback",
+              "completion",
+              "reset"
+            ],
+            "not": {
+              "required": [
+                "whyStatic"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "newSlide": {
+      "type": "object",
+      "required": [
+        "id",
+        "afterSlide",
+        "gapId",
+        "title",
+        "objectiveId",
+        "objective",
+        "contentRefs",
+        "purpose",
+        "components",
+        "layout",
+        "interaction",
+        "screenContent",
+        "interactionDesign",
+        "narration",
+        "transition"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^S[0-9]+[A-Z]?$"
+        },
+        "afterSlide": {
+          "type": "string",
+          "pattern": "^S[0-9]+[A-Z]?$"
+        },
+        "gapId": {
+          "type": "string",
+          "pattern": "^G[0-9]{2,}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "objectiveId": {
+          "type": "string",
+          "pattern": "^O[0-9]+$"
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contentRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]+[0-9]+$"
+          }
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "concepts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^C[0-9]{2,}$"
+          }
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "layout": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interaction": {
+          "type": "object",
+          "required": [
+            "type",
+            "level",
+            "learningAction"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "minLength": 1
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "watch",
+                "answer",
+                "modify",
+                "construct",
+                "explain"
+              ]
+            },
+            "learningAction": {
+              "type": "string",
+              "enum": [
+                "observe",
+                "locate",
+                "label",
+                "predict",
+                "trace",
+                "convert",
+                "classify",
+                "construct",
+                "modify",
+                "explain"
+              ]
+            },
+            "component": {
+              "type": "string",
+              "minLength": 1
+            },
+            "misconception": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "level": {
+                    "const": "watch"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "learningAction": {
+                    "const": "observe"
+                  }
+                }
+              },
+              "else": {
+                "required": [
+                  "component"
+                ],
+                "properties": {
+                  "learningAction": {
+                    "not": {
+                      "const": "observe"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "componentPlan": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "screenContent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interactionDesign": {
+          "$ref": "#/definitions/interactionDesign"
+        },
+        "narration": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "transition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "continuedFrom": {
+          "type": "string",
+          "pattern": "^S[0-9]+[A-Z]?$"
+        },
+        "continued": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

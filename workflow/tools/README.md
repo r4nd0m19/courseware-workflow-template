@@ -8,7 +8,7 @@
 node workflow/tools/smoke-test.mjs
 ```
 
-覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
+覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、structured brief/script/self-study generation、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
 
 ## 0B. 壳批准（先于内容包）
 
@@ -195,12 +195,40 @@ node workflow/tools/build-self-review-inputs.mjs --lesson-slug <slug> \
   --shell-ok true --shell-review review/shells/<slug>/shell-preview.md \
   --out review/<slug>/self-review-inputs.json --md review/<slug>/self-review-inputs.md
 
-# script 生成：紧凑输入包（workflow 的 speckit.script 只读这一个 JSON）
+# script 生成：紧凑输入包（workflow 的 generate-courseware-script 读取这一个 JSON）
 node workflow/tools/build-script-input.mjs --lesson-slug <slug> --lesson "<title>" \
   --script specs/<slug>/courseware.md --review-sections specs/<slug>/review-sections.yml \
   --content <content-pack.json> --concepts specs/<slug>/concepts.yml \
   --style <style-pack.manifest.json> --style-full <style-pack.full.json> \
   --out review/<slug>/script-input.json
+
+# script 生成（0.42.0）：大纲 JSON → 逐页 page JSON → 确定性渲染
+node workflow/tools/generate-courseware-script.mjs \
+  --input review/<slug>/script-input.json \
+  --out specs/<slug>/courseware.md --sections specs/<slug>/review-sections.yml \
+  --outline review/<slug>/script-outline.json --pages-dir review/<slug>/script-pages \
+  --report review/<slug>/script-generation.json
+# 也可单独渲染：
+node workflow/tools/render-courseware-md.mjs --input review/<slug>/script-input.json \
+  --outline review/<slug>/script-outline.json --pages-dir review/<slug>/script-pages \
+  --out specs/<slug>/courseware.md
+node workflow/tools/render-review-sections.mjs \
+  --outline review/<slug>/script-outline.json --out specs/<slug>/review-sections.yml
+
+# brief（0.43.0）：结构化 UbD 简报 → spec.md + concepts.yml
+node workflow/tools/generate-brief.mjs --lesson-slug <slug> --lesson "<title>" \
+  --content <content-pack.json> --style <style-pack.manifest.json> \
+  --concepts specs/<slug>/concepts.yml --review-dir review/<slug>
+
+# self-study audit（0.43.0）：判断 JSON → check-self-study → 报告 + 补充/新增页
+node workflow/tools/generate-self-study-audit.mjs --lesson-slug <slug> --lesson "<title>" \
+  --script specs/<slug>/courseware.md --content <content-pack.json> \
+  --style <style-pack.manifest.json> --registry registry/index.json \
+  --concepts specs/<slug>/concepts.yml \
+  --review-dir review/<slug> --declared-pages 10
+node workflow/tools/apply-self-study-audit.mjs --audit review/<slug>/self-study-audit.json \
+  --script specs/<slug>/courseware.md --proposal specs/<slug>/courseware.self-study.md \
+  --sections specs/<slug>/review-sections.yml --record review/<slug>/self-study-apply.json
 
 # script：紧凑逐屏证据包 + density/complexity 自审骨架（AI 只填判断字段）
 node workflow/tools/build-script-review-evidence.mjs --lesson-slug <slug> \
@@ -241,6 +269,19 @@ node workflow/tools/render-self-review-md.mjs review/<slug>/self-review-page-S02
 # 老师版脚本（0.35.0）：只含屏幕内容/旁白/转场/一行学生动作，不含交互设计/制作字段
 node workflow/tools/render-teacher-script.mjs specs/<slug>/courseware.md \
   --out review/<slug>/courseware.teacher.md
+
+# 页面 deck（0.41.0）：证据 + 单次 slide JSON + 校验落盘
+node workflow/tools/build-page-deck-evidence.mjs --lesson-slug <slug> \
+  --script specs/<slug>/courseware.md --storyboard specs/<slug>/storyboard.yml \
+  --sections specs/<slug>/review-sections.yml --section S01 --deck specs/<slug>/deck.json \
+  --shell shells/<id> --registry registry/index.json --staging registry/staging \
+  --out review/<slug>/page-deck-evidence-S01.json
+node workflow/tools/single-shot-generate.mjs --mode page-deck \
+  --evidence review/<slug>/page-deck-evidence-S01.json \
+  --out review/<slug>/page-deck-S01.json
+node workflow/tools/apply-page-deck.mjs --deck specs/<slug>/deck.json \
+  --evidence review/<slug>/page-deck-evidence-S01.json \
+  --slide-json review/<slug>/page-deck-S01.json
 
 # 插画简报 / 参考适配（0.39.0）：紧凑证据 + 单次模型调用
 node workflow/tools/build-art-brief-evidence.mjs --lesson-slug <slug> --lesson "<title>" \

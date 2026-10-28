@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/script-outline.schema.json",
+  "title": "Structured courseware script outline",
+  "description": "One model-generated outline for courseware.md. Node validates it before any page is written.",
+  "type": "object",
+  "required": ["lesson", "title", "audience", "duration", "overview", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "lesson": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "audience": { "type": "string", "minLength": 1 },
+    "duration": { "type": "string", "minLength": 1 },
+    "overview": { "$ref": "#/definitions/overview" },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": { "$ref": "#/definitions/page" }
+    }
+  },
+  "definitions": {
+    "overview": {
+      "type": "object",
+      "required": ["learners", "objectives", "misconceptions", "pace", "componentStrategy"],
+      "additionalProperties": false,
+      "properties": {
+        "learners": { "type": "string", "minLength": 1 },
+        "objectives": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^O[0-9]+$" },
+              "text": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "misconceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^M[0-9]+$" },
+              "text": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "pace": { "type": "string", "minLength": 1 },
+        "componentStrategy": { "type": "string", "minLength": 1 }
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "objectiveId",
+        "objective",
+        "contentRefs",
+        "purpose",
+        "concepts",
+        "components",
+        "layout",
+        "interaction"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+        "title": { "type": "string", "minLength": 1 },
+        "objectiveId": { "type": "string", "pattern": "^O[0-9]+$" },
+        "objective": { "type": "string", "minLength": 1 },
+        "contentRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[A-Z]+[0-9]+$" }
+        },
+        "purpose": { "type": "string", "minLength": 1 },
+        "concepts": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^C[0-9]{2,}$" }
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "layout": { "type": "string", "minLength": 1 },
+        "interaction": { "$ref": "#/definitions/interaction" },
+        "componentPlan": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/componentPlan" }
+        },
+        "continuedFrom": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
+        "continued": { "type": "boolean" }
+      }
+    },
+    "interaction": {
+      "type": "object",
+      "required": ["type", "level", "learningAction"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "level": {
+          "type": "string",
+          "enum": ["watch", "answer", "modify", "construct", "explain"]
+        },
+        "learningAction": {
+          "type": "string",
+          "enum": ["observe", "locate", "label", "predict", "trace", "convert", "classify", "construct", "modify", "explain"]
+        },
+        "component": { "type": "string", "minLength": 1 },
+        "misconception": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "level": { "const": "watch" } } },
+          "then": {
+            "properties": { "learningAction": { "const": "observe" } }
+          },
+          "else": {
+            "required": ["component"],
+            "properties": {
+              "learningAction": {
+                "not": { "const": "observe" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "componentPlan": {
+      "type": "object",
+      "required": ["id", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "status": { "type": "string", "enum": ["reference-verbatim", "existing", "extend", "new"] },
+        "brief": { "type": "string", "minLength": 1 },
+        "registry": { "type": "string", "minLength": 1 },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

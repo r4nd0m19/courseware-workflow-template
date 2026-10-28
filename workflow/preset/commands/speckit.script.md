@@ -12,6 +12,8 @@ $ARGUMENTS
 
 > **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，优先读取 `--input <script-input.json>` 指定的紧凑输入包。包里已经包含 spec、content items、concepts、style vocabulary、registry、模板、输出路径、规则和已有脚本；不要 `ls`/`cat`/`grep` 仓库，不要读取 `workflow/tools` 源码，不要额外跑门禁套件或临时脚本，不要写 `review.md`。只按 `outputs` 写 `courseware.md` 和 `review-sections.yml`；自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
 
+> **生产 workflow 0.42.0 起不再调用本命令**：`courseware-production` 的 `script` 步骤改由 `generate-courseware-script.mjs` 生成大纲/逐页 JSON 并确定性渲染。本命令保留给手动或非 workflow 使用；不要让 workflow 回退到它。
+
 ## Outline
 
 1. 前置条件：`spec.md` 已获人工 `approve`；内容包、风格包 manifest 与 `.specify/memory/constitution.md` 可读。

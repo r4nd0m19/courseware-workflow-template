@@ -12,6 +12,8 @@ $ARGUMENTS
 
 > **工作流模式**：如果 `$ARGUMENTS` 包含 `--no-self-review`，只生成产物；跳过本文件的 Self-review 与 Human Review（人工审核）两节，不要读取 `workflow/tools` 源码、不要额外跑门禁套件或临时脚本、不要写 `review.md`。自审、校验和人工 gate 由 `courseware-production` workflow 的统一步骤负责。写完产物即结束。
 
+> **生产 workflow 0.43.0 起不再调用本命令**：教学简报由 `generate-brief.mjs` 生成结构化 JSON 并渲染 `spec.md` + `concepts.yml`。本命令保留给手动或非 workflow 使用。
+
 ## Outline
 
 1. 读取 `.specify/memory/constitution.md`、内容包（content pack）和风格包（style pack manifest）。

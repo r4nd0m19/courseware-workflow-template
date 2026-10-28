@@ -52,6 +52,7 @@ function styleComponents(style, full) {
   return source.map((component) => ({
     id: component.id,
     name: component.name || component.id,
+    kind: component.kind || '',
     category: component.category || '',
     status: component.status || '',
     whenToUse: component.whenToUse || '',
