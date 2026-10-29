@@ -81,13 +81,28 @@ function findProjectRoot(explicit) {
   return process.cwd()
 }
 
-function stateDirFor(projectRoot, flags) {
+function stateDirFromRun(projectRoot, runId) {
+  if (!runId) return ''
+  const state = readJson(runPath(projectRoot, runId), null)
+  if (!state) return ''
+  for (const result of Object.values(state.step_results || {})) {
+    const raw = result?.output?.guiGate?.stateDir
+    if (typeof raw === 'string' && raw.trim()) {
+      return resolveProjectPath(projectRoot, raw)
+    }
+  }
+  return ''
+}
+
+function stateDirFor(projectRoot, flags, runId = '') {
   if (typeof flags['state-dir'] === 'string') {
     return path.resolve(projectRoot, flags['state-dir'])
   }
   if (process.env.COURSEWARE_GATE_STATE_DIR) {
     return path.resolve(projectRoot, process.env.COURSEWARE_GATE_STATE_DIR)
   }
+  const fromRun = stateDirFromRun(projectRoot, runId)
+  if (fromRun) return fromRun
   return path.join(projectRoot, 'review', 'gui-gates')
 }
 
@@ -506,7 +521,8 @@ const { positional, flags } = parseArgs(process.argv.slice(2))
 const command = positional[0]
 if (!command) usage()
 const projectRoot = findProjectRoot(typeof flags.project === 'string' ? flags.project : undefined)
-const stateDir = stateDirFor(projectRoot, flags)
+const runIdHint = positional[1] || flags.run || flags.runId || ''
+const stateDir = stateDirFor(projectRoot, flags, runIdHint)
 switch (command) {
   case 'show':
     showCommand(projectRoot, stateDir, flags, positional)

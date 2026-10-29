@@ -225,7 +225,7 @@ node workflow/tools/generate-self-study-audit.mjs --lesson-slug <slug> --lesson 
   --script specs/<slug>/courseware.md --content <content-pack.json> \
   --style <style-pack.manifest.json> --registry registry/index.json \
   --concepts specs/<slug>/concepts.yml \
-  --review-dir review/<slug> --declared-pages 10
+  --review-dir review/<slug> [--declared-pages <n>]  # 省略时使用当前脚本页数
 node workflow/tools/apply-self-study-audit.mjs --audit review/<slug>/self-study-audit.json \
   --script specs/<slug>/courseware.md --proposal specs/<slug>/courseware.self-study.md \
   --sections specs/<slug>/review-sections.yml --record review/<slug>/self-study-apply.json

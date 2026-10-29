@@ -76,12 +76,12 @@ const proposalPath = opt(
 const singleShotPath = opt('--single-shot', path.join(toolsDir, 'single-shot-generate.mjs'))
 const checkPath = opt('--check', path.join(toolsDir, 'check-self-study.mjs'))
 const mockDir = opt('--mock-dir')
-const declaredPages = Math.max(1, Number(opt('--declared-pages', '10')) || 10)
+const declaredPagesOption = opt('--declared-pages', '').trim()
 const maxAttempts = Math.max(1, Number(opt('--max-attempts', '3')) || 3)
 
 if (!lessonSlug || !scriptPath || !contentPath) {
   console.error(
-    'usage: node generate-self-study-audit.mjs --lesson-slug <slug> --lesson "<title>" --script <courseware.md> --content <content-pack.json> [--spec <spec.md>] [--out <audit.json>] [--md <audit.md>] [--proposal <courseware.self-study.md>] [--mock-dir <dir>] [model options]',
+    'usage: node generate-self-study-audit.mjs --lesson-slug <slug> --lesson "<title>" --script <courseware.md> --content <content-pack.json> [--declared-pages <n>] [--spec <spec.md>] [--out <audit.json>] [--md <audit.md>] [--proposal <courseware.self-study.md>] [--mock-dir <dir>] [model options]',
   )
   process.exit(2)
 }
@@ -129,6 +129,14 @@ const knownLayouts = new Set(
 const PRODUCTION_TITLE_RE = /^(封面|标题|本页|第\s*\d+\s*页|S\d+[A-Z]?)\s*[：:·\-—\s]/
 const scriptSha = sha256(scriptText)
 const slides = parsed.slides
+let declaredPages = slides.length
+if (declaredPagesOption) {
+  const value = Number(declaredPagesOption)
+  if (!Number.isInteger(value) || value < 1) {
+    die(`--declared-pages must be a positive integer, got ${JSON.stringify(declaredPagesOption)}`)
+  }
+  declaredPages = value
+}
 const slideIds = slides.map((slide) => slide.id)
 const slideSet = new Set(slideIds)
 const objectiveById = new Map()

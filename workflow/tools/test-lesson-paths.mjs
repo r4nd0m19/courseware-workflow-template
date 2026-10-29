@@ -161,6 +161,8 @@ const checkerArgs = [
   'site/alpha/narration.json',
   '--audio-dir',
   'site/alpha/audio',
+  '--audio-url-prefix',
+  '/audio',
   '--art-dir',
   'generated/alpha',
   '--baseline-dir',
@@ -186,6 +188,19 @@ const bad = spawnSync(process.execPath, [checker, ...badArgs], {
 })
 if (bad.status !== 1 || !`${bad.stdout}${bad.stderr}`.includes('must contain')) {
   console.error('FAIL lesson paths — checker accepted a shared site path')
+  cleanup()
+  process.exit(1)
+}
+const badAudioArgs = checkerArgs.map((value, index) =>
+  value === '/audio' ? 'C:/Program Files/Git/audio' : value,
+)
+const badAudio = spawnSync(process.execPath, [checker, ...badAudioArgs], {
+  cwd: projectRoot,
+  encoding: 'utf8',
+  env: checkerEnv,
+})
+if (badAudio.status !== 1 || !`${badAudio.stdout}${badAudio.stderr}`.includes('audio_url_prefix')) {
+  console.error('FAIL lesson paths — checker accepted a rewritten audio URL prefix')
   cleanup()
   process.exit(1)
 }

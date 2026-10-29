@@ -63,7 +63,7 @@ $ARGUMENTS
 - `objectives` 逐目标记录 `explanation / workedExample / practice / feedback` 四个布尔值。
 - `screens` 覆盖**每一张非 SKIP 屏**且只出现一次：`role`（activate/explain/demonstrate/practice/assess/integrate/summary/other）、`status`（sufficient/gap/waived/n/a）、`gapIds`。标为 `gap` 的屏必须至少引用一个缺口。
 - `gaps[]` 每条必须有：`severity`、`dimension`、`slideIds`、证据、提案、**依据**、`pageImpact`。
-- `pageBudget`：`current` = 当前屏数；`proposed` = `current + Σ pageImpact`；超过声明的 10 页时 `exceedsDeclaredBudget: true`、`decision: teacher-approval-required`。**先报告，不自动加页。**
+- `pageBudget`：`current` = 当前屏数；`proposed` = `current + Σ pageImpact`；`declared` 由 `--declared-pages` 提供，省略时使用当前脚本页数；超过声明预算时 `exceedsDeclaredBudget: true`、`decision: teacher-approval-required`。**先报告，不自动加页。**
 - `supplements[]`：只列**允许补充**的类型（解释、先修复习、完整例题、检查题、反馈、转场），`label` 固定为 `自学补充`，并写 `basis`（依据来自哪条内容/哪条课标/哪个教学原则）。
 - `verdict`：有 blocking gap → `insufficient`，否则 `sufficient`。
 
