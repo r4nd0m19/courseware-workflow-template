@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.44.0"
+  version: "0.44.1"
   author: "courseware"
   description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 结构化教学简报 → 结构化脚本生成 → 人类可读脚本（整份一次审）→ 概念/结构化自学审核/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/结构化 Beta/Gold 汇总"
 
@@ -127,6 +127,10 @@ inputs:
     type: string
     default: "70"
     prompt: "Number of pages/slides for the overflow gate"
+  declared_pages:
+    type: string
+    default: ""
+    prompt: "Optional self-study page budget; empty uses the current script page count"
   density_authority:
     type: string
     default: "script"
@@ -151,7 +155,7 @@ steps:
   # screenshots or site. The wrapper exports the COURSEWARE_* values.
   - id: validate-lesson-paths
     type: shell
-    run: "node workflow/tools/check-lesson-paths.mjs --lesson-slug {{ inputs.lesson_slug }} --site-dir \"{{ inputs.site_dir }}\" --narration \"{{ inputs.narration_manifest }}\" --audio-dir \"{{ inputs.audio_dir }}\" --art-dir \"{{ inputs.art_dir }}\" --baseline-dir \"{{ inputs.baseline_dir }}\""
+    run: "node workflow/tools/check-lesson-paths.mjs --lesson-slug {{ inputs.lesson_slug }} --site-dir \"{{ inputs.site_dir }}\" --narration \"{{ inputs.narration_manifest }}\" --audio-dir \"{{ inputs.audio_dir }}\" --audio-url-prefix \"{{ inputs.audio_url_prefix }}\" --art-dir \"{{ inputs.art_dir }}\" --baseline-dir \"{{ inputs.baseline_dir }}\""
 
   # The shell is generated and reviewed once in courseware-shell, before any
   # content pack exists. Production only verifies the hash-bound approval; it
@@ -261,7 +265,7 @@ steps:
   - id: self-study-audit
     type: shell
     timeout: 300
-    run: "node workflow/tools/generate-self-study-audit.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --registry {{ inputs.component_registry }} --concepts {{ inputs.concepts }} --review-dir review/{{ inputs.lesson_slug }} --out review/{{ inputs.lesson_slug }}/self-study-audit.json --md review/{{ inputs.lesson_slug }}/self-study-audit.md --raw review/{{ inputs.lesson_slug }}/self-study-audit-generation.json --report review/{{ inputs.lesson_slug }}/self-study-generation.json"
+    run: "node workflow/tools/generate-self-study-audit.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --registry {{ inputs.component_registry }} --concepts {{ inputs.concepts }} --declared-pages \"{{ inputs.declared_pages }}\" --review-dir review/{{ inputs.lesson_slug }} --out review/{{ inputs.lesson_slug }}/self-study-audit.json --md review/{{ inputs.lesson_slug }}/self-study-audit.md --raw review/{{ inputs.lesson_slug }}/self-study-audit-generation.json --report review/{{ inputs.lesson_slug }}/self-study-generation.json"
 
   - id: check-self-study
     type: shell

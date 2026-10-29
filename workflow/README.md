@@ -2,7 +2,7 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.44.0 / 90 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.44.1 / 90 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
 
 **人工审核只有三类：壳、整份课程脚本、每一页。**
 
@@ -10,8 +10,9 @@
 
 核心变化：
 
+- **0.44.1 工作流修复**：新增 `declared_pages` 自学页数预算输入（留空=当前页数）；启动时校验 `audio_url_prefix`，阻止 Git Bash 把 `/audio` 改写成 `C:/Program Files/Git/audio`；修复 `existing` 组件跨页复用被误报为重复 `componentPlan`；修复脚本自审证据丢失 `objective`、把补充块起止标记重复计为两个 tag；`gate-review show` 可从 run state 自动定位课时 gate 目录。workflow 90 步；preset 0.3.15。
 - **结构化收敛（0.44.0）**：`generate-converge-report.mjs` 读取 Alpha 自审、页批准账本、截图清单和可选的 `review/<slug>/trial-feedback.md`，有试用反馈时一次无工具模型调用只返回 `findings`/`verdict`/`followUps` JSON；Node 校验证据来源、页 ID、blocker 与 verdict 一致性后确定性渲染 `converge-report.md`。没有试用反馈时直接生成空报告，不调用模型。它不修改已批准脚本、deck、组件或账本；Beta 的确定性扫描会拦住未关闭 blocker。有试用反馈时，模型也不能凭截图文件名编造视觉问题。production workflow 90 步，**已无 command/prompt 步骤**。2026-10-28 用当前对话模型 `deepseek-flash[1m]` 对 converge 做过真实运行：试课反馈 S02 反馈文案不足 → 1 个 major、0 blocker、1 次通过。
-- **简报 / 自学审核改单次结构化（0.43.0）**：`generate-brief.mjs` 让模型返回结构化 UbD 简报，Node 校验内容覆盖、概念台账和误区后渲染 `spec.md` + `concepts.yml`；`generate-self-study-audit.mjs` 让模型返回 rubric、逐屏作用、目标链路、缺口和补充提案，Node 补脚本哈希/内容引用/页数预算、生成 `self-study-audit.json` + 报告 + `courseware.self-study.md`，并先用 `check-self-study` 校验。生产 workflow 的 `brief` / `self-study-audit` 步骤改为 shell，不再调用 `speckit.specify` / `speckit.self-study-audit` coding agent。自学审核支持原位补充和 `newSlides` 新增页；新增页由 apply 步骤同步 `review-sections.yml`。workflow 90 步；preset 0.3.13。
+- **简报 / 自学审核改单次结构化（0.43.0）**：`generate-brief.mjs` 让模型返回结构化 UbD 简报，Node 校验内容覆盖、概念台账和误区后渲染 `spec.md` + `concepts.yml`；`generate-self-study-audit.mjs` 让模型返回 rubric、逐屏作用、目标链路、缺口和补充提案，Node 补脚本哈希/内容引用/页数预算、生成 `self-study-audit.json` + 报告 + `courseware.self-study.md`，并先用 `check-self-study` 校验。生产 workflow 的 `brief` / `self-study-audit` 步骤改为 shell，不再调用 `speckit.specify` / `speckit.self-study-audit` coding agent。自学审核支持原位补充和 `newSlides` 新增页；新增页由 apply 步骤同步 `review-sections.yml`。页面预算由 `declared_pages` 提供，留空时用当前脚本页数，避免固定 10 页造成误报。workflow 90 步；preset 0.3.13。
 - **组件生成结构化（0.43.0）**：`component-package-to-files` 把现有组件转成文件包契约；`build-component-evidence` 组装简报/现有组件/示例/风格包；`generate-component` 调单次模型返回文件包（默认 `--strategy files`，每个文件一次，单次请求只发一次、外层组件循环负责修复；门禁点名的文件才重生成，缺失 story 基线回退到 stories 文件，extend 保留未列入 manifest 的既有支持文件；避免大组件 max_tokens），`apply-component-files` 只写临时 staging，捕获缺失 stories 基线后跑 `run-component-checks`（包检查 + 测试），通过才原子移动到 `registry/staging/<id>`。已有 mock 文件包与 6 个 core 组件金标准回归；2026-10-28 用当前对话模型 `deepseek-flash[1m]` 对 `code-anatomy`（34 个测试）、`loop-trace`（23 个测试、5 张基线）、`matrix-fill`（46 个测试）、`matrix-basics`（29 个测试）、`quiz-bank`（38 个测试，2 次通过，首轮 interaction 测试失败后被定点修复）和 `matrix-lab`（43 个测试、6 张基线，1 次通过）做过真实文件级生成；产物只在 `review/`。workflow 的 `build-all-missing-components` / `build-missing-page-components` 已改为 `generate-components.mjs`；`component-plan` 已改为 `generate-component-plan.mjs`（结构化复用检索/缺口/简报 + `check-component-plan`）。`reference-verbatim` 由 `extract-reference-component.mjs` 按 manifest 做逐字节源码提取；把 manifest 放在 `specs/<lesson>/reference-extracts/<id>.json` 后，`list-missing-components` / `list-section-components` 会标记该组件，`generate-components` 自动改用 `--mode reference-verbatim`，不需要手工加参数。组件测试和基线截图可用 `--sandbox`（bubblewrap）隔离仓库、密钥和网络。`speckit.component-build` / `speckit.component-plan` 只保留手动回退。2026-10-28 还用当前模型跑通 `generate-component-plan`（edge-sum-lab，1 次通过，`check-component-plan` 通过）。
 - **脚本生成改单次结构化（0.42.0）**：`build-script-input` 仍提供紧凑输入；`generate-courseware-script.mjs` 先让模型返回脚本大纲 JSON，再逐页返回 page JSON，由 Node 校验内容覆盖、概念、标题、组件和交互字段；失败只重试当前页。`render-courseware-md.mjs` / `render-review-sections.mjs` 确定性渲染 `courseware.md` 与 `review-sections.yml`。生产 workflow 的 `script` 步骤改为 shell，不再调用 `speckit.script` coding agent；模型无工具、不能读仓库或写文件。workflow 90 步；preset 0.3.13。
 - **页面实现改单次结构化 deck（0.41.0）**：`build-page-deck-evidence` 汇总脚本页、storyboard、壳原生 slide 模板、组件 props schema、当前 deck/meta；`single-shot-generate --mode page-deck` 只返回一页 slide JSON；`apply-page-deck` 校验 id/title/type/component/props 和禁用字段后写 `deck.json`。生产 workflow 不再用 `speckit.implement` coding agent；构建、语音、截图、门禁仍由 shell 步骤执行。workflow 90 步；preset 0.3.13。
@@ -420,7 +421,7 @@ approve-script（DRAFT → APPROVED，记录脚本哈希）
 | `site_dir` / `deck_data` | 装配后的壳站点目录 / 声明式 `deck.json` |
 | `deck_url` | 构建后 deck 的 dev/preview URL |
 | `voice_catalog` / `narration_manifest` / `audio_dir` | Edge TTS 声线目录、manifest 与 MP3 目录 |
-| `page_count` / `baseline_dir` / `coverage_waivers` | overflow、基线、覆盖豁免 |
+| `page_count` / `declared_pages` / `baseline_dir` / `coverage_waivers` | overflow、可选自学页数预算（空=当前页数）、基线、覆盖豁免 |
 | `density_authority` / `page_review_scope` | 密度权威（`script` 默认）/ 页面自审输入（`visual-script` 默认；`evidence` 回滚） |
 
 ## 运行
@@ -451,6 +452,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
   -i deck_data="specs/001-2d-arrays/deck.json" \
   -i deck_url="http://127.0.0.1:8082/" \
   -i page_count=16 \
+  -i declared_pages=16 \
   -i baseline_dir="baselines/001-2d-arrays"
 ```
 

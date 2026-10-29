@@ -62,7 +62,7 @@ for (const slide of parsed.slides) {
     id: slide.id,
     title: slide.headingTitle,
     objectiveId: slide.machine?.objectiveId || board.objectiveId || '',
-    objective: board.objective || '',
+    objective: slide.machine?.objective || board.objective || '',
     contentRefs: slide.machine?.contentRefs || board.contentRefs || [],
     components: slide.machine?.components || board.components || [],
     layout: slide.machine?.layout || board.layout || '',
@@ -73,6 +73,11 @@ for (const slide of parsed.slides) {
     transition: slide.transition,
     interaction: slide.machine?.interaction || board.interaction || null,
     componentPlan: slide.machine?.componentPlan || null,
+    supplementTags: [...new Set(
+      [...String(slide.screenContent || '').matchAll(/<!--\s*self-study-supplement:([A-Za-z0-9-]+)/g)].map(
+        (match) => match[1],
+      ),
+    )],
   })
 }
 
@@ -175,11 +180,19 @@ function summarizeSelfStudy(auditPath, applyPath) {
   try {
     const audit = readData(auditPath)
     const apply = readData(applyPath)
+    const tagById = new Map(slides.map((slide) => [slide.id, slide.supplementTags || []]))
     return {
       auditVerdict: audit.verdict || '',
       pageBudget: audit.pageBudget || null,
       gapCount: Array.isArray(audit.gaps) ? audit.gaps.length : 0,
       supplementCount: Array.isArray(apply.supplements) ? apply.supplements.length : 0,
+      supplements: (apply.supplements || []).map((supplement) => ({
+        id: supplement.id,
+        targetSlides: supplement.targetSlides || [],
+        visibleInSlides: (supplement.targetSlides || []).filter((slideId) =>
+          (tagById.get(slideId) || []).includes(supplement.id),
+        ),
+      })),
       applyVerdict: apply.verdict || '',
       changed: Boolean(apply.changed),
     }

@@ -29,6 +29,7 @@ const paths = {
 }
 const baseline = opt('--baseline-dir').trim()
 if (baseline) paths.baseline_dir = baseline
+const audioUrlPrefix = opt('--audio-url-prefix').trim()
 
 function containsSlug(value) {
   const normalized = String(value).replace(/\\/g, '/').replace(/\/+$/, '')
@@ -44,8 +45,15 @@ for (const [name, value] of Object.entries(paths)) {
   }
 }
 
+if (audioUrlPrefix && !/^(?:\/|https?:\/\/)/i.test(audioUrlPrefix)) {
+  problems.push(
+    `audio_url_prefix is ${JSON.stringify(audioUrlPrefix)}; expected a site URL prefix such as /audio or https://... ` +
+      '(Git Bash may rewrite /audio to C:/Program Files/Git/audio; set MSYS_NO_PATHCONV=1 or run from PowerShell)',
+  )
+}
+
 if (problems.length) {
-  console.error('FAIL lesson paths — runtime paths must be scoped per lesson:')
+  console.error('FAIL lesson paths — runtime inputs are invalid or not scoped per lesson:')
   for (const problem of problems) console.error(`  ${problem}`)
   console.error(
     'Use e.g. site/<lesson>, site/<lesson>/narration.json, site/<lesson>/audio, generated/<lesson>, baselines/<lesson>.',

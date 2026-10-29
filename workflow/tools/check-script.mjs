@@ -220,7 +220,15 @@ for (const slide of parsed.slides) {
 
   // component plan declarations
   for (const item of m.componentPlan || []) {
-    if (declared.has(item.id)) warnings.push(`${where}: componentPlan ${item.id} declared more than once`)
+    const previous = declared.get(item.id)
+    const duplicate =
+      previous &&
+      (previous.slide === slide.id ||
+        previous.status === 'new' ||
+        previous.status === 'extend' ||
+        item.status === 'new' ||
+        item.status === 'extend')
+    if (duplicate) warnings.push(`${where}: componentPlan ${item.id} declared more than once`)
     declared.set(item.id, { ...item, slide: slide.id })
     if (item.status === 'existing' || item.status === 'reference-verbatim') {
       if (!registered.has(item.id)) {

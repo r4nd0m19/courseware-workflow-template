@@ -135,7 +135,14 @@ export function safeSegment(value) {
 }
 
 export function audioUrl(prefix, slideId, voiceId) {
-  const base = String(prefix || '').replace(/\/+$/, '')
+  const raw = String(prefix || '').trim()
+  if (!/^(?:\/|https?:\/\/)/i.test(raw)) {
+    throw new Error(
+      `invalid audio URL prefix ${JSON.stringify(prefix)}; expected /audio or https://... ` +
+        '(Git Bash may rewrite /audio; set MSYS_NO_PATHCONV=1)',
+    )
+  }
+  const base = raw.replace(/\/+$/, '')
   return `${base}/${safeSegment(slideId)}/${safeSegment(voiceId)}.mp3`
 }
 
