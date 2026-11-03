@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { readData, validateWithSchema } from './lib.mjs'
 import { parseScript, normalizeForMatch } from './script-lib.mjs'
+import { collectQuizQuestions } from './quiz-lib.mjs'
 import { renderSlideBlock } from './script-render-lib.mjs'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
@@ -347,6 +348,17 @@ function validateJudgments(raw) {
     if (slide.interaction.component && !(slide.components || []).includes(slide.interaction.component)) {
       errors.push(`${where}: interaction.component ${slide.interaction.component} is not in components`)
     }
+    const quizAudit = collectQuizQuestions(
+      [{
+        id: slide.id,
+        screenContent: slide.screenContent,
+        interaction: slide.interaction,
+        contentRefs: slide.contentRefs || [],
+      }],
+      [...contentById.values()],
+      { maxShare: 1 },
+    )
+    errors.push(...quizAudit.errors)
     for (const conceptId of slide.concepts || []) {
       const concept = conceptById.get(conceptId)
       if (!concept) {

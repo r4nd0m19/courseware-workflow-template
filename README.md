@@ -4,14 +4,15 @@
 
 模板只包含工作流引擎、preset、Node 门禁工具、示例、内置判题运行时和安装脚本；**不包含**具体课件的壳、风格包、用户自己的注册表、研究资料、插画或截图。模板自带 `judge-runtime/` 与暂存组件 `registry/staging/code-judge/`（安装时复制到项目），用于阶段编程题；用户自己的组件仍由项目维护。完整阶段、产物与审核点见 `工作流说明.md`。
 
-- 工作流版本：`courseware-production` `0.46.1`（90 个顶层步骤，0 个 command/prompt 步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
+- 工作流版本：`courseware-production` `0.46.2`（90 个顶层步骤，0 个 command/prompt 步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
 - preset：`courseware` `0.3.16`
-- 模板版本：`0.25.0`（2026-11-03）
+- 模板版本：`0.25.1`（2026-11-03）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
 - 脚本审核：`review-script` 显示自动生成的老师版 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行“学生要做”摘要；交互设计与制作字段保留在 `courseware.md` 供工具使用，脚本批准账本仍绑定完整源文件。
 - 页面实现：`build-page-deck-evidence` + `single-shot-generate --mode page-deck` + `apply-page-deck`；模型只返回一页 slide JSON，Node 校验后写 deck，不再由 coding agent 构建/截图。
 - 0.44.1 工作流修复：新增 `declared_pages` 页数预算；校验 `audio_url_prefix` 并阻止 Git Bash 路径改写；修复 existing 组件跨页复用误报；修复脚本自审证据的 objective 与补充标签；`gate-review show` 自动定位课时 gate 目录。
 - 阶段练习页（0.46.0）：脚本大纲可以把某页标为 `exercise`（`code-judge`），页面模型只返回题面、起始代码和 1–6 组公开测试，屏幕内容由 Node 渲染；`apply-page-deck` 要求题面、代码、测试和时限逐字一致，拒绝隐藏测试、`disabled` 和静态降级。阶段练习只用于课堂练习，**不锁定翻页、没有通关门禁**；最多 4 个、非首页、不连续。模板自带判题运行时与 `code-judge` 暂存组件，安装时复制到项目；首次使用判题页前运行 `node judge-runtime/install.mjs` 下载并校验约 91MB 的 browsercc（已 gitignore）。
+- 0.46.2 修复：`check-quiz-keys` 只统计非 watch 的答题页并按测验条目去重，概念引入页等预览页不再被误判为缺少选项块；选项文本比较忽略 Markdown 行内代码/强调标记（`` `a[2][3]` `` 与 `a[2][3]` 等价），星号图案选项保持原样。脚本生成器新增答题页围栏块/顺序字母校验和最多 2 轮答案分布修复；script-page 与 self-study-audit 提示词要求答题页使用 `A.`/`B.`/`C.` 围栏块并打乱正确选项位置。新增对应回归测试并纳入 smoke。
 - 0.46.1 修复：一份 AI 配置文件驱动页面自审与文本生成（`model` 用于看图审核，`textModel` 用于长文本）；新建项目没有 `.specify/feature.json` 时回退 `specs/<lesson>/spec.md`；Windows 路径、沙箱和参考提取兼容；AI 步骤超时放宽；推理模型建议 `maxTokens: 32768`、`timeoutMs: 300000`。
 - Beta 收敛（0.44.0）：`generate-converge-report.mjs` 读取 Alpha/批准/截图/`review/<lesson>/trial-feedback.md`，有试用反馈时一次无工具模型调用只返回 findings/verdict/followUps；没有反馈时直接生成空报告，不调用模型。报告不修改已批准内容，未关闭 blocker 由 Beta 确定性扫描拦下。
 - 脚本生成：`build-script-input` → `generate-courseware-script`（大纲 JSON → 逐页 page JSON → 校验/局部重试）→ `render-courseware-md` + `render-review-sections`；生产 workflow 的 `script` 步骤是 shell，不再调用 `speckit.script`。
@@ -154,9 +155,9 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 
 ```bash
 specify workflow info courseware-shell        # 应显示 0.1.0、3 steps
-specify workflow info courseware-production   # 应显示 0.46.1、90 steps
+specify workflow info courseware-production   # 应显示 0.46.2、90 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 完整开发仓库 152/152；模板仓库 140/140（8 项依赖开发样例的检查 SKIP）
+node workflow/tools/smoke-test.mjs            # 完整开发仓库 154/154；模板仓库 142/142（8 项依赖开发样例的检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
 

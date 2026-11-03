@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { readData, validateWithSchema } from './lib.mjs'
 import { normalizeForMatch, hasPlaceholder } from './script-lib.mjs'
+import { collectQuizQuestions, letterForIndex } from './quiz-lib.mjs'
 import { cleanOneLine, screenContentForPage } from './script-render-lib.mjs'
 import { readStagingManifests, stagingDirForRegistry } from './registry-lib.mjs'
 
@@ -45,7 +46,7 @@ function runNode(scriptArgs, label) {
 const inputPath = opt('--input')
 if (!inputPath) {
   console.error(
-    'usage: node generate-courseware-script.mjs --input <script-input.json> [--out <courseware.md>] [--sections <review-sections.yml>] [--outline <outline.json>] [--pages-dir <dir>] [--report <report.json>] [--max-outline-attempts 2] [--max-page-attempts 3] [--mock-dir <dir>] [model options]',
+    'usage: node generate-courseware-script.mjs --input <script-input.json> [--out <courseware.md>] [--sections <review-sections.yml>] [--outline <outline.json>] [--pages-dir <dir>] [--report <report.json>] [--max-outline-attempts 2] [--max-page-attempts 3] [--quiz-max-share 0.6] [--max-quiz-repair-rounds 2] [--max-quiz-repair-attempts 2] [--mock-dir <dir>] [model options]',
   )
   process.exit(2)
 }
@@ -65,6 +66,12 @@ const mockDir = opt('--mock-dir')
 const maxOutlineAttempts = Math.max(1, Number(opt('--max-outline-attempts', '2')) || 2)
 const maxPageAttempts = Math.max(1, Number(opt('--max-page-attempts', '3')) || 3)
 const maxPages = Math.max(1, Number(opt('--max-pages', '30')) || 30)
+const maxQuizShare = Number(opt('--quiz-max-share', '0.6'))
+if (!Number.isFinite(maxQuizShare) || maxQuizShare <= 0 || maxQuizShare > 1) {
+  die('--quiz-max-share must be a number in (0, 1]')
+}
+const maxQuizRepairRounds = Math.max(0, Number(opt('--max-quiz-repair-rounds', '2')) || 0)
+const maxQuizRepairAttempts = Math.max(1, Number(opt('--max-quiz-repair-attempts', '2')) || 2)
 
 if (!outPath || !sectionsPath) {
   die('input.outputs.courseware and input.outputs.reviewSections are required (or pass --out/--sections)')
@@ -96,6 +103,7 @@ for (let i = 0; i < args.length; i += 1) {
 
 const contentItems = Array.isArray(input.content?.items) ? input.content.items : []
 const contentById = new Map(contentItems.map((item) => [item.id, item]))
+const quizItems = contentItems.filter((item) => item.kind === 'quiz')
 const concepts = Array.isArray(input.concepts?.concepts) ? input.concepts.concepts : []
 const conceptById = new Map(concepts.map((concept) => [concept.id, concept]))
 const styleComponentInfo = new Map(
@@ -423,6 +431,73 @@ function conceptErrors(page) {
   return errors
 }
 
+function quizPageErrors(page, outlinePage) {
+  if (!quizItems.length || outlinePage.exercise) return []
+  const audit = collectQuizQuestions(
+    [{
+      id: page.id,
+      screenContent: screenContentForPage(page),
+      interaction: outlinePage.interaction,
+      contentRefs: outlinePage.contentRefs || [],
+    }],
+    quizItems,
+    { maxShare: 1 },
+  )
+  return audit.errors
+}
+
+function quizAuditSlides(pages) {
+  const outlineById = new Map(outline.pages.map((page) => [page.id, page]))
+  return pages.map((page) => {
+    const outlinePage = outlineById.get(page.id) || {}
+    return {
+      id: page.id,
+      screenContent: screenContentForPage(page),
+      interaction: outlinePage.interaction,
+      contentRefs: outlinePage.contentRefs || [],
+    }
+  })
+}
+
+function auditAllQuizPages(pages) {
+  if (!quizItems.length) {
+    return {
+      questions: [],
+      skipped: [],
+      warnings: [],
+      errors: [],
+      distributionErrors: [],
+      distribution: {},
+      count: 0,
+      maxCount: 0,
+      maxShare: 0,
+      allSame: false,
+      dominant: false,
+      pass: true,
+    }
+  }
+  return collectQuizQuestions(quizAuditSlides(pages), quizItems, { maxShare: maxQuizShare })
+}
+
+function planQuizRepairs(audit) {
+  if (!audit.count) return []
+  const targetMax = Math.max(1, Math.floor(audit.count * maxQuizShare))
+  const need = audit.maxCount - targetMax
+  if (need <= 0) return []
+  const dominantLetters = new Set(
+    Object.entries(audit.distribution)
+      .filter(([, count]) => count === audit.maxCount)
+      .map(([letter]) => letter),
+  )
+  const candidates = audit.questions.filter((question) => dominantLetters.has(question.answer))
+  return candidates.slice(-need).map((question, index) => {
+    const currentIndex = question.position - 1
+    let targetIndex = (currentIndex + 1 + index) % question.optionCount
+    if (targetIndex === currentIndex) targetIndex = (currentIndex + 2) % question.optionCount
+    return { ...question, targetLetter: letterForIndex(targetIndex) }
+  })
+}
+
 function validatePage(page, outlinePage) {
   const errors = []
   const result = validateWithSchema(
@@ -638,6 +713,7 @@ for (const [index, outlinePage] of outline.pages.entries()) {
     page = callModel('script-page', evidence, path.join(pagesDir, `${outlinePage.id}.json`), 'page', outlinePage.id, attempt)
     errors = validatePage(page, outlinePage)
     if (!errors.length) errors = conceptErrors(page)
+    if (!errors.length) errors = quizPageErrors(page, outlinePage)
     if (!errors.length) {
       // Only commit content coverage after the whole page passes; a failed
       // attempt must not mark earlier items as satisfied.
@@ -665,12 +741,144 @@ if (missingRequired.length) {
   die(`required content items were not placed verbatim by any page: ${missingRequired.join(', ')}`)
 }
 
+// The answer-position gate only counts non-watch pages and only once per quiz
+// item. Generated pages already passed the per-page format check; this bounded
+// loop repairs the lesson-level distribution before the late quiz-keys gate can
+// fail an otherwise complete run.
+const quizRepairs = []
+let finalQuizAudit = null
+if (quizItems.length) {
+  for (let round = 1; round <= maxQuizRepairRounds; round += 1) {
+    const audit = auditAllQuizPages(pages)
+    if (audit.pass) break
+    if (audit.errors.length) {
+      die(`quiz layout validation failed after page generation:\n${audit.errors.map((error) => `  - ${error}`).join('\n')}`)
+    }
+    const targets = planQuizRepairs(audit)
+    if (!targets.length) {
+      die(`quiz answer distribution cannot be repaired:\n${audit.distributionErrors.map((error) => `  - ${error}`).join('\n')}`)
+    }
+
+    let changed = false
+    for (const target of targets) {
+      const pageIndex = pages.findIndex((page) => page.id === target.slideId)
+      const outlineIndex = outline.pages.findIndex((page) => page.id === target.slideId)
+      if (pageIndex < 0 || outlineIndex < 0) continue
+      const outlinePage = outline.pages[outlineIndex]
+      let repaired = null
+      let repairErrors = []
+      let attempts = 0
+      for (let attempt = 1; attempt <= maxQuizRepairAttempts; attempt += 1) {
+        attempts = attempt
+        const evidence = buildPageEvidence(
+          outlinePage,
+          outline,
+          outline.pages[outlineIndex - 1] || null,
+          outline.pages[outlineIndex + 1] || null,
+          {
+            errors: [
+              ...audit.distributionErrors,
+              `${outlinePage.id}: move the correct option for quiz item ${target.id} from position ` +
+                `${target.answer} to position ${target.targetLetter}. Reorder the existing option lines only; ` +
+                'keep the question and every option text verbatim, keep one fenced text block with sequential ' +
+                'letters A. B. C., and update any option-letter references in narration or interactionDesign.',
+            ],
+            previous: pages[pageIndex],
+          },
+        )
+        repaired = callModel(
+          'script-page',
+          evidence,
+          path.join(pagesDir, `${outlinePage.id}.json`),
+          'page',
+          outlinePage.id,
+          maxPageAttempts + round * 10 + attempt,
+        )
+        repairErrors = validatePage(repaired, outlinePage)
+        if (!repairErrors.length) repairErrors = conceptErrors(repaired)
+        if (!repairErrors.length) repairErrors = quizPageErrors(repaired, outlinePage)
+        if (!repairErrors.length) {
+          repairErrors = contentErrors({ ...repaired, __outline: outlinePage }, new Set())
+        }
+        if (!repairErrors.length) {
+          const pageAudit = collectQuizQuestions(
+            [{
+              id: repaired.id,
+              screenContent: screenContentForPage(repaired),
+              interaction: outlinePage.interaction,
+              contentRefs: outlinePage.contentRefs || [],
+            }],
+            quizItems,
+            { maxShare: 1 },
+          )
+          const question = pageAudit.questions.find((entry) => entry.id === target.id)
+          if (!question || question.answer !== target.targetLetter) {
+            repairErrors = [
+              `${outlinePage.id}: expected quiz item ${target.id} at position ` +
+                `${target.targetLetter} after reorder, got ${question?.answer || 'none'}`,
+            ]
+          }
+        }
+        if (!repairErrors.length) break
+      }
+
+      if (repairErrors.length) {
+        quizRepairs.push({
+          round,
+          pageId: target.slideId,
+          questionId: target.id,
+          from: target.answer,
+          to: target.targetLetter,
+          attempts,
+          ok: false,
+          errors: repairErrors,
+        })
+      } else {
+        pages[pageIndex] = repaired
+        quizRepairs.push({
+          round,
+          pageId: target.slideId,
+          questionId: target.id,
+          from: target.answer,
+          to: target.targetLetter,
+          attempts,
+          ok: true,
+        })
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+
+  finalQuizAudit = auditAllQuizPages(pages)
+  if (!finalQuizAudit.pass) {
+    die(
+      `quiz answer distribution is still invalid after ${maxQuizRepairRounds} repair round(s):\n` +
+        [...finalQuizAudit.errors, ...finalQuizAudit.distributionErrors]
+          .map((error) => `  - ${error}`)
+          .join('\n'),
+    )
+  }
+}
+
 writeGenerated(outline, pages)
 writeJson(reportPath, {
   schemaVersion: '1.0',
   lessonSlug,
   outline: { attempts: outlineAttempts, pages: outline.pages.length },
   pages: pageAttempts,
+  quizRepairs,
+  quizAudit: finalQuizAudit
+    ? {
+        questions: finalQuizAudit.count,
+        distribution: finalQuizAudit.distribution,
+        maxShare: Number(finalQuizAudit.maxShare.toFixed(4)),
+        threshold: maxQuizShare,
+      }
+    : null,
   outputs: { courseware: outPath, reviewSections: sectionsPath, outline: outlinePath, pagesDir },
 })
 console.log(`OK script generation — ${pages.length} page(s), outline attempts ${outlineAttempts}`)
+if (quizRepairs.length) {
+  console.log(`OK quiz answer distribution repaired — ${quizRepairs.filter((repair) => repair.ok).length}/${quizRepairs.length} page(s)`)
+}

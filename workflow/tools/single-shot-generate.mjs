@@ -400,6 +400,7 @@ Rules:
 - Every blocking gap needs at least one supplement. Mark verdict insufficient iff any blocking gap exists.
 - A gap may have pageImpact 0 or a positive number. Every new page must appear in newSlides, carry the same gapId, and use afterSlide to point at an existing or earlier new slide. The sum of pageImpact must equal the number of new slides.
 - New slides must be complete, student-facing pages: id/title, objectiveId/objective, contentRefs, purpose, components, layout, interaction, screenContent, interactionDesign, narration and transition. One semantic unit per page; do not duplicate an existing slide.
+- New quiz answer pages: if a new slide has a non-watch interaction and references quiz items, copy the question and every option verbatim and put the options in one fenced text block with sequential letters A. B. C.; Markdown bullets are not accepted. Vary the correct option's position instead of keeping the content pack's correct-first order. Watch preview pages may keep a normal list.
 - Only add a page when the gap cannot be fixed in place. New slides must use existing content items, concepts and components; do not invent component ids or core concepts.
 - Supplement content must be concise, student-facing Markdown that fits the chosen section; do not include the supplement label or basis in content.
 - Use only real slide ids and objective ids from the supplied script.
@@ -517,6 +518,7 @@ Return one JSON object:
 
 Rules:
 - Copy visible content from the referenced content items. Do not paraphrase code, output, quiz questions, quiz options or narration items that the checks require verbatim.
+- Quiz options: copy the question and every option verbatim. On a non-watch page, put each quiz item's options in one fenced text block, one option per line with sequential letters A. B. C.; Markdown bullets are not accepted by the answer-position gate. You may reorder options, but vary the correct option's position across the lesson instead of always keeping the content pack's correct-first order. On a watch page, options may stay in a normal list; they are preview only.
 - If the outline page has "exercise", return the exercise object and OMIT screenContent: the visible screen (statement, starter code, all tests) is rendered deterministically from exercise. Otherwise omit exercise and write screenContent.
 - Exercise rules: 1-6 tests, all of them visible to students — never hidden tests; every test needs a distinct id, a short label, input and expected output; starterCode must be valid, compilable C++ that represents the intended starting point (not the finished answer); statement must state the input format, output format and limits clearly. timeLimitMs and maxOutputBytes are optional (defaults 2000 and 65536). The checkpoint is practice only: never promise a navigation lock, unlock state or "pass to continue" gate.
 - screenContent is student-visible Markdown only. Never put narration into screenContent. Do not add Markdown headings (#, ##, ###) outside fenced code blocks.

@@ -12,10 +12,14 @@
 //     [--slides S03,S06] [--max-share 0.6] [--json]
 //   node check-quiz-keys.mjs <deck.json>
 //     [--slides S03,S06] [--max-share 0.6] [--json]
-import fs from 'node:fs'
 import path from 'node:path'
-import { parseScript, extractFencedBlocks } from './script-lib.mjs'
+import { parseScript } from './script-lib.mjs'
 import { readData } from './lib.mjs'
+import {
+  checkQuizSequentialLetters,
+  collectQuizQuestions,
+  letterForIndex,
+} from './quiz-lib.mjs'
 
 const args = process.argv.slice(2)
 const positionals = []
@@ -71,76 +75,6 @@ const warnings = []
 const questions = []
 const skipped = []
 
-function normalizeOptionText(value) {
-  return String(value ?? '')
-    .replace(/\\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function letterForIndex(index) {
-  return String.fromCharCode(65 + index)
-}
-
-function parseOptionBlock(content) {
-  const lines = String(content || '').split(/\r?\n/)
-  const parsed = []
-  let current = null
-  for (const raw of lines) {
-    const match = raw.match(/^\s*([A-Z])\s*[.．、)]\s*(.*)$/)
-    if (match) {
-      if (current) parsed.push(current)
-      current = { letter: match[1], text: [match[2]] }
-    } else if (current) {
-      current.text.push(raw)
-    }
-  }
-  if (current) parsed.push(current)
-  return parsed
-    .map((option) => ({
-      letter: option.letter,
-      text: normalizeOptionText(option.text.join('\n')),
-    }))
-    .filter((option) => option.text)
-}
-
-function sameTextMultiset(left, right) {
-  const normalize = (values) => values.map(normalizeOptionText).sort().join('\u0000')
-  return normalize(left) === normalize(right)
-}
-
-function matchContentItem(blockOptions, items) {
-  return items.find((item) => {
-    const itemOptions = item.options || []
-    return (
-      itemOptions.length === blockOptions.length &&
-      sameTextMultiset(
-        blockOptions.map((option) => option.text),
-        itemOptions.map((option) => option.text),
-      )
-    )
-  })
-}
-
-function checkSequentialLetters(where, letters, allowedCount) {
-  const expected = letters.map((_, index) => letterForIndex(index))
-  if (letters.join('') !== expected.join('')) {
-    errors.push(
-      `${where}: option markers are ${letters.join('/')}, expected ${expected.join('/')} in display order`,
-    )
-    return false
-  }
-  if (new Set(letters).size !== letters.length) {
-    errors.push(`${where}: duplicate option markers (${letters.join('/')})`)
-    return false
-  }
-  if (allowedCount !== letters.length) {
-    errors.push(`${where}: expected ${allowedCount} option(s), got ${letters.length}`)
-    return false
-  }
-  return true
-}
-
 function addQuestion(record) {
   questions.push(record)
 }
@@ -169,79 +103,26 @@ function runScriptMode() {
     return
   }
 
-  const contentItems = new Map(
-    (content.items || [])
-      .filter((item) => item.kind === 'quiz')
-      .map((item) => [item.id, item]),
-  )
-  if (contentItems.size === 0) {
+  const quizItems = (content.items || []).filter((item) => item.kind === 'quiz')
+  if (quizItems.length === 0) {
     errors.push(`${options.content}: no quiz items found`)
     return
   }
 
-  for (const slide of parsed.slides) {
-    if (options.slides && !options.slides.has(slide.id)) continue
-    const refQuizIds = readScriptRefs(slide).filter((id) => contentItems.has(id))
-    const candidates = refQuizIds.length
-      ? refQuizIds.map((id) => contentItems.get(id))
-      : [...contentItems.values()]
-    const blocks = extractFencedBlocks(slide.screenContent)
-      .map((block) => parseOptionBlock(block.content))
-      .filter((blockOptions) => blockOptions.length >= 2)
-    if (blocks.length === 0) {
-      if (refQuizIds.length) {
-        errors.push(`${slide.id}: references quiz item(s) ${refQuizIds.join(', ')} but has no option block`)
-      }
-      continue
-    }
-
-    const matchedIds = new Set()
-    for (const blockOptions of blocks) {
-      const item = matchContentItem(blockOptions, candidates.filter((candidate) => !matchedIds.has(candidate.id)))
-      if (!item) {
-        if (refQuizIds.length) {
-          errors.push(
-            `${slide.id}: option block (${blockOptions.map((option) => option.letter).join('/')}) ` +
-              `does not match any referenced quiz item (${refQuizIds.join(', ')})`,
-          )
-        }
-        continue
-      }
-      matchedIds.add(item.id)
-      const quizType = item.quizType || 'single'
-      if (quizType === 'multi') {
-        skipped.push({ id: item.id, slideId: slide.id, reason: 'multi-select' })
-        continue
-      }
-
-      const correct = (item.options || []).filter((option) => option.correct)
-      if (correct.length !== 1) {
-        errors.push(`${item.id} (${slide.id}): expected exactly 1 correct option, got ${correct.length}`)
-        continue
-      }
-      const correctText = normalizeOptionText(correct[0].text)
-      const position = blockOptions.findIndex((option) => option.text === correctText)
-      if (position < 0) {
-        errors.push(`${item.id} (${slide.id}): correct option text not found in the script block`)
-        continue
-      }
-      if (!checkSequentialLetters(`${item.id} (${slide.id})`, blockOptions.map((option) => option.letter), blockOptions.length)) {
-        continue
-      }
-      addQuestion({
-        id: item.id,
-        slideId: slide.id,
-        answer: blockOptions[position].letter,
-        position: position + 1,
-        optionCount: blockOptions.length,
-        source: 'script',
-      })
-    }
-
-    for (const id of refQuizIds) {
-      if (!matchedIds.has(id)) errors.push(`${slide.id}: contentRef ${id} has no matching quiz block`)
-    }
-  }
+  const slides = parsed.slides.map((slide) => ({
+    id: slide.id,
+    screenContent: slide.screenContent,
+    interaction: slide.machine?.interaction,
+    contentRefs: readScriptRefs(slide),
+  }))
+  const audit = collectQuizQuestions(slides, quizItems, {
+    maxShare: options.maxShare,
+    slideIds: options.slides,
+  })
+  errors.push(...audit.errors, ...audit.distributionErrors)
+  warnings.push(...audit.warnings)
+  questions.push(...audit.questions)
+  skipped.push(...audit.skipped)
 }
 
 function runDeckMode() {
@@ -282,7 +163,15 @@ function runDeckMode() {
           ? option.id
           : letterForIndex(optionIndex),
       )
-      if (!checkSequentialLetters(`${id} (${slide.id})`, letters, questionOptions.length)) continue
+      const letterErrors = checkQuizSequentialLetters(
+        `${id} (${slide.id})`,
+        letters,
+        questionOptions.length,
+      )
+      if (letterErrors.length) {
+        errors.push(...letterErrors)
+        continue
+      }
       const correct = questionOptions.filter((option) => option.correct)
       if (correct.length !== 1) {
         errors.push(`${id} (${slide.id}): expected exactly 1 correct option, got ${correct.length}`)
@@ -317,9 +206,11 @@ const allSame = count >= 2 && maxCount === count
 // pattern is a real cue. The share threshold applies once a set is large enough
 // for a dominant position to be a pattern.
 const dominant = count >= 4 && maxShare > options.maxShare
-const pass = errors.length === 0 && !allSame && !dominant
 
-if (!pass) {
+// Script mode gets distribution errors from collectQuizQuestions so the
+// generator and the gate share one implementation. Deck mode still computes
+// them from its own question list here.
+if (isJson) {
   if (allSame) {
     const letter = Object.keys(distribution).find((key) => distribution[key] === count)
     errors.push(
@@ -334,6 +225,7 @@ if (!pass) {
     )
   }
 }
+const pass = errors.length === 0
 
 const result = {
   ok: pass,
@@ -350,25 +242,27 @@ const result = {
 
 if (options.json) {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
-} else if (pass) {
-  const letters = Object.keys(distribution)
-    .sort()
-    .map((letter) => `${letter}=${distribution[letter]}`)
-    .join(' ')
-  const summary = count
-    ? `${count} single-select question(s); ${letters} (max ${Math.round(maxShare * 100)}%)`
-    : 'no single-select question(s) in scope'
-  console.log(`OK quiz keys — ${summary}`)
-  for (const warning of warnings) console.error(`WARN quiz keys: ${warning}`)
 } else {
-  console.error('FAIL quiz keys')
-  for (const error of errors) console.error(`  ${error}`)
-  if (count) {
+  for (const warning of warnings) console.error(`WARN quiz keys: ${warning}`)
+  if (pass) {
     const letters = Object.keys(distribution)
       .sort()
       .map((letter) => `${letter}=${distribution[letter]}`)
       .join(' ')
-    console.error(`  distribution: ${letters} (max ${Math.round(maxShare * 100)}%)`)
+    const summary = count
+      ? `${count} single-select question(s); ${letters} (max ${Math.round(maxShare * 100)}%)`
+      : 'no single-select question(s) in scope'
+    console.log(`OK quiz keys — ${summary}`)
+  } else {
+    console.error('FAIL quiz keys')
+    for (const error of errors) console.error(`  ${error}`)
+    if (count) {
+      const letters = Object.keys(distribution)
+        .sort()
+        .map((letter) => `${letter}=${distribution[letter]}`)
+        .join(' ')
+      console.error(`  distribution: ${letters} (max ${Math.round(maxShare * 100)}%)`)
+    }
   }
 }
 

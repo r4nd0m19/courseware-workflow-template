@@ -2,10 +2,11 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.46.1 / 90 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.46.2 / 90 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
 
 **人工审核只有三类：壳、整份课程脚本、每一页。**
 
+- **测验答案检查修复（0.46.2）**：`check-quiz-keys` 只统计非 watch 的答题页，按测验条目去重；概念引入页等预览页即使按概念台账要求引用测验，也不再被误判为“缺少选项块”。选项文本比较忽略 Markdown 行内代码与强调标记（`` `a[2][3]` `` 与 `a[2][3]` 等价），星号图案选项保持原样。脚本生成器新增答题页围栏块/顺序字母校验，失败时把门禁原文反馈给模型局部重试；整课生成后按 0.6 阈值做最多 2 轮答案分布修复（重排主导页的正确选项位置），仍不合格才失败。`single-shot-generate` 的 script-page 与 self-study-audit 提示词要求答题页使用 `A.`/`B.`/`C.` 围栏块并打乱正确选项位置。新增 `test-quiz-keys.mjs`、`test-script-quiz-repair.mjs` 并纳入 smoke。
 - **跨平台与共享配置修复（0.46.1）**：文本步骤（`review-ai`、`single-shot-generate`）现在和页面自审共用同一份配置文件，读取其中的 `zcodeConfig` / `zcodeProvider`，并支持 `textModel` 给长文本步骤、`model` 留给视觉自审；显式配置的 `model` 优先于 provider 的默认模型。简报/脚本自审证据与脚本输入工具在没有 `.specify/feature.json` 的新项目里回退到 `specs/<lesson>/spec.md`。`extract-content` / `extract-reference-component` 改用 `fileURLToPath` 读取 schema；Windows 上组件检查自动关闭 bubblewrap，`generate-components` 透传 `--no-sandbox`，参考提取测试用 junction/复制回退。AI 步骤超时放宽（简报/自学审核/脚本自审 900s，其余文本步骤 600s）。插画接口无可用通道时可显式设 `COURSEWARE_ART_LOCAL_FALLBACK=1`，用参考图生成本地变体并以 `model: local-variant` 记录溯源（默认关闭，绝不冒充 API 生成）。
 
 - **阶段练习页（0.46.0）**：脚本大纲可把某页标为 `exercise`（`code-judge`）；页面模型只返回题面、起始代码和 1–6 组公开测试，不写屏幕内容，Node 渲染 `courseware.md` 的屏幕内容并把规范化的 exercise 写入制作字段。`build-page-deck-evidence` 透传 exercise；`apply-page-deck` 要求 `type=blank` + `component=code-judge`，题面、起始代码、测试和时限必须与已批准脚本逐字一致，拒绝隐藏测试、禁用态和静态降级；`check-rendered-text` 会把题面、起始代码和每组测试都作为高信号文本检查。`generate-component-plan` / `check-component-plan` / `check-vocabulary` / `build-script-input` 现在也能看到 `registry/staging`，staged 组件（如 `code-judge`）可直接作为 `existing` 复用，不必再规划成新组件。阶段练习只用于课堂练习，**不锁定翻页、不做通关门禁**；位置约束为最多 4 个、非首页、不连续。preset 0.3.16。

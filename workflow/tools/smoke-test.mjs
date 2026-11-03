@@ -583,6 +583,7 @@ try {
     1,
     'all 4 correct answers are at position A',
   )
+  run('quiz keys regression', 'test-quiz-keys.mjs', [], 0, 'PASS quiz keys checker')
   run(
     'script → storyboard parity pass',
     'script-to-storyboard.mjs',
@@ -1745,6 +1746,24 @@ try {
     failed += 1
     console.error(scriptGenerationOutput.trimEnd())
     console.error('script generation must render courseware.md from outline/page JSON and repair invalid pages')
+  }
+
+  // ---- quiz option format + answer-position distribution repair ----
+  total += 1
+  const quizRepairTest = spawnSync(
+    process.execPath,
+    [path.join(toolsDir, 'test-script-quiz-repair.mjs')],
+    { encoding: 'utf8', cwd: projectRoot },
+  )
+  const quizRepairOutput = `${quizRepairTest.stdout || ''}\n${quizRepairTest.stderr || ''}`
+  const quizRepairToolPass =
+    quizRepairTest.status === 0 &&
+    /PASS quiz format and distribution repair/.test(quizRepairOutput)
+  console.log(`${quizRepairToolPass ? 'PASS' : 'FAIL'} quiz format and distribution repair`)
+  if (!quizRepairToolPass) {
+    failed += 1
+    console.error(quizRepairOutput.trimEnd())
+    console.error('generated answer pages must use fenced A/B/C options and repair a dominant answer position')
   }
 
   // ---- structured teaching brief ----
