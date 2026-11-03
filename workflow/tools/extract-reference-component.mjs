@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import { readData, validateWithSchema } from './lib.mjs'
 
 const args = process.argv.slice(2)
@@ -37,7 +38,8 @@ function readRelative(base, relative) {
 }
 const manifest = readData(manifestPath)
 const schema = validateWithSchema(
-  new URL('../schemas/reference-extract.schema.json', import.meta.url).pathname,
+  // fileURLToPath preserves Windows drive letters; URL.pathname does not.
+  fileURLToPath(new URL('../schemas/reference-extract.schema.json', import.meta.url)),
   manifest,
 )
 if (!schema.ok) die(`manifest schema:\n  ${schema.errors.join('\n  ')}`)

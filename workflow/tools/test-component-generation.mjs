@@ -10,6 +10,20 @@ import { readData } from './lib.mjs'
 
 const tools = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(tools, '../..')
+// The mock generation round-trip reuses the development fixtures (built-in
+// component, lesson brief, registry index, shell style pack). Skip on a fresh
+// template project instead of failing the install smoke test.
+const fixtures = [
+  path.join(root, 'registry/components/code-anatomy'),
+  path.join(root, 'specs/001-2d-arrays/component-briefs/code-anatomy.md'),
+  path.join(root, 'registry/index.json'),
+  path.join(root, 'shells/branch-choice/style-pack.manifest.json'),
+]
+const missing = fixtures.filter((file) => !fs.existsSync(file))
+if (missing.length) {
+  console.log(`SKIP structured component generation (dev fixtures not available: ${missing.map((file) => path.relative(root, file)).join(', ')})`)
+  process.exit(0)
+}
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'courseware-component-generation-'))
 const staging = fs.mkdtempSync(path.join(root, 'registry', '.tmp-component-generation-'))
 const repairStaging = fs.mkdtempSync(path.join(root, 'registry', '.tmp-component-repair-'))

@@ -22,6 +22,8 @@ const mocks = path.join(tmp, 'mocks')
 const contentFile = path.join(tmp, 'content.json')
 const styleFile = path.join(tmp, 'style.json')
 const conceptsFile = path.join(tmp, 'concepts.yml')
+const registryFile = path.join(tmp, 'registry', 'index.json')
+const stagingDir = path.join(tmp, 'registry', 'staging')
 
 fs.mkdirSync(mocks)
 fs.writeFileSync(
@@ -57,6 +59,29 @@ fs.writeFileSync(
     }],
   }),
 )
+// Staged code-judge: the script generator, check-script and vocabulary gates
+// must see registry/staging, not just the core index.
+fs.mkdirSync(path.join(stagingDir, 'code-judge'), { recursive: true })
+fs.writeFileSync(
+  path.join(stagingDir, 'code-judge', 'component.json'),
+  JSON.stringify({
+    id: 'code-judge',
+    name: '代码判题',
+    version: '0.1.0',
+    status: 'core',
+    propsSchema: { type: 'object', additionalProperties: true },
+  }),
+)
+fs.writeFileSync(
+  registryFile,
+  JSON.stringify({
+    schemaVersion: '1.0',
+    registryId: 'smoke-registry',
+    version: '0.0.1',
+    stylePack: { id: 'smoke-style', version: '1.0' },
+    components: [],
+  }),
+)
 fs.writeFileSync(
   input,
   JSON.stringify({
@@ -85,7 +110,7 @@ fs.writeFileSync(
       components: [{ id: 'cover-hero' }, { id: 'quiz-bank' }],
       layouts: [{ id: 'cover' }, { id: 'content-slide' }],
     },
-    registry: { path: 'registry.json', components: [] },
+    registry: { path: registryFile, components: [] },
     templates: {},
     outputs: { courseware, reviewSections: sections },
     existing: { courseware: '' },
@@ -129,6 +154,20 @@ const outlineResponse = {
       components: ['quiz-bank'],
       layout: 'content-slide',
       interaction: { type: 'quiz-bank', level: 'answer', learningAction: 'predict', component: 'quiz-bank' },
+    },
+    {
+      id: 'S03',
+      title: '测试判题',
+      objectiveId: 'O1',
+      objective: '说出测试概念',
+      contentRefs: ['K01'],
+      purpose: '用可运行的 C++ 练习验证概念。',
+      concepts: [],
+      components: ['code-judge'],
+      layout: 'content-slide',
+      interaction: { type: 'code-judge', level: 'construct', learningAction: 'construct', component: 'code-judge' },
+      componentPlan: [{ id: 'code-judge', status: 'existing' }],
+      exercise: { kind: 'code', component: 'code-judge' },
     },
   ],
 }
@@ -178,9 +217,38 @@ const pageResponse2 = {
 function envelope(value) {
   return JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(value) }] })
 }
+const pageResponse3 = {
+  id: 'S03',
+  title: '测试判题',
+  exercise: {
+    component: 'code-judge',
+    statement: '读入两个整数，输出它们的和。',
+    starterCode: '#include <iostream>\nint main() {\n  int a, b;\n  std::cin >> a >> b;\n  std::cout << a + b << std::endl;\n  return 0;\n}',
+    tests: [{ id: 't1', label: '基本样例', input: '1 2\n', expected: '3\n' }],
+  },
+  interactionDesign: {
+    attempt: '让学生在编辑器里运行代码并对照可见测试。',
+    learningAction: 'construct',
+    contentDemand: '学生需要自己写出可编译的程序。',
+    evidence: '全部可见测试通过。',
+    learningFunction: '把概念落到可运行程序。',
+    level: 'construct',
+    initialState: '显示题面、起始代码和一组测试。',
+    studentAction: '修改代码并点击运行测试',
+    successFeedback: '显示全部通过。',
+    errorFeedback: '显示答案错误，并提示测试概念。',
+    completion: '学生运行并理解可见测试结果。',
+    reset: '可以恢复起始代码。',
+    accessibility: '键盘可操作，状态有文字标签。',
+    staticAlternative: '静态显示题面、代码与测试数据。',
+  },
+  narration: ['请补全程序并运行测试。'],
+  transition: '完成后进入下一页。',
+}
 fs.writeFileSync(path.join(mocks, 'outline.json'), envelope(outlineResponse))
 fs.writeFileSync(path.join(mocks, 'page-S01.json'), envelope(pageResponse))
 fs.writeFileSync(path.join(mocks, 'page-S02.json'), envelope(pageResponse2))
+fs.writeFileSync(path.join(mocks, 'page-S03.json'), envelope(pageResponse3))
 
 function run() {
   return spawnSync(
@@ -212,7 +280,7 @@ assert.ok(fs.existsSync(sections))
 assert.ok(fs.existsSync(outline))
 assert.ok(fs.existsSync(path.join(pages, 'S01.json')))
 const parsed = parseScript(courseware)
-assert.equal(parsed.slides.length, 2)
+assert.equal(parsed.slides.length, 3)
 assert.equal(parsed.slides[0].id, 'S01')
 assert.equal(parsed.slides[0].headingTitle, '测试页')
 assert.match(parsed.slides[0].screenContent, /测试概念/)
@@ -220,15 +288,26 @@ assert.equal(parsed.slides[0].machine.interaction.level, 'watch')
 assert.equal(parsed.slides[0].machine.status, 'DRAFT')
 assert.equal(parsed.slides[1].id, 'S02')
 assert.equal(parsed.slides[1].machine.interaction.level, 'answer')
+const exerciseSlide = parsed.slides[2]
+assert.equal(exerciseSlide.id, 'S03')
+assert.match(exerciseSlide.screenContent, /阶段练习/)
+assert.match(exerciseSlide.screenContent, /读入两个整数/)
+assert.match(exerciseSlide.screenContent, /基本样例/)
+assert.match(exerciseSlide.screenContent, /1 2/)
+assert.equal(exerciseSlide.machine.exercise.component, 'code-judge')
+assert.equal(exerciseSlide.machine.exercise.timeLimitMs, 2000)
+assert.equal(exerciseSlide.machine.exercise.maxOutputBytes, 65536)
+assert.deepEqual(exerciseSlide.machine.exercise.tests.map((test) => test.id), ['t1'])
 const sectionData = readData(sections)
-assert.equal(sectionData.sections.length, 2)
+assert.equal(sectionData.sections.length, 3)
 assert.deepEqual(sectionData.sections[0].slides, ['S01'])
 assert.deepEqual(sectionData.sections[1].slides, ['S02'])
+assert.deepEqual(sectionData.sections[2].slides, ['S03'])
 const generatedReport = readData(report)
 assert.equal(generatedReport.pages[0].attempts, 1)
 const scriptGate = spawnSync(
   process.execPath,
-  [path.join(tools, 'check-script.mjs'), courseware, contentFile, styleFile],
+  [path.join(tools, 'check-script.mjs'), courseware, contentFile, styleFile, registryFile],
   { encoding: 'utf8' },
 )
 if (scriptGate.status !== 0) {

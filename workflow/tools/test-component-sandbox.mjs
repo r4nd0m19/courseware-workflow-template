@@ -14,6 +14,10 @@ if (!bwrap) {
   console.log('SKIP component sandbox (bwrap not installed)')
   process.exit(0)
 }
+if (!fs.existsSync(path.join(root, 'registry/components/code-anatomy'))) {
+  console.log('SKIP component sandbox (dev fixture registry/components/code-anatomy not available)')
+  process.exit(0)
+}
 const staging = fs.mkdtempSync(path.join(root, 'registry', '.tmp-component-sandbox-'))
 const packageDir = path.join(staging, 'code-anatomy')
 try {

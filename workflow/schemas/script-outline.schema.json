@@ -92,6 +92,7 @@
         },
         "layout": { "type": "string", "minLength": 1 },
         "interaction": { "$ref": "#/definitions/interaction" },
+        "exercise": { "$ref": "#/definitions/exerciseMarker" },
         "componentPlan": {
           "type": "array",
           "items": { "$ref": "#/definitions/componentPlan" }
@@ -133,6 +134,16 @@
           }
         }
       ]
+    },
+    "exerciseMarker": {
+      "type": "object",
+      "description": "Marks a staged coding checkpoint. The page writer supplies the statement, starter code and visible tests.",
+      "required": ["kind", "component"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "code" },
+        "component": { "const": "code-judge" }
+      }
     },
     "componentPlan": {
       "type": "object",

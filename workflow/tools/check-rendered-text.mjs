@@ -220,6 +220,17 @@ function collectBlocking(slide, out) {
       case 'matrix-basics':
         for (const point of props.concept?.points || []) addBlocking(out.text, point.label)
         break
+      case 'code-judge':
+        // Exercise pages are approved in the script; the visible statement,
+        // starter code and every test datum must survive into the page.
+        addBlocking(out.text, props.statement)
+        addCode(out, props.starterCode)
+        for (const test of props.tests || []) {
+          addBlocking(out.text, test.label)
+          addBlocking(out.text, test.input)
+          addBlocking(out.text, test.expected)
+        }
+        break
       default:
         // Unknown blank component: title only. Its props are reviewed on the
         // rendered page, not assumed visible here.

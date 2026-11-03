@@ -1,0 +1,376 @@
+/* code-judge — component-scoped styles. Shell tokens provide the visual
+   language; every rule is scoped under .code-judge so the deck bundle cannot
+   leak styles into other pages. */
+.code-judge {
+  --cj-ink: var(--ink, #26382f);
+  --cj-muted: var(--muted, #66766e);
+  --cj-yellow: var(--yellow, #f5bf4f);
+  --cj-orange: var(--orange, #c78332);
+  --cj-sky: var(--sky, #b9dfe9);
+  --cj-green: var(--green, #4f8f54);
+  --cj-red: var(--red, #b84c3f);
+  --cj-paper: #ffffff;
+  --cj-soft: #f4f5f2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 1120px;
+  min-width: 0;
+  color: var(--cj-ink);
+  font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.code-judge *,
+.code-judge *::before,
+.code-judge *::after {
+  box-sizing: border-box;
+}
+.code-judge [hidden] {
+  display: none !important;
+}
+.code-judge-statement {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 6px solid var(--cj-orange);
+  background: #fff8ce;
+  font-size: 14.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.code-judge-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+}
+.code-judge-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 2px solid var(--cj-ink);
+  border-radius: 3px;
+  background: var(--cj-paper);
+  box-shadow: 4px 4px 0 var(--cj-sky);
+}
+.code-judge-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-bottom: 2px solid var(--cj-ink);
+  background: var(--cj-soft);
+  font-size: 13px;
+  font-weight: 900;
+}
+.code-judge-shortcut {
+  color: var(--cj-muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.code-judge-editor {
+  position: relative;
+  height: 238px;
+  min-height: 180px;
+  overflow: hidden;
+  background: #1e2a27;
+}
+.code-judge-editor-mount,
+.code-judge-editor .cm-editor {
+  height: 100%;
+}
+.code-judge-editor .cm-scroller {
+  overflow: auto;
+}
+.code-judge-textarea {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: #1e2a27;
+  color: #e8f5e7;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+.code-judge-textarea:focus-visible {
+  outline: 3px solid var(--cj-yellow);
+  outline-offset: -3px;
+}
+.code-judge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 2px solid var(--cj-ink);
+}
+.code-judge-run,
+.code-judge-reset {
+  min-height: 34px;
+  padding: 4px 14px;
+  border: 2px solid var(--cj-ink);
+  border-radius: 3px;
+  background: var(--cj-paper);
+  color: var(--cj-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--cj-yellow);
+}
+.code-judge-run {
+  background: var(--cj-yellow);
+}
+.code-judge-run:hover:not(:disabled),
+.code-judge-reset:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.code-judge-run:disabled,
+.code-judge-reset:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.code-judge-run:focus-visible,
+.code-judge-reset:focus-visible,
+.code-judge-compile summary:focus-visible {
+  outline: 3px solid var(--cj-orange);
+  outline-offset: 2px;
+}
+.code-judge-status {
+  flex: 1 1 120px;
+  min-width: 0;
+  color: var(--cj-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.code-judge-status[data-tone="ok"] {
+  color: var(--cj-green);
+  font-weight: 900;
+}
+.code-judge-status[data-tone="bad"] {
+  color: var(--cj-red);
+  font-weight: 900;
+}
+.code-judge-status[data-tone="busy"] {
+  color: var(--cj-orange);
+  font-weight: 900;
+}
+.code-judge-summary {
+  color: var(--cj-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+.code-judge-summary[data-tone="ok"] {
+  color: var(--cj-green);
+}
+.code-judge-summary[data-tone="bad"] {
+  color: var(--cj-red);
+}
+.code-judge-tests {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  max-height: 300px;
+  overflow: auto;
+  list-style: none;
+}
+.code-judge-test {
+  padding: 6px 8px;
+  border: 1px solid #b9c3bd;
+  border-left: 4px solid #b9c3bd;
+  border-radius: 2px;
+  background: #fff;
+}
+.code-judge-test-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.code-judge-state {
+  flex: 0 0 auto;
+  min-width: 54px;
+  padding: 1px 6px;
+  border: 1px solid var(--cj-ink);
+  border-radius: 999px;
+  background: var(--cj-soft);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+}
+.code-judge-test-label {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-judge-test.is-running {
+  border-left-color: var(--cj-orange);
+  background: #fff8ce;
+}
+.code-judge-test.is-ac {
+  border-left-color: var(--cj-green);
+}
+.code-judge-test.is-ac .code-judge-state {
+  background: #d8f2df;
+  color: var(--cj-green);
+}
+.code-judge-test.is-wa,
+.code-judge-test.is-re,
+.code-judge-test.is-tle,
+.code-judge-test.is-ole {
+  border-left-color: var(--cj-red);
+}
+.code-judge-test.is-wa .code-judge-state,
+.code-judge-test.is-re .code-judge-state,
+.code-judge-test.is-tle .code-judge-state,
+.code-judge-test.is-ole .code-judge-state {
+  background: #ffe1d8;
+  color: var(--cj-red);
+}
+.code-judge-test-data {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2px 8px;
+  margin: 5px 0 0;
+}
+.code-judge-test-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+.code-judge-test-row dt {
+  color: var(--cj-muted);
+  font-size: 10.5px;
+  font-weight: 900;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.code-judge-test-row dd {
+  min-width: 0;
+  margin: 0;
+}
+.code-judge-test-data pre,
+.code-judge-actual pre {
+  max-height: 54px;
+  margin: 0;
+  padding: 2px 5px;
+  overflow: auto;
+  border-radius: 2px;
+  background: var(--cj-soft);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.code-judge-actual {
+  margin-top: 5px;
+}
+.code-judge-actual-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--cj-muted);
+  font-size: 10.5px;
+  font-weight: 900;
+}
+.code-judge-actual pre {
+  max-height: 72px;
+  background: #1e2a27;
+  color: #d8f4dc;
+}
+.code-judge-test-note {
+  display: block;
+  margin-top: 3px;
+  color: var(--cj-red);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.code-judge-test.is-ac .code-judge-test-note {
+  color: var(--cj-muted);
+}
+.code-judge-compile {
+  margin: 0;
+  border-top: 2px solid var(--cj-ink);
+  background: #fff8ce;
+}
+.code-judge-compile summary {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.code-judge-compile-output {
+  max-height: 160px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-top: 1px solid #d8cf9b;
+  background: #fff;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.code-judge-static-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.code-judge-static-code {
+  max-height: 260px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  background: #1e2a27;
+  color: #e8f5e7;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+}
+.code-judge-tests-static {
+  max-height: 260px;
+}
+.code-judge-static-note {
+  margin: 0;
+  color: var(--cj-muted);
+  font-size: 11.5px;
+}
+@media (max-width: 900px) {
+  .code-judge-grid,
+  .code-judge-static-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .code-judge-editor {
+    height: 220px;
+  }
+  .code-judge-tests {
+    max-height: 260px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .code-judge-run:hover:not(:disabled),
+  .code-judge-reset:hover:not(:disabled) {
+    transform: none;
+  }
+  .code-judge * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

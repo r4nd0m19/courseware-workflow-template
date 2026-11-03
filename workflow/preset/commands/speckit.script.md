@@ -25,6 +25,7 @@ $ARGUMENTS
    - **旁白 / 语音**：逐字稿；等待操作处写 `[暂停]`；不得照读屏幕全文。
    - **转场**：与上一屏/下一屏的衔接。
    - **制作字段**：`id`、`title`、`objectiveId`、`contentRefs`、`components`、`layout`、`interaction`（必填：`type`、`level`、`contentDemand`、`learningAction`、`evidence`、`learningFunction`、`staticAlternative`；`watch` 另填 `whyStatic`）、`componentPlan`、`status`。
+   - **阶段练习（可选）**：制作字段可加 `exercise: {component: code-judge, statement, starterCode, tests: [{id, label, input, expected}], timeLimitMs, maxOutputBytes}`。屏幕内容必须同时写出题面、起始代码和每组测试（工作流模式下由 `generate-courseware-script.mjs` 自动渲染）；`components` 含 `code-judge`，`interaction.component` 为 `code-judge`，层级/学习动作为 `construct` 或 `modify`，`componentPlan` 只能是 `existing`。最多 4 个、不能放第一页、不能连续两页；练习只是课堂练习，**不锁定翻页、没有通关门禁**。
 5. 内容与教学规则：
    - content pack 中每个 `required: true` 项至少被一个非 SKIP 屏的 `contentRefs` 引用。
    - 每个 objective 至少一个 `answer` 级及以上互动；`watch` 级必须有静态替代与静态理由。

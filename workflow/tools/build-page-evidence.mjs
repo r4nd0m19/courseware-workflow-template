@@ -381,6 +381,7 @@ const scriptSlides = section.slides.map((id) => {
     transition: slide.transition,
     interaction: machine.interaction || board.interaction || null,
     componentPlan: machine.componentPlan || null,
+    exercise: machine.exercise || null,
   }
 })
 let relatedConcepts = []

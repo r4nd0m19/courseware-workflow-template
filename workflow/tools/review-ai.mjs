@@ -94,6 +94,10 @@ function readConfigFile(file) {
   }
 }
 const fileConfig = readConfigFile(configPath)
+// One shared config drives every AI step: page review may pass --zcode-* flags,
+// while text reviews inherit zcodeConfig/zcodeProvider from the same JSON file.
+const effectiveZcodeConfigPath = zcodeConfigPath || fileConfig.zcodeConfig || ''
+const effectiveZcodeProviderId = zcodeProviderId || fileConfig.zcodeProvider || ''
 
 function zcodeConfigCandidates(value) {
   return (Array.isArray(value) ? value : [value])
@@ -144,8 +148,8 @@ function readZcodeProvider(file, providerId) {
   return { api, baseUrl, model: rule.modelId, apiKey, providerId: chosen.providerId }
 }
 
-const zcode = zcodeConfigPath
-  ? readZcodeProvider(zcodeConfigPath, zcodeProviderId)
+const zcode = effectiveZcodeConfigPath
+  ? readZcodeProvider(effectiveZcodeConfigPath, effectiveZcodeProviderId)
   : null
 const api =
   opt('--api') ||
@@ -162,8 +166,11 @@ const baseUrl =
 const model =
   opt('--model') ||
   process.env.COURSEWARE_REVIEW_MODEL ||
-  zcode?.model ||
+  // textModel keeps long text steps on a fast text model while `model` stays
+  // reserved for the vision page review.
+  fileConfig.textModel ||
   fileConfig.model ||
+  zcode?.model ||
   (mockResponsePath ? 'mock' : '')
 const apiKeyEnv = opt('--api-key-env') || fileConfig.apiKeyEnv || 'COURSEWARE_REVIEW_API_KEY'
 const apiKeyFile =

@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { readData } from './lib.mjs'
 import { parseFlagValue } from './self-review-lib.mjs'
+import { readStagingManifests, stagingDirForRegistry } from './registry-lib.mjs'
 
 const args = process.argv.slice(2)
 const lessonSlug = parseFlagValue(args, '--lesson-slug')
@@ -38,8 +39,12 @@ if (!lessonSlug || !scriptPath || !reviewSectionsPath || !contentPath || !concep
   process.exit(2)
 }
 
-const feature = readData('.specify/feature.json')
-const specPath = path.join(feature.feature_directory, 'spec.md')
+// New projects may not have .specify/feature.json; fall back to the lesson's
+// own spec directory, matching generate-brief.mjs.
+const feature = fs.existsSync('.specify/feature.json') ? readData('.specify/feature.json') : {}
+const specPath = feature.feature_directory
+  ? path.join(feature.feature_directory, 'spec.md')
+  : path.join('specs', lessonSlug, 'spec.md')
 function readText(file) {
   return fs.existsSync(path.resolve(file)) ? fs.readFileSync(path.resolve(file), 'utf8') : ''
 }
@@ -83,6 +88,29 @@ const styleFull = styleFullPath && fs.existsSync(path.resolve(styleFullPath))
   ? readData(styleFullPath)
   : null
 const registry = readData(registryPath)
+const coreComponents = (Array.isArray(registry.components)
+  ? registry.components
+  : Object.entries(registry.components || {}).map(([id, value]) => ({ id, ...value }))
+).map((component) => ({
+  id: component.id,
+  version: component.version,
+  status: component.status,
+  staged: false,
+}))
+const coreIds = new Set(coreComponents.map((component) => component.id))
+// Staging implementations are already built and usable for the first page
+// that needs them; the script must be able to schedule them instead of
+// declaring a duplicate new component.
+const stagingComponents = readStagingManifests(stagingDirForRegistry(registryPath))
+  .map(({ manifest }) => ({
+    id: manifest.id,
+    version: manifest.version,
+    status: manifest.status,
+    staged: true,
+    whenToUse: manifest.whenToUse || '',
+    interactionLevels: manifest.interactionLevels || [],
+  }))
+  .filter((component) => component.id && !coreIds.has(component.id))
 const input = {
   schemaVersion: '1.0',
   lessonSlug,
@@ -103,14 +131,7 @@ const input = {
   },
   registry: {
     path: registryPath,
-    components: (Array.isArray(registry.components)
-      ? registry.components
-      : Object.entries(registry.components || {}).map(([id, value]) => ({ id, ...value }))
-    ).map((component) => ({
-      id: component.id,
-      version: component.version,
-      status: component.status,
-    })),
+    components: [...coreComponents, ...stagingComponents],
   },
   templates: {
     script: { path: scriptTemplatePath, text: readText(scriptTemplatePath) },
@@ -134,6 +155,10 @@ const input = {
     '互动形式从内容的学习动作推出；quiz 只用于检索/预测，不按组件凑数。',
     '标题是学生可见标题，不得带“封面：/标题：/第 X 页/Sxx”等制作前缀。',
     '组件只能来自 style.components / registry.components，或明确标为 new/extend 并写组件简报。',
+    'registry.components 中 staged=true 的组件已经构建完成，可直接用 existing 引用；不要把它们标成 new/extend。',
+    '阶段练习用 code-judge：在 outline 页标 exercise，并在该页 page JSON 写 exercise（statement/starterCode/tests），不写 screenContent；屏幕内容由工具生成。',
+    '阶段练习 1-3 个为宜，最多 4 个；不能放在第一页，不能连续两页；测试数据全部可见，不设隐藏测试。',
+    '阶段练习只是练习页，不锁定翻页、不做通关门禁；旁白和交互设计不要承诺“做完才能继续”。',
     '不要写 TODO/TBD/待定/占位内容；不要写个人信息。',
   ],
 }

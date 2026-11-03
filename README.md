@@ -2,15 +2,17 @@
 
 这是 Spec Kit 的 `courseware-production` + `courseware-shell` 工作流模板，用于在**新项目**里装好课件生产流水线：壳生成/审核 → 教学简报 → 人类可读脚本 → 概念台账 → 分镜 → 逐页组件/页面审核 → 渲染与门禁 → 壳站点。
 
-模板只包含工作流引擎、preset、Node 门禁工具、示例和安装脚本；**不包含**具体课件的壳、风格包、注册表、研究资料、插画或截图。这些内容需要由使用方项目自行准备，避免把第三方参考素材和个人信息带进模板。
+模板只包含工作流引擎、preset、Node 门禁工具、示例、内置判题运行时和安装脚本；**不包含**具体课件的壳、风格包、用户自己的注册表、研究资料、插画或截图。模板自带 `judge-runtime/` 与暂存组件 `registry/staging/code-judge/`（安装时复制到项目），用于阶段编程题；用户自己的组件仍由项目维护。完整阶段、产物与审核点见 `工作流说明.md`。
 
-- 工作流版本：`courseware-production` `0.44.1`（90 个顶层步骤，0 个 command/prompt 步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
-- preset：`courseware` `0.3.15`
-- 模板版本：`0.24.0`（2026-10-28）
+- 工作流版本：`courseware-production` `0.46.1`（90 个顶层步骤，0 个 command/prompt 步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
+- preset：`courseware` `0.3.16`
+- 模板版本：`0.25.0`（2026-11-03）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
 - 脚本审核：`review-script` 显示自动生成的老师版 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行“学生要做”摘要；交互设计与制作字段保留在 `courseware.md` 供工具使用，脚本批准账本仍绑定完整源文件。
 - 页面实现：`build-page-deck-evidence` + `single-shot-generate --mode page-deck` + `apply-page-deck`；模型只返回一页 slide JSON，Node 校验后写 deck，不再由 coding agent 构建/截图。
 - 0.44.1 工作流修复：新增 `declared_pages` 页数预算；校验 `audio_url_prefix` 并阻止 Git Bash 路径改写；修复 existing 组件跨页复用误报；修复脚本自审证据的 objective 与补充标签；`gate-review show` 自动定位课时 gate 目录。
+- 阶段练习页（0.46.0）：脚本大纲可以把某页标为 `exercise`（`code-judge`），页面模型只返回题面、起始代码和 1–6 组公开测试，屏幕内容由 Node 渲染；`apply-page-deck` 要求题面、代码、测试和时限逐字一致，拒绝隐藏测试、`disabled` 和静态降级。阶段练习只用于课堂练习，**不锁定翻页、没有通关门禁**；最多 4 个、非首页、不连续。模板自带判题运行时与 `code-judge` 暂存组件，安装时复制到项目；首次使用判题页前运行 `node judge-runtime/install.mjs` 下载并校验约 91MB 的 browsercc（已 gitignore）。
+- 0.46.1 修复：一份 AI 配置文件驱动页面自审与文本生成（`model` 用于看图审核，`textModel` 用于长文本）；新建项目没有 `.specify/feature.json` 时回退 `specs/<lesson>/spec.md`；Windows 路径、沙箱和参考提取兼容；AI 步骤超时放宽；推理模型建议 `maxTokens: 32768`、`timeoutMs: 300000`。
 - Beta 收敛（0.44.0）：`generate-converge-report.mjs` 读取 Alpha/批准/截图/`review/<lesson>/trial-feedback.md`，有试用反馈时一次无工具模型调用只返回 findings/verdict/followUps；没有反馈时直接生成空报告，不调用模型。报告不修改已批准内容，未关闭 blocker 由 Beta 确定性扫描拦下。
 - 脚本生成：`build-script-input` → `generate-courseware-script`（大纲 JSON → 逐页 page JSON → 校验/局部重试）→ `render-courseware-md` + `render-review-sections`；生产 workflow 的 `script` 步骤是 shell，不再调用 `speckit.script`。
 - 教学简报 / 自学审核：`generate-brief` 渲染 `spec.md` + `concepts.yml`；`generate-self-study-audit` 生成 rubric/缺口/补充或新增页判断，Node 生成 `self-study-audit.json` + 报告 + `courseware.self-study.md`，并用 `check-self-study` 校验；新增页会同步 `review-sections.yml`。`brief` / `self-study-audit` 步骤不再调用 coding agent。
@@ -49,7 +51,7 @@
 
 ## 在 ZCode 里使用
 
-ZCode 是 Spec Kit 的内置 integration（`zcode`），AI 步骤由 `zcode -p` 执行，技能渲染到 `.zcode/skills`。
+ZCode 是 Spec Kit 的内置 integration（`zcode`），技能渲染到 `.zcode/skills`。0.44.0 起 workflow 的 AI 步骤由 Node 直接调用模型，不再由 `zcode -p` 执行；`zcode -p` 只用于手动 `speckit-*` 技能。
 
 ```bash
 # 在项目根目录；确保 zcode CLI 在 PATH 上
@@ -79,9 +81,10 @@ cat > ~/.config/courseware/page-review.json <<'JSON'
   "api": "anthropic-messages",
   "baseUrl": "https://你的视觉模型网关",
   "model": "支持图片输入的模型",
+  "textModel": "长文本生成模型",
   "apiKeyFile": "~/.config/courseware/page-review.key",
-  "maxTokens": 8192,
-  "timeoutMs": 120000,
+  "maxTokens": 32768,
+  "timeoutMs": 300000,
   "structuredOutput": "json"
 }
 JSON
@@ -94,8 +97,9 @@ node workflow/tools/page-review-ai.mjs --check-config
 
 - `api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。
 - 也可以不用配置文件，改用 `COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。
-- 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。
-- `structuredOutput` 建议 `json`；DeepSeek 兼容端点可能返回 DSML 文本，工具检测到会自动重试一次 JSON 模式。`maxTokens` 默认 8192，推理模型可能把几千 token 花在 thinking 上。
+- 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。`textModel` 只用于文本步骤，不要求图片能力。
+- 同一份配置驱动所有 AI 步骤：页面自审用 `model`，简报/脚本/组件/收敛等长文本步骤用 `textModel`（缺省回退 `model`）；显式命令行参数仍优先。
+- `structuredOutput` 建议 `json`；DeepSeek 兼容端点可能返回 DSML 文本，工具检测到会自动重试一次 JSON 模式。`maxTokens` 默认 8192，推理模型可能把几千 token 花在 thinking 上；长输出步骤建议 `maxTokens: 32768`、`timeoutMs: 300000`。
 - ZCode 用户可以在配置里写 `"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`，直接复用 ZCode 已配置的 provider/model/key，不需要另外复制 key。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 是候选路径数组，Windows 用 `~`、WSL 用 `/mnt/c/...`，谁存在用谁。
 - 工作流在逐页循环前运行 `check-page-review-config`，配置缺失会提前失败。
 - `page-review-ai.mjs --dry-run` 可以只生成请求预览，不调用模型、不打印 key。
@@ -128,7 +132,7 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 2. 缺少 `specify` 时，用 `uv tool install specify-cli` 或 `pipx install specify-cli` 安装 Spec Kit CLI；
 3. 克隆模板到临时目录；
 4. 在目标目录 `git init`，写入 `.gitignore` 和 `AGENTS.md`（已存在则保留）；
-5. 运行 `workflow/install.mjs --integration codex`，安装 `gui-gate` step、preset 和两个工作流（`courseware-shell` + `courseware-production`）；旧版 `.zcode/config.json` 里的 `courseware-approval` 条目会被移除；
+5. 运行 `workflow/install.mjs --integration codex`，安装 `gui-gate` step、preset 和两个工作流（`courseware-shell` + `courseware-production`）；首次安装会把模板自带的 `judge-runtime/` 和 `registry/staging/code-judge/` 复制到项目（已有则保留）；旧版 `.zcode/config.json` 里的 `courseware-approval` 条目会被移除；
 6. `npm ci` 安装 `workflow/tools` 依赖；
 7. 检测 Chrome/Chromium；没有则用项目内的 `playwright-core` 下载 Chromium；
 8. 跑 `smoke-test.mjs`、`specify workflow info courseware-shell` 和 `specify workflow info courseware-production` 做验证。
@@ -150,9 +154,9 @@ bash bootstrap-codex-courseware.sh --integration zcode --force
 
 ```bash
 specify workflow info courseware-shell        # 应显示 0.1.0、3 steps
-specify workflow info courseware-production   # 应显示 0.43.0、90 steps
+specify workflow info courseware-production   # 应显示 0.46.1、90 steps
 specify integration status                    # 应包含 codex
-node workflow/tools/smoke-test.mjs            # 完整仓库 143/143；模板仓库 138/138（2 项壳检查 SKIP）
+node workflow/tools/smoke-test.mjs            # 完整开发仓库 152/152；模板仓库 140/140（8 项依赖开发样例的检查 SKIP）
 ls .agents/skills                             # 应包含 speckit-script 等
 ```
 
@@ -175,12 +179,23 @@ rsync -a --delete \
   --exclude node_modules --exclude __pycache__ \
   --exclude chrome-path.txt --exclude .cache \
   /path/to/courseware/workflow/ ~/code/courseware-workflow-template/workflow/
+
+# 同步模板级运行时、暂存组件和文档（不复制 browsercc）
+rsync -a --exclude browsercc --exclude node_modules \
+  /path/to/courseware/judge-runtime/ ~/code/courseware-workflow-template/judge-runtime/
+mkdir -p ~/code/courseware-workflow-template/registry/staging
+rsync -a \
+  /path/to/courseware/registry/staging/code-judge/ \
+  ~/code/courseware-workflow-template/registry/staging/code-judge/
+cp /path/to/courseware/AGENTS.md /path/to/courseware/工作流说明.md ~/code/courseware-workflow-template/
+
 cd ~/code/courseware-workflow-template
+# 更新 VERSION 后再提交
 git add -A
 git commit -m "chore: sync workflow"
 ```
 
-不要把 `workflow/tools/node_modules`、`workflow/tools/chrome-path.txt`、`.specify/`、`research/`、`shells/`、`specs/`、`generated/`、`prototype/`、`screenshots/`、`review/` 或任何凭据提交进模板。
+不要把 `workflow/tools/node_modules`、`workflow/tools/chrome-path.txt`、`judge-runtime/browsercc/`、`.specify/`、`research/`、`shells/`、`specs/`、`generated/`、`prototype/`、`screenshots/`、`review/` 或任何凭据提交进模板。
 
 ## 发布
 

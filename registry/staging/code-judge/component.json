@@ -1,0 +1,253 @@
+{
+  "id": "code-judge",
+  "name": "代码判题",
+  "version": "0.1.0",
+  "status": "core",
+  "category": "interactive",
+  "description": "在课件页面内编写 C++，在浏览器里编译并逐组运行可见测试，给出通过、答案错误、运行错误、超时和输出超限的即时反馈。",
+  "tags": [
+    "code",
+    "cpp",
+    "compiler",
+    "judge",
+    "editor",
+    "practice"
+  ],
+  "interactionLevels": [
+    "construct",
+    "modify"
+  ],
+  "whenToUse": "当一屏需要学生自己写一段 C++，并用 1–6 组公开的输入/输出数据验证结果时；适合课堂练习、变式和即时纠错。",
+  "whenNotToUse": "当需要隐藏测试、防作弊、正式评测或长期保存提交记录时，不使用本组件；当页面只需要读代码或选择答案时，使用 code-anatomy 或 quiz-bank。",
+  "learningFunction": "让学生把刚学的语法或算法落到可运行的程序上，用逐组测试暴露边界与输出格式问题，形成“写—运行—看结果—修改”的练习闭环。",
+  "propsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "statement",
+      "tests"
+    ],
+    "properties": {
+      "statement": {
+        "type": "string",
+        "minLength": 1,
+        "description": "题面，保留换行；只接受纯文本。"
+      },
+      "starterCode": {
+        "type": "string",
+        "default": "",
+        "description": "初始代码；学生可以恢复到这里。"
+      },
+      "tests": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 6,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "label",
+            "input",
+            "expected"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "input": {
+              "type": "string",
+              "description": "标准输入；可为空字符串。"
+            },
+            "expected": {
+              "type": "string",
+              "description": "期望的标准输出；可为空字符串。"
+            }
+          }
+        }
+      },
+      "timeLimitMs": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 10000,
+        "default": 2000,
+        "description": "每组测试的墙钟时间上限。"
+      },
+      "compileTimeoutMs": {
+        "type": "integer",
+        "minimum": 10000,
+        "maximum": 300000,
+        "default": 120000,
+        "description": "编译总超时；第一次加载编译器通常需要数秒。"
+      },
+      "maxOutputBytes": {
+        "type": "integer",
+        "minimum": 4096,
+        "maximum": 1048576,
+        "default": 65536,
+        "description": "标准输出与标准错误的总字节上限。"
+      },
+      "runtimeBaseUrl": {
+        "type": "string",
+        "default": "judge-runtime/",
+        "description": "站点内的判题运行时目录；禁止外部协议或协议相对 URL。"
+      },
+      "fallbackMode": {
+        "type": "string",
+        "enum": [
+          "interactive",
+          "static"
+        ],
+        "default": "interactive"
+      },
+      "disabled": {
+        "type": "boolean",
+        "default": false
+      },
+      "ariaLabel": {
+        "type": "string"
+      }
+    }
+  },
+  "states": [
+    "idle",
+    "compiling",
+    "compile-error",
+    "running",
+    "passed",
+    "failed",
+    "disabled",
+    "static"
+  ],
+  "interactionModel": {
+    "states": [
+      "idle",
+      "compiling",
+      "compile-error",
+      "running",
+      "passed",
+      "failed",
+      "disabled",
+      "static"
+    ],
+    "transitions": [
+      {
+        "from": "idle",
+        "event": "run",
+        "to": "compiling",
+        "feedback": "禁用运行与恢复按钮，状态区提示正在准备编译器。"
+      },
+      {
+        "from": "compiling",
+        "event": "compile-failed",
+        "to": "compile-error",
+        "feedback": "显示编译器输出，测试项保持“待运行”。"
+      },
+      {
+        "from": "compile-error",
+        "event": "run",
+        "to": "compiling",
+        "feedback": "重新编译当前代码。"
+      },
+      {
+        "from": "compiling",
+        "event": "compiled",
+        "to": "running",
+        "condition": "编译器返回 WebAssembly 模块",
+        "feedback": "逐组运行测试，测试项显示“运行中…”。"
+      },
+      {
+        "from": "running",
+        "event": "all-tests-pass",
+        "to": "passed",
+        "feedback": "汇总显示“全部通过”，每组显示实际输出。"
+      },
+      {
+        "from": "running",
+        "event": "any-test-fails",
+        "to": "failed",
+        "feedback": "汇总显示首个失败的类别，逐组标出错误、超时或输出超限。"
+      },
+      {
+        "from": "passed",
+        "event": "run",
+        "to": "compiling",
+        "condition": "代码已修改",
+        "feedback": "重新编译；未修改时复用已编译模块直接重跑。"
+      },
+      {
+        "from": "failed",
+        "event": "run",
+        "to": "compiling",
+        "condition": "代码已修改",
+        "feedback": "重新编译；未修改时复用已编译模块直接重跑。"
+      },
+      {
+        "from": "passed",
+        "event": "reset",
+        "to": "idle",
+        "feedback": "恢复初始代码并清空结果。"
+      },
+      {
+        "from": "failed",
+        "event": "reset",
+        "to": "idle",
+        "feedback": "恢复初始代码并清空结果。"
+      }
+    ]
+  },
+  "accessibility": {
+    "keyboard": "Tab 进入编辑器、运行测试和恢复初始代码；编辑器内 Ctrl/⌘+Enter 直接运行；编辑器按键不会触发课件的翻页快捷键。",
+    "aria": "组件根节点使用 role=region 与 aria-label；运行状态使用 role=status、aria-live=polite；运行中根节点设置 aria-busy=true；测试项的通过/错误状态有文字标签，不只靠颜色。",
+    "focus": "按钮和编辑器有 3px 可见焦点环；编辑器替换为 CodeMirror 时保留原焦点；运行结束后焦点不强制跳转。",
+    "contrast": "正文与背景达到 7:1，测试状态与背景达到 4.5:1；通过/错误同时有“通过”“答案错误”等文字标签。",
+    "reducedMotion": "prefers-reduced-motion: reduce 下取消按钮上移与所有过渡动画，状态变化仍即时可见。"
+  },
+  "fallback": {
+    "description": "静态版保留题面、初始代码、每组测试的输入与期望输出，不提供运行按钮；无脚本或无判题运行时仍能读懂题目和数据。"
+  },
+  "implementation": "runtime.js",
+  "stories": [
+    "stories/index.html",
+    "stories/static.html"
+  ],
+  "tests": [
+    "tests/core.spec.mjs",
+    "tests/interaction.spec.mjs",
+    "tests/real-compile.spec.mjs"
+  ],
+  "baselines": [
+    "baselines/sum-1100x560.png",
+    "baselines/reverse-1100x560.png"
+  ],
+  "provenance": {
+    "type": "generated",
+    "brief": "workflow/examples/component-briefs/code-judge.md",
+    "reuseSearch": "代码编辑 编译 判题 测试数据 / code,compiler,judge,editor — NO MATCH; registry has code-anatomy (read-only anatomy) and quiz-bank (choice questions), neither compiles or runs code",
+    "approvedBy": "pending-page-review",
+    "approvedAt": "2026-11-03T09:00:00.000Z"
+  },
+  "usedBy": [],
+  "runtime": "vanilla-browser",
+  "styles": [
+    "styles.css"
+  ],
+  "sourceFidelity": {
+    "kind": "generated",
+    "sourceRefs": [],
+    "selectors": [
+      ".code-judge",
+      ".code-judge-editor",
+      ".code-judge-tests",
+      ".code-judge-test",
+      ".code-judge-state"
+    ],
+    "animation": "只有按钮 hover 的 1px 上移；prefers-reduced-motion 下取消。",
+    "notes": "生成的交互组件；用 shell 的纸面、描边、硬阴影和黄色强调色构建编辑器与测试结果两栏，不复制参考课件内容。判题使用 browsercc 0.1.1（Clang/LLD WASM）、@bjorn3/browser_wasi_shim 0.4.2 与 CodeMirror 6，均在浏览器本地运行。"
+  }
+}

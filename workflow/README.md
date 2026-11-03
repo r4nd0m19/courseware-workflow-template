@@ -2,9 +2,15 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.44.1 / 90 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.46.1 / 90 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
 
 **人工审核只有三类：壳、整份课程脚本、每一页。**
+
+- **跨平台与共享配置修复（0.46.1）**：文本步骤（`review-ai`、`single-shot-generate`）现在和页面自审共用同一份配置文件，读取其中的 `zcodeConfig` / `zcodeProvider`，并支持 `textModel` 给长文本步骤、`model` 留给视觉自审；显式配置的 `model` 优先于 provider 的默认模型。简报/脚本自审证据与脚本输入工具在没有 `.specify/feature.json` 的新项目里回退到 `specs/<lesson>/spec.md`。`extract-content` / `extract-reference-component` 改用 `fileURLToPath` 读取 schema；Windows 上组件检查自动关闭 bubblewrap，`generate-components` 透传 `--no-sandbox`，参考提取测试用 junction/复制回退。AI 步骤超时放宽（简报/自学审核/脚本自审 900s，其余文本步骤 600s）。插画接口无可用通道时可显式设 `COURSEWARE_ART_LOCAL_FALLBACK=1`，用参考图生成本地变体并以 `model: local-variant` 记录溯源（默认关闭，绝不冒充 API 生成）。
+
+- **阶段练习页（0.46.0）**：脚本大纲可把某页标为 `exercise`（`code-judge`）；页面模型只返回题面、起始代码和 1–6 组公开测试，不写屏幕内容，Node 渲染 `courseware.md` 的屏幕内容并把规范化的 exercise 写入制作字段。`build-page-deck-evidence` 透传 exercise；`apply-page-deck` 要求 `type=blank` + `component=code-judge`，题面、起始代码、测试和时限必须与已批准脚本逐字一致，拒绝隐藏测试、禁用态和静态降级；`check-rendered-text` 会把题面、起始代码和每组测试都作为高信号文本检查。`generate-component-plan` / `check-component-plan` / `check-vocabulary` / `build-script-input` 现在也能看到 `registry/staging`，staged 组件（如 `code-judge`）可直接作为 `existing` 复用，不必再规划成新组件。阶段练习只用于课堂练习，**不锁定翻页、不做通关门禁**；位置约束为最多 4 个、非首页、不连续。preset 0.3.16。
+
+- **纯浏览器判题（0.45.0）**：新增 `code-judge` 组件（`registry/staging/code-judge/`）和 `judge-runtime/`。学生在页面里写 C++，browsercc 0.1.1（Clang/LLD WASM）在第一次运行时加载并在浏览器内编译；每组公开测试在独立 WASI Worker 中运行，支持 AC/WA/RE/TLE/OLE/CE、超时终止和输出字节上限。`build-shell-site` 只在 deck 含 `code-judge` 页时复制运行时（默认 `judge-runtime/`），缺失时 fail-closed 并提示 `node judge-runtime/install.mjs`；运行时约 91MB，已 gitignore，不入库。测试数据对学生可见，定位是课堂练习，不是正式 OJ。`workflow/tools/test-code-judge.mjs` 覆盖壳站点集成与真实编译。
 
 第一次使用：安装后不需要重启 ZCode。把课程资料（教案/讲义/网页/Word/PDF/图片）放进项目，对 agent 说 **“开始做课件”**。老师说明见 `START-HERE.md`；agent 流程见 `AGENTS.md`。以下是内部细节，老师不需要阅读。
 
@@ -92,7 +98,9 @@
 | `tools/generate-shell-art.mjs` / `check-shell-art.mjs` | 按课件生成风格相似但不同的角色插图；哈希/尺寸/透明背景/溯源门禁；`--reuse` 幂等复用，`--prompt-file` 提供本课提示词 |
 | `tools/image-alpha.mjs` | 生成图去白底、裁透明边距，按壳配置最近邻像素化，输出带 alpha 的像素角色 |
 | `tools/prepare-shell-site.mjs` | 选壳 + deck + 语音 + 插图 → 可运行站点，写 `build-manifest.json`；默认缺图即失败 |
-| `tools/build-shell-site.mjs` | 生产构建唯一入口：插画 provenance → `prepare-shell-site`（fail-closed）→ 组件 bundle/宿主 → 壳/插画站点闸门 |
+| `tools/build-shell-site.mjs` | 生产构建唯一入口：插画 provenance → `prepare-shell-site`（fail-closed）→ `code-judge` 运行时复制（按需）→ 组件 bundle/宿主 → 壳/插画站点闸门 |
+| `tools/judge-runtime-lib.mjs` / `judge-runtime/` | 纯浏览器判题：检测 deck 是否用 `code-judge`、校验/复制 browsercc 运行时；安装见 `node judge-runtime/install.mjs` |
+| `tools/test-code-judge.mjs` | 判题站点集成测试：壳站点 + 组件 bundle + 运行时，在 headless Chromium 里真实编译并跑完 3 组测试 |
 | `runtime/shell-component-host.js` | 壳站点的 deck 级组件宿主：挂载 `blank` 页注册组件，删除无 chapter 页时的 `0.x` 站号 |
 | `tools/check-deck-data.mjs` | deck 数据 vs storyboard（id/title/顺序/type/旁白/禁用字段）门禁 |
 | `tools/sync-deck-components.mjs` | 把注册表 core 组件打成 `components.bundle.js/.css` |
@@ -173,10 +181,11 @@ specs/<lesson>/deck.json + narration.json + specs/<lesson>/art-prompts.json
          │  build-shell-site.mjs
          │   1. check-shell-art --require-all（本课插画 provenance）
          │   2. prepare-shell-site（默认 fail-closed：缺图即失败）
+         │   2b. code-judge 页存在时复制 judge-runtime/（缺失即失败）
          │   3. sync-deck-components（bundle + 宿主，写入后 --check）
          │   4. check-shell --require-art + check-shell-art --site --require-all
          ▼
-prototype/shell-site（壳 chrome/renderer + deck + 旁白 + 本课生成插画 + 组件 bundle）
+prototype/shell-site（壳 chrome/renderer + deck + 旁白 + 本课生成插画 + 组件 bundle + 可选判题运行时）
 ```
 
 硬规则：
@@ -232,7 +241,7 @@ node workflow/tools/check-source-fidelity.mjs \
 - **预览 deck 覆盖全类型且必须是占位内容**：profile 的 `deck` 生成 `site/deck.js`，21 种原生 slide 类型（含 `numberLab` 的 kind、`code` 的 `flowType`、两/三张卡片）各至少出现一次；所有标题必须带“占位”，`meta.preview.dummy=true`。`check-shell` 直接检查壳包时缺一即失败，并实际点通主要交互。生产站点用 `--site` 时只要求本课声明的类型被渲染。
 - **占位语音 fixture**：`preview-narration.mjs` 定义 8 句占位旁白 × 4 个音色；`make-preview-voice.mjs` 生成 32 个 MP3 与 `manifest.json`（字节数、SHA-256、浏览器实测时长）。`shell-preview-lib.mjs` 在写入站点前逐项校验，`check-shell` 再解码全部音频并在真实壳里播放默认与第三个音色。占位语音只用于检查播放/切换，不是本课旁白；`prepare-shell-site` 装配生产站点时会删除 `preview-audio/` 与 `preview-data.json`，没有本课旁白时写空清单。
 - **运行时数据驱动**：`site/lesson.js` 不再内嵌任何一节课的 slides，只读 `window.COURSEWARE_SHELL_DATA = { meta, slides }`；插图读 `window.COURSEWARE_SHELL_ART`；调试钩子 `COURSEWARE_DEBUG`。
-- **生成时换图**：`generate-shell-art.mjs --prompt-file specs/<lesson>/art-prompts.json` 以参考角色为风格输入、以本课提示词要求不同角色，自动选择 token 可用的图像模型（qwen-image-2.0 / gpt-image-2），去白底并裁透明边距。`--reuse` 在提示词、参考图、输出文件与溯源都没变时跳过 API 调用；`--force` 强制重生成。
+- **生成时换图**：`generate-shell-art.mjs --prompt-file specs/<lesson>/art-prompts.json` 以参考角色为风格输入、以本课提示词要求不同角色，自动选择 token 可用的图像模型（qwen-image-2.0 / gpt-image-2），去白底并裁透明边距。`--reuse` 在提示词、参考图、输出文件与溯源都没变时跳过 API 调用；`--force` 强制重生成。图像接口没有可用通道时，可显式设 `COURSEWARE_ART_LOCAL_FALLBACK=1`：工具会从参考图生成一个本地变体（换色/镜像/缩放），并把 `model` 记为 `local-variant`；默认关闭，不会悄悄替代 API 生成。
 - **插画 provenance 闸门**：`check-shell-art --require-all` 要求每个槽位都有生成图，哈希 ≠ 参考图、PNG 含透明像素、尺寸 ≥ 256 且像素化尺寸可整除，提示词/种子/模型齐全；`--site` 还校验 `build-manifest.json` 与 `shell-art-data.js`。
 - **参考图不随站点发布**：`prepare-shell-site` 只复制 `site/`，天然不带 `reference/`；`check-shell` 还会显式检查 `site/reference` 不存在。
 - **生产构建 fail-closed**：`prepare-shell-site` 默认缺图即失败（`--allow-missing-art` 只用于壳预览）；`build-shell-site.mjs` 把插画闸门、装配、组件注入与站点闸门串成唯一生产入口。
@@ -506,7 +515,7 @@ content: internal self-reviews/checks → review-script (once) → review-page (
 - **脚本审核看老师版**：`render-teacher-script` 在 gate 前从 `courseware.md` 生成 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行学生动作；`review-script` 的 `show_file` 指向它。完整源文件仍是唯一内容源，批准账本绑定完整 `courseware.md`。
 - **壳审核先于内容包**：壳工作流不依赖 `content_pack`/`lesson_slug`，只依赖壳包；通过后写 `review/shells/<shell_slug>/shell-approval.json`（壳包全文哈希 + gate run）。内容工作流开头 `check-shell-approval` 校验，壳改一个字节即失效。
 - **页面自审不是 coding agent**：`self-review-page` 是 `shell` 步骤，调用 `page-review-ai.mjs` 发一次 HTTP 请求；模型默认只拿到本页截图和已批准脚本页，只能返回 `submit_page_review` 结构化 JSON，没有文件/命令/MCP 工具。它不能读 `courseware.md`、跑 `check-overlap` 或修改页面。
-- **模型由用户配置**：优先读项目内 `.courseware/page-review.json`（已 gitignore，适合 Windows/WSL 共用），否则读 `~/.config/courseware/page-review.json`；也支持 `COURSEWARE_REVIEW_CONFIG`、`COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。`api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。模型必须支持图片输入；不支持时请求直接失败，不会退化成纯文本。
+- **模型由用户配置（所有 AI 步骤共用一份）**：优先读项目内 `.courseware/page-review.json`（已 gitignore，适合 Windows/WSL 共用），否则读 `~/.config/courseware/page-review.json`；也支持 `COURSEWARE_REVIEW_CONFIG`、`COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。`api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。`model` 给页面视觉自审；`textModel` 给简报、脚本、自学审核、组件计划、插画简报、参考适配和逐页 deck 等文本步骤（未配时回退 `model`）。`zcodeConfig`/`zcodeProvider` 对所有 AI 步骤生效，不必每一步重复传命令行参数。模型必须支持图片输入；不支持时请求直接失败，不会退化成纯文本。
 - **配置预检**：`check-page-review-config` 在逐页循环前运行；缺配置时整次运行在开始制作页面前失败，不会做到一半才报错。
 
 最小配置（项目内 `.courseware/page-review.json` 或 `~/.config/courseware/page-review.json`，权限 600）：
@@ -516,11 +525,12 @@ content: internal self-reviews/checks → review-script (once) → review-page (
   "api": "anthropic-messages",
   "baseUrl": "https://你的视觉模型网关",
   "model": "支持图片输入的模型",
+  "textModel": "长文本步骤用的快速模型",
   "apiKeyFile": "~/.config/courseware/page-review.key"
 }
 ```
 
-也可以把 key 放进 `COURSEWARE_REVIEW_API_KEY`，或用 `apiKeyEnv` 指定其他环境变量名。ZCode 用户可以在配置里写 `"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`，直接复用 ZCode 已配置的 provider/model/key。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 支持候选路径数组，Windows 用 `~` 路径、WSL 用 `/mnt/c/...`，谁存在用谁。`openai-chat` 用同样的 `baseUrl`/`model`，只是请求路径和消息格式不同。`structuredOutput` 默认 `tool`（强制调用 `submit_page_review`）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`，因为 DeepSeek 兼容端点可能返回 DSML 文本（工具检测到会自动重试一次 JSON 模式）。`maxTokens` 默认 8192，推理模型的 thinking 可能占掉几千 token。完整示例：`workflow/examples/page-review.config.example.json`。
+也可以把 key 放进 `COURSEWARE_REVIEW_API_KEY`，或用 `apiKeyEnv` 指定其他环境变量名。ZCode 用户可以在配置里写 `"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`，直接复用 ZCode 已配置的 provider/model/key；这份配置现在同时供页面自审和所有文本步骤使用。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 支持候选路径数组，Windows 用 `~` 路径、WSL 用 `/mnt/c/...`，谁存在用谁。命令行 `--zcode-config` / `--zcode-provider` 仍可覆盖配置。`openai-chat` 用同样的 `baseUrl`/`model`，只是请求路径和消息格式不同。`structuredOutput` 默认 `tool`（强制调用 `submit_page_review`）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`，因为 DeepSeek 兼容端点可能返回 DSML 文本（工具检测到会自动重试一次 JSON 模式）。`maxTokens` 默认 8192，但这是**所有 AI 步骤共用的输出上限**；推理模型会在 thinking 上消耗额度，脚本大纲/逐页 JSON 容易触顶，实际使用建议设 `32768` 并把 `timeoutMs` 设到 `300000`（页面自审本身只用几千 token，高上限不会让它变慢）。完整示例：`workflow/examples/page-review.config.example.json`。
 
 - self-review 写 `review/self-review-<stage>.json/.md`（schema：`workflow/schemas/self-review.schema.json`；模板：`preset/templates/self-review-template.md`）。
 - `check-self-review` 要求：`verdict: pass`、无自动检查 `fail`、无未修复 blocking issue、checklist 无 `fail`。

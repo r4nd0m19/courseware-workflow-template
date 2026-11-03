@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>code-judge · static story</title>
+    <link rel="stylesheet" href="../../../../shells/branch-choice/source/styles.css" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      html,
+      body {
+        height: auto;
+        min-height: 100%;
+        overflow: auto;
+      }
+      body {
+        margin: 0;
+        padding: 28px 24px 56px;
+        background: #e9eef8;
+        color: #111;
+      }
+      main {
+        display: block;
+      }
+      .story-head {
+        max-width: 1120px;
+        margin: 0 auto 20px;
+      }
+      .story-head h1 {
+        margin: 0 0 6px;
+        font-size: 24px;
+      }
+      .story-head p {
+        margin: 0;
+        color: #5f6065;
+        font-size: 15px;
+      }
+      .story-static {
+        width: 100%;
+        max-width: 1120px;
+        margin: 0 auto 28px;
+        padding: 18px 20px 22px;
+        border: 2px solid #111;
+        border-radius: 3px;
+        background: #fff;
+        box-shadow: 6px 6px 0 #b9cae8;
+      }
+      .story-static > h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="story-head">
+      <h1>code-judge · 静态故事</h1>
+      <p>无脚本时的降级视图：完整保留题目、初始代码与全部测试数据。</p>
+    </header>
+    <main>
+      <section class="story-static" id="static-sum" data-story>
+        <h2>A+B 静态版</h2>
+        <div id="judge-sum-static"></div>
+      </section>
+    </main>
+    <script>
+      window.CoursewareComponents = (function () {
+        var registry = new Map()
+        return {
+          register: function (id, implementation) {
+            registry.set(id, implementation)
+          },
+          get: function (id) {
+            return registry.get(id)
+          },
+          types: function () {
+            return Array.from(registry.keys())
+          },
+        }
+      })()
+    </script>
+    <script src="../runtime.js"></script>
+    <script src="fixtures.js"></script>
+    <script>
+      ;(function () {
+        var component = window.CoursewareComponents.get('code-judge')
+        var props = Object.assign({}, window.CODE_JUDGE_FIXTURES.sum, {
+          fallbackMode: 'static',
+        })
+        var host = document.getElementById('judge-sum-static')
+        host.innerHTML = component.render(props)
+        component.bind(host, props)
+        window.__storiesReady = true
+      })()
+    </script>
+  </body>
+</html>

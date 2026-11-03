@@ -47,6 +47,8 @@ const MIME = {
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
   '.woff2': 'font/woff2',
+  '.wasm': 'application/wasm',
+  '.tar': 'application/x-tar',
 }
 
 export function serveDir(root, port = 0) {

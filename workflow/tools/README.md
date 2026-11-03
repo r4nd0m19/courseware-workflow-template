@@ -421,25 +421,27 @@ node workflow/tools/page-review-ai.mjs \
   --density-authority script --review-scope visual-script
 ```
 
-配置优先读项目内 `.courseware/page-review.json`（已 gitignore），否则读 `~/.config/courseware/page-review.json`；也可用 `COURSEWARE_REVIEW_CONFIG`：
+配置优先读项目内 `.courseware/page-review.json`（已 gitignore），否则读 `~/.config/courseware/page-review.json`；也可用 `COURSEWARE_REVIEW_CONFIG`。**同一份配置驱动所有 AI 步骤**：页面自审用 `model`，简报/脚本/组件/收敛等文本步骤用 `textModel`（缺省回退 `model`）；显式命令行 `--model` / `--zcode-config` / `--zcode-provider` 仍优先。
 
 ```json
 {
   "api": "anthropic-messages",
   "baseUrl": "https://你的视觉模型网关",
   "model": "支持图片输入的模型",
+  "textModel": "长文本生成模型",
   "apiKeyFile": "~/.config/courseware/page-review.key",
-  "maxTokens": 8192,
-  "timeoutMs": 120000,
+  "maxTokens": 32768,
+  "timeoutMs": 300000,
   "structuredOutput": "json"
 }
 ```
 
 - `api`：`anthropic-messages`（`POST {baseUrl}/v1/messages`）或 `openai-chat`（`POST {baseUrl}/v1/chat/completions`）。
 - key：`apiKeyEnv` 指向的环境变量（默认 `COURSEWARE_REVIEW_API_KEY`），或 `apiKeyFile`（建议 600）。
-- 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。
+- 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。`textModel` 只在文本步骤使用，不要求图片能力。
+- 推理模型建议 `"maxTokens": 32768`、`"timeoutMs": 300000`：8192 可能被 thinking 吃满，导致脚本大纲等长输出在完成前截断。默认值仍是 8192 / 120000，不配置时按默认。
 - `structuredOutput`：默认 `tool`（forced tool call）；用 `--zcode-config` 复用 ZCode provider 时默认 `json`。DeepSeek 的 Anthropic 兼容端点可能返回 DSML 文本而不是标准 `tool_use`，工具检测到后会**自动重试一次 JSON 模式**；也可以直接写 `"structuredOutput": "json"` 避免这次重试。
-- `maxTokens` 默认 **8192**：推理模型可能把几千 token 花在 thinking 上，4096 会在输出前被截断。工具在 `stop_reason: max_tokens` 时会直接提示增大 `maxTokens`，不会写半成品。
+- `maxTokens` 默认 **8192**：推理模型可能把几千 token 花在 thinking 上，4096 会在输出前被截断；长输出步骤建议 32768。工具在 `stop_reason: max_tokens` 时会直接提示增大 `maxTokens`，不会写半成品。
 - 默认 `visual-script`：模型只拿本页截图和已批准脚本页（`screenContent` / `interactionDesign` / `transition`），判断可见内容是否与脚本一致，以及裁切、重叠、拥挤、可读性、可见占位/个人信息等视觉问题；不接收 density、确定性检查结果、概念或参考映射。非视觉确定性检查仍由 `build-page-evidence` 跑并阻断；0.37.0 起页面证据不再跑 overflow/overlap。`evidence` 模式保留旧的完整证据包和静态页规则。
 - `density_authority=page` 只在 `evidence` 模式下有效；`visual-script` 要求 `density_authority=script`（脚本阶段已判定 density）。两种模式都只允许模型填 `checklist` / `issues` / `referenceAdaptation` / `verdict`；`signals`、`concepts`、`automatedChecks`、`reviewedArtifacts` 由工具保留/合并。模型声称 `fixed: true` 也会被强制改成 `false`。
 - 失败时不会写半成品：schema 不合法、缺截图、HTTP 错误都退出非 0；原始模型输出写到 `review/<slug>/page-review-raw-<section>.json` 方便排查。
@@ -541,6 +543,23 @@ node workflow/tools/sync-deck-components.mjs --registry registry/index.json --ch
 - 组件实现必须是浏览器 `.js`，并调用 `window.CoursewareComponents.register('<id>', { render, bind })`；JSX/MDX 会被拒绝。
 - `component.json` 的 `styles` 会被汇总到 `components.bundle.css`。
 - 页面只写组件 props；不得把组件实现复制进 `slides.js`/`index.html`。
+
+## 10C-1. 纯浏览器判题运行时（code-judge）
+
+`code-judge` 组件在浏览器里用 browsercc（Clang/LLD WASM）编译 C++，每组测试在独立 WASI Worker 中运行。运行时约 91MB，**不提交进仓库**：
+
+```bash
+node judge-runtime/install.mjs          # 下载并校验 browsercc，可重复运行
+node judge-runtime/install.mjs --check  # 只检查
+node workflow/tools/test-code-judge.mjs # 壳站点集成 + 真实编译（未安装时 SKIP）
+```
+
+- `build-shell-site.mjs` 只在 deck 含 `code-judge` 页时复制运行时；按 `props.runtimeBaseUrl`（默认 `judge-runtime/`）落到站点，使用硬链接，缺失/截断时 fail-closed。
+- `judge-runtime-lib.mjs` 负责检测、校验、复制和站点验证；`runtimeBaseUrl` 只允许站点内普通相对目录，拒绝外部 URL、绝对路径和 `..`。
+- `shell-lib.mjs` 的预览服务器为 `.wasm` / `.tar` 返回 `application/wasm` / `application/x-tar`；其它静态服务器也要配置这两个 MIME。
+- `code-judge` 当前在 `registry/staging/`：脚本显式写 `component: code-judge` 时 `list-missing-components` 会视为已存在，不会重复生成；`build-script-input`、`check-script`、`check-vocabulary`、`check-component-plan` 和 `generate-component-plan` 也会扫描 `registry/staging`，所以脚本可把 staged 组件直接写成 `existing`，组件计划会推荐它而不是新建重复组件。跨课复用时走正常页面审核，由 `register-staged-components` 注册进 core，不要手改 index 或伪造 `approvedBy`。
+- 阶段练习：脚本页可声明 `exercise`（`code-judge`），页面模型只返回题面、起始代码和 1–6 组公开测试，不写屏幕内容；Node 确定性渲染屏幕内容并把规范化的 exercise 写入制作字段。`apply-page-deck` 要求 deck 页逐字复制 exercise，拒绝隐藏测试、`disabled` 和 `fallbackMode: static`；`check-rendered-text` 会检查题面、代码和每组测试。练习页只是课堂练习，**不锁定翻页、没有通关门禁**；位置约束为最多 4 个、非首页、不连续。
+- 详细运行模型、超时/输出上限和“不是正式 OJ”的边界见 `judge-runtime/README.md`。
 
 ## 10D. 语音适配器
 

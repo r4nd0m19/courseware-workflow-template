@@ -4,5 +4,10 @@ workflow/tools/chrome-path.txt
 workflow/tools/.cache/
 __pycache__/
 .specify/
+
+# browsercc toolchain is downloaded by judge-runtime/install.mjs (~91MB)
+judge-runtime/browsercc/
+registry/.tmp-component-files-*/
+
 .DS_Store
 Thumbs.db

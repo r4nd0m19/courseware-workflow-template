@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>code-judge · interactive story</title>
+    <link rel="stylesheet" href="../../../../shells/branch-choice/source/styles.css" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      html,
+      body {
+        height: auto;
+        min-height: 100%;
+        overflow: auto;
+      }
+      body {
+        margin: 0;
+        padding: 28px 24px 56px;
+        background: #e9eef8;
+        color: #111;
+      }
+      main {
+        display: block;
+      }
+      .story-head {
+        max-width: 1120px;
+        margin: 0 auto 20px;
+      }
+      .story-head h1 {
+        margin: 0 0 6px;
+        font-size: 24px;
+      }
+      .story-head p {
+        margin: 0;
+        color: #5f6065;
+        font-size: 15px;
+      }
+      .story-card {
+        width: 100%;
+        max-width: 1120px;
+        margin: 0 auto 28px;
+        padding: 18px 20px 22px;
+        border: 2px solid #111;
+        border-radius: 3px;
+        background: #fff;
+        box-shadow: 6px 6px 0 #b9cae8;
+      }
+      .story-card > h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+      .story-note {
+        margin: 0 0 12px;
+        color: #5f6065;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="story-head">
+      <h1>code-judge · 交互故事</h1>
+      <p>组件在浏览器里编译并运行 C++；测试数据来自 props，适合课堂练习。</p>
+    </header>
+    <main>
+      <section class="story-card" id="story-sum" data-story>
+        <h2>A+B · 三组可见测试</h2>
+        <p class="story-note">点“运行测试”后逐组显示通过/答案错误；编译器在第一次运行时加载。</p>
+        <div id="judge-sum"></div>
+      </section>
+      <section class="story-card" id="story-reverse" data-story>
+        <h2>倒序输出 · 两组测试</h2>
+        <p class="story-note">初始代码本身是正确的，可直接运行观察全部通过的反馈。</p>
+        <div id="judge-reverse"></div>
+      </section>
+    </main>
+    <script>
+      window.CoursewareComponents = (function () {
+        var registry = new Map()
+        return {
+          register: function (id, implementation) {
+            registry.set(id, implementation)
+          },
+          get: function (id) {
+            return registry.get(id)
+          },
+          types: function () {
+            return Array.from(registry.keys())
+          },
+        }
+      })()
+    </script>
+    <script src="../runtime.js"></script>
+    <script src="fixtures.js"></script>
+    <script>
+      ;(function () {
+        var component = window.CoursewareComponents.get('code-judge')
+        ;[
+          ['sum', 'judge-sum'],
+          ['reverse', 'judge-reverse'],
+        ].forEach(function (entry) {
+          var props = window.CODE_JUDGE_FIXTURES[entry[0]]
+          var host = document.getElementById(entry[1])
+          host.innerHTML = component.render(props)
+          component.bind(host, props)
+        })
+        // Keep the visual baseline on the final CodeMirror editor rather than
+        // the textarea that is shown while the 700KB editor bundle loads.
+        var deadline = Date.now() + 3000
+        ;(function readyWhenEditorMounted() {
+          if (document.querySelector('#judge-sum .cm-editor') || Date.now() > deadline) {
+            window.__storiesReady = true
+          } else {
+            setTimeout(readyWhenEditorMounted, 50)
+          }
+        })()
+      })()
+    </script>
+  </body>
+</html>

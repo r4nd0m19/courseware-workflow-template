@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { readData, validateWithSchema, fail, ok } from './lib.mjs'
 import { parseScript } from './script-lib.mjs'
+import { readStagingManifests, stagingDirForRegistry } from './registry-lib.mjs'
 
 const rawArgs = process.argv.slice(2)
 const positionals = []
@@ -83,6 +84,15 @@ if (registry) {
   for (const c of registry.components || []) {
     components.add(c.id)
     if (c.status === 'deprecated') deprecated.add(c.id)
+  }
+}
+// Staged implementations are usable during production; they are registered
+// core only after their first page is approved. The vocabulary gate must see
+// them or a staged checkpoint (code-judge) would fail before the page loop.
+if (registryPath && registryPath.trim()) {
+  for (const { manifest } of readStagingManifests(stagingDirForRegistry(registryPath))) {
+    components.add(manifest.id)
+    if (manifest.status === 'deprecated') deprecated.add(manifest.id)
   }
 }
 

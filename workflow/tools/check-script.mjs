@@ -9,6 +9,7 @@ import {
   normalizeComparable,
   hasPlaceholder,
 } from './script-lib.mjs'
+import { readStagingManifests, stagingDirForRegistry } from './registry-lib.mjs'
 
 const rawArgs = process.argv.slice(2)
 const options = { waivers: '', strictContent: false }
@@ -121,6 +122,16 @@ for (const c of registry?.components || []) {
     registered.set(c.id, { source: 'registry', status: c.status })
   }
 }
+// Staged components are implemented and reviewable; they become core only after
+// the page that uses them is approved. The script gate may use them, but keeps
+// their source visible so nothing treats them as approved core components.
+if (registryPath && registryPath.trim()) {
+  for (const { manifest } of readStagingManifests(stagingDirForRegistry(registryPath))) {
+    if (!registered.has(manifest.id)) {
+      registered.set(manifest.id, { source: 'staging', status: manifest.status })
+    }
+  }
+}
 // A manifest may carry layout ids as bare strings or as {id, description}
 // objects (the extracted shell and full style pack use the object form).
 const layouts = new Set(
@@ -148,6 +159,24 @@ function detectLevel(text) {
 }
 function hasLabel(text, re) {
   return re.test(text)
+}
+function exerciseScreenErrors(where, slide, exercise) {
+  const errors = []
+  const screen = normalizeForExact(slide.screenContent)
+  const requireVisible = (value, label) => {
+    const text = normalizeForExact(value)
+    if (text && !screen.includes(text)) {
+      errors.push(`${where}: 屏幕内容缺少阶段练习的${label}，制作字段 exercise 与屏幕内容不同步`)
+    }
+  }
+  requireVisible(exercise.statement, '题面')
+  requireVisible(exercise.starterCode, '起始代码')
+  for (const test of exercise.tests || []) {
+    requireVisible(test.label, `测试 ${test.id} 的名称`)
+    requireVisible(test.input, `测试 ${test.id} 的输入`)
+    requireVisible(test.expected, `测试 ${test.id} 的期望输出`)
+  }
+  return errors
 }
 
 for (const slide of parsed.slides) {
@@ -207,6 +236,39 @@ for (const slide of parsed.slides) {
     warnings.push(`${where}: 缺少「**内容来源**」行`)
   }
 
+  // Staged coding checkpoints. code-judge is a staged component, not a generic
+  // blank-component choice: it is only valid when the slide carries an exercise.
+  const exercise = m.exercise
+  const usesJudge =
+    (m.components || []).includes('code-judge') || m.interaction?.component === 'code-judge'
+  if (exercise) {
+    if (!(m.components || []).includes(exercise.component)) {
+      errors.push(`${where}: exercise.component ${exercise.component} 不在 components 中`)
+    }
+    if (m.interaction?.component !== exercise.component) {
+      errors.push(`${where}: 阶段练习页的 interaction.component 必须是 ${exercise.component}`)
+    }
+    if (!['construct', 'modify'].includes(m.interaction?.level)) {
+      errors.push(`${where}: 阶段练习页的 interaction.level 必须是 construct 或 modify`)
+    }
+    if (!['construct', 'modify'].includes(m.interaction?.learningAction)) {
+      errors.push(`${where}: 阶段练习页的 interaction.learningAction 必须是 construct 或 modify`)
+    }
+    const testIds = new Set()
+    for (const [index, test] of (exercise.tests || []).entries()) {
+      if (testIds.has(test.id)) errors.push(`${where}: 阶段练习测试 id 重复：${test.id}`)
+      testIds.add(test.id)
+      for (const field of ['label', 'input', 'expected']) {
+        if (hasPlaceholder(test[field])) {
+          errors.push(`${where}: 阶段练习测试 ${test.id} 的 ${field} 含占位内容`)
+        }
+      }
+    }
+    errors.push(...exerciseScreenErrors(where, slide, exercise))
+  } else if (usesJudge) {
+    errors.push(`${where}: code-judge 只能用于阶段练习页；制作字段缺少 exercise`)
+  }
+
   // component vocabulary
   for (const c of m.components || []) {
     const reg = registered.get(c)
@@ -230,6 +292,11 @@ for (const slide of parsed.slides) {
         item.status === 'extend')
     if (duplicate) warnings.push(`${where}: componentPlan ${item.id} declared more than once`)
     declared.set(item.id, { ...item, slide: slide.id })
+    if (item.id === 'code-judge' && item.status !== 'existing') {
+      errors.push(
+        `${where}: code-judge is already staged; do not declare it ${item.status} in componentPlan`,
+      )
+    }
     if (item.status === 'existing' || item.status === 'reference-verbatim') {
       if (!registered.has(item.id)) {
         errors.push(
@@ -368,6 +435,26 @@ for (const slide of parsed.slides) {
     }
   }
 }
+
+// ---- staged exercise placement ----
+// The script generator enforces these while outlining; teachers can edit the
+// script later, so the approval gate re-checks the same placement rules.
+let exerciseCount = 0
+let previousExercise = false
+let firstContentSlide = true
+for (const slide of parsed.slides) {
+  const m = slide.machine
+  if (!m || m.status === 'SKIP') continue
+  const hasExercise = Boolean(m.exercise)
+  if (hasExercise) {
+    exerciseCount += 1
+    if (firstContentSlide) errors.push(`${slide.id}: 阶段练习不能放在第一页`)
+    if (previousExercise) errors.push(`${slide.id}: 阶段练习不能连续两页出现`)
+  }
+  previousExercise = hasExercise
+  firstContentSlide = false
+}
+if (exerciseCount > 4) errors.push(`阶段练习最多 4 个，当前 ${exerciseCount} 个`)
 
 // ---- coverage ----
 const known = new Set((content.items || []).map((i) => i.id))

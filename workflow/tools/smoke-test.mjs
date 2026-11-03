@@ -25,8 +25,7 @@ let failed = 0
 let skipped = 0
 let total = 0
 
-function run(name, script, args, expected, expectedText) {
-  total += 1
+function run(name, script, args, expected, expectedText, options = {}) {
   const res = spawnSync(process.execPath, [path.join(toolsDir, script), ...args], {
     encoding: 'utf8',
   })
@@ -36,6 +35,13 @@ function run(name, script, args, expected, expectedText) {
     : expectedText
       ? [expectedText]
       : []
+  if (options.allowSkip && res.status === 0 && /^SKIP /m.test(output)) {
+    skipped += 1
+    const reason = (output.match(/^SKIP .*/m) || [''])[0]
+    console.log(`SKIP ${name} (${reason.replace(/^SKIP\s*/, '')})`)
+    return
+  }
+  total += 1
   const pass =
     res.status === expected && expectedTexts.every((text) => output.includes(text))
   console.log(
@@ -864,6 +870,7 @@ try {
       failed += 1
       console.error('prepare-shell-site must not copy preview-audio/preview-data.json, and must not leave dummy narration in a site assembled without narration')
     }
+    run('code-judge site integration', 'test-code-judge.mjs', [], 0, 'code-judge site integration')
   } else {
     skip('shell art fail-closed', 'no shells/branch-choice in this project')
   }
@@ -1566,6 +1573,7 @@ try {
       [],
       0,
       'OK review gate end-to-end',
+      { allowSkip: true },
     )
     run(
       'review gate resume keeps the verdict when the pre-gate body would rewrite evidence',
@@ -1573,6 +1581,7 @@ try {
       [],
       0,
       'OK review gate resume guard',
+      { allowSkip: true },
     )
     run(
       'page-level tools fail closed outside the production workflow',
@@ -1695,7 +1704,7 @@ try {
   )
   const reviewAiTestOutput = `${reviewAiTest.stdout || ''}\n${reviewAiTest.stderr || ''}`
   const reviewAiToolPass =
-    reviewAiTest.status === 0 && /3\/3 review-ai tests passed/.test(reviewAiTestOutput)
+    reviewAiTest.status === 0 && /4\/4 review-ai tests passed/.test(reviewAiTestOutput)
   console.log(`${reviewAiToolPass ? 'PASS' : 'FAIL'} single-shot text review tool`)
   if (!reviewAiToolPass) {
     failed += 1
@@ -1773,40 +1782,24 @@ try {
   }
 
   // ---- structured component files ----
-  total += 1
-  const componentFilesTest = spawnSync(
-    process.execPath,
-    [path.join(toolsDir, 'test-component-files.mjs')],
-    { encoding: 'utf8', cwd: projectRoot },
+  run(
+    'structured component files',
+    'test-component-files.mjs',
+    [],
+    0,
+    'PASS structured component files golden round-trip',
+    { allowSkip: true },
   )
-  const componentFilesOutput = `${componentFilesTest.stdout || ''}\n${componentFilesTest.stderr || ''}`
-  const componentFilesPass =
-    componentFilesTest.status === 0 &&
-    /PASS structured component files golden round-trip/.test(componentFilesOutput)
-  console.log(`${componentFilesPass ? 'PASS' : 'FAIL'} structured component files`)
-  if (!componentFilesPass) {
-    failed += 1
-    console.error(componentFilesOutput.trimEnd())
-    console.error('component files must round-trip an existing package through apply and run package/tests')
-  }
 
   // ---- structured component generation ----
-  total += 1
-  const componentGenerationTest = spawnSync(
-    process.execPath,
-    [path.join(toolsDir, 'test-component-generation.mjs')],
-    { encoding: 'utf8', cwd: projectRoot },
+  run(
+    'structured component generation',
+    'test-component-generation.mjs',
+    [],
+    0,
+    'PASS structured component generation with mock files',
+    { allowSkip: true },
   )
-  const componentGenerationOutput = `${componentGenerationTest.stdout || ''}\n${componentGenerationTest.stderr || ''}`
-  const componentGenerationPass =
-    componentGenerationTest.status === 0 &&
-    /PASS structured component generation with mock files/.test(componentGenerationOutput)
-  console.log(`${componentGenerationPass ? 'PASS' : 'FAIL'} structured component generation`)
-  if (!componentGenerationPass) {
-    failed += 1
-    console.error(componentGenerationOutput.trimEnd())
-    console.error('component generation must apply a mock file bundle, capture baselines, run tests and repair a failed attempt')
-  }
 
   // ---- structured component build workflow steps ----
   total += 1
@@ -1826,22 +1819,14 @@ try {
   }
 
   // ---- structured component batch generation ----
-  total += 1
-  const componentBatchTest = spawnSync(
-    process.execPath,
-    [path.join(toolsDir, 'test-generate-components.mjs')],
-    { encoding: 'utf8', cwd: projectRoot },
+  run(
+    'structured component batch generation',
+    'test-generate-components.mjs',
+    [],
+    0,
+    'PASS structured component batch generation',
+    { allowSkip: true },
   )
-  const componentBatchOutput = `${componentBatchTest.stdout || ''}\n${componentBatchTest.stderr || ''}`
-  const componentBatchPass =
-    componentBatchTest.status === 0 &&
-    /PASS structured component batch generation/.test(componentBatchOutput)
-  console.log(`${componentBatchPass ? 'PASS' : 'FAIL'} structured component batch generation`)
-  if (!componentBatchPass) {
-    failed += 1
-    console.error(componentBatchOutput.trimEnd())
-    console.error('generate-components.mjs must resolve briefs and build the requested component set')
-  }
 
   // ---- structured component plan ----
   total += 1
@@ -1862,21 +1847,14 @@ try {
   }
 
   // ---- component test sandbox ----
-  total += 1
-  const sandboxTest = spawnSync(
-    process.execPath,
-    [path.join(toolsDir, 'test-component-sandbox.mjs')],
-    { encoding: 'utf8', cwd: projectRoot },
+  run(
+    'component test sandbox',
+    'test-component-sandbox.mjs',
+    [],
+    0,
+    'PASS component test sandbox',
+    { allowSkip: true },
   )
-  const sandboxOutput = `${sandboxTest.stdout || ''}\n${sandboxTest.stderr || ''}`
-  const sandboxPass =
-    sandboxTest.status === 0 && /(PASS component test sandbox|SKIP component sandbox)/.test(sandboxOutput)
-  console.log(`${sandboxPass ? 'PASS' : 'FAIL'} component test sandbox`)
-  if (!sandboxPass) {
-    failed += 1
-    console.error(sandboxOutput.trimEnd())
-    console.error('sandboxed component tests must hide the repository or skip when bwrap is unavailable')
-  }
 
   // ---- reference-verbatim extraction ----
   total += 1
@@ -1923,7 +1901,7 @@ try {
   )
   const generateTestOutput = `${generateTest.stdout || ''}\n${generateTest.stderr || ''}`
   const generateToolPass =
-    generateTest.status === 0 && /4\/4 single-shot-generate tests passed/.test(generateTestOutput)
+    generateTest.status === 0 && /5\/5 single-shot-generate tests passed/.test(generateTestOutput)
   console.log(`${generateToolPass ? 'PASS' : 'FAIL'} single-shot art/reference generator`)
   if (!generateToolPass) {
     failed += 1

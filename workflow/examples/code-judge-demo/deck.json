@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "title": "代码判题演示",
+    "brandMain": "C++",
+    "brandAccent": "互动课堂",
+    "brandTitle": "代码判题",
+    "lessonLabel": "代码判题演示",
+    "kicker": "信奥 · 课堂练习",
+    "endKicker": "信奥 · 课堂练习 · 完成",
+    "monitorTitle": "main.cpp",
+    "endMonitorTitle": "本课收获",
+    "coverCode": "int main();",
+    "coverOutput": "Hello, C++!",
+    "endCode": "return 0;",
+    "endOutput": "See you next time!",
+    "recap": [
+      "读入",
+      "计算",
+      "输出"
+    ]
+  },
+  "slides": [
+    {
+      "id": "S01",
+      "type": "blank",
+      "title": "A+B：让程序读入两个数",
+      "eyebrow": "课堂练习 · 浏览器内编译",
+      "component": "code-judge",
+      "props": {
+        "statement": "输入两个整数 a 和 b，输出它们的和。\n\n数据范围：-1000 ≤ a, b ≤ 1000。\n输出格式：一个整数，最后换行。",
+        "starterCode": "#include <iostream>\nusing namespace std;\n\nint main() {\n  int a, b;\n  cin >> a >> b;\n  cout << a + b << \"\\n\";\n  return 0;\n}\n",
+        "tests": [
+          {
+            "id": "t1",
+            "label": "样例 1",
+            "input": "2 3\n",
+            "expected": "5\n"
+          },
+          {
+            "id": "t2",
+            "label": "样例 2",
+            "input": "10 0\n",
+            "expected": "10\n"
+          },
+          {
+            "id": "t3",
+            "label": "含负数",
+            "input": "-4 7\n",
+            "expected": "3\n"
+          }
+        ],
+        "timeLimitMs": 2000,
+        "compileTimeoutMs": 120000,
+        "maxOutputBytes": 65536
+      }
+    }
+  ]
+}

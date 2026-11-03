@@ -127,6 +127,59 @@ function copyWorkflow() {
   return dest
 }
 
+// The template ships two project-level assets outside workflow/: the browser
+// judge runtime and the built-in code-judge staged component. Copy them into a
+// new project, but never overwrite an existing copy: both are project-owned
+// after install and may have local updates.
+function copyBundledAssets() {
+  const templateRoot = path.resolve(workflowSource, '..')
+  const assets = [
+    {
+      label: 'judge-runtime/',
+      src: path.join(templateRoot, 'judge-runtime'),
+      dest: path.join(projectRoot, 'judge-runtime'),
+      skip: new Set(['browsercc', 'node_modules', '.cache']),
+    },
+    {
+      label: 'registry/staging/code-judge/',
+      src: path.join(templateRoot, 'registry', 'staging', 'code-judge'),
+      dest: path.join(projectRoot, 'registry', 'staging', 'code-judge'),
+      skip: new Set(['node_modules']),
+    },
+  ]
+  for (const asset of assets) {
+    if (!fs.existsSync(asset.src)) continue
+    if (path.resolve(asset.src) === path.resolve(asset.dest)) continue
+    if (fs.existsSync(asset.dest)) {
+      console.log(`${asset.label} already exists in project; keeping it`)
+      continue
+    }
+    if (dryRun) {
+      console.log(`would copy ${asset.label} -> ${asset.dest}`)
+      continue
+    }
+    fs.mkdirSync(path.dirname(asset.dest), { recursive: true })
+    fs.cpSync(asset.src, asset.dest, {
+      recursive: true,
+      filter: (srcPath) => {
+        const normalize = (value) => {
+          let p = String(value)
+          if (process.platform === 'win32' && p.startsWith('\\\\?\\')) {
+            p = p.slice(4)
+            if (p.startsWith('UNC\\')) p = `\\\\${p.slice(4)}`
+          }
+          return path.resolve(p)
+        }
+        const rel = path.relative(normalize(asset.src), normalize(srcPath))
+        const parts = rel.split(path.sep)
+        if (path.isAbsolute(rel) || parts.includes('..')) return false
+        return !parts.some((part) => asset.skip.has(part))
+      },
+    })
+    console.log(`copied ${asset.label} -> ${asset.dest}`)
+  }
+}
+
 // Spec Kit loads custom step types from .specify/workflows/steps/<dir>/ before
 // `workflow add` validates a YAML, so the gui-gate package must be installed
 // first. Copy regular files: Spec Kit refuses symlinked step packages.
@@ -222,6 +275,8 @@ if (integration === 'zcode') {
 }
 
 const workflowDir = copyWorkflow()
+log('Copy bundled judge assets')
+copyBundledAssets()
 const startHereSource = path.join(workflowSource, 'START-HERE.md')
 const startHereTarget = path.join(projectRoot, 'START-HERE.md')
 if (fs.existsSync(startHereSource) && !fs.existsSync(startHereTarget)) {

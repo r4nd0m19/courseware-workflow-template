@@ -36,9 +36,56 @@ export function machineFor(outlinePage, page) {
     status: 'DRAFT',
   }
   if (outlinePage.componentPlan?.length) machine.componentPlan = outlinePage.componentPlan
+  if (page.exercise) machine.exercise = page.exercise
   if (outlinePage.continuedFrom) machine.continuedFrom = outlinePage.continuedFrom
   if (outlinePage.continued) machine.continued = true
   return machine
+}
+
+function fenced(value, lang = '') {
+  const text = String(value ?? '').replace(/\r\n/g, '\n')
+  const runs = text.match(/`+/g) || []
+  const size = Math.max(3, ...runs.map((run) => run.length + 1))
+  const fence = '`'.repeat(size)
+  return `${fence}${lang}\n${text.replace(/\n+$/, '')}\n${fence}`
+}
+
+// The visible half of a staged exercise is generated, never model-written:
+// statement, starter code and every visible test stay in sync with the deck
+// props that code-judge receives. There is deliberately no navigation gate.
+export function renderExerciseScreen(exercise) {
+  const tests = Array.isArray(exercise.tests) ? exercise.tests : []
+  const lines = [
+    '**阶段练习**',
+    '',
+    String(exercise.statement || '').trim(),
+    '',
+    '**起始代码**',
+    '',
+    fenced(exercise.starterCode || '', 'cpp'),
+    '',
+    '**测试数据（全部可见）**',
+  ]
+  for (const [index, test] of tests.entries()) {
+    const label = cleanOneLine(test.label || `测试 ${index + 1}`)
+    lines.push(
+      '',
+      `**测试 ${index + 1} · ${label}**`,
+      '',
+      '输入：',
+      '',
+      String(test.input || '') ? fenced(test.input) : '（无输入）',
+      '',
+      '期望输出：',
+      '',
+      String(test.expected || '') ? fenced(test.expected) : '（无输出）',
+    )
+  }
+  return lines.join('\n')
+}
+
+export function screenContentForPage(page) {
+  return page.exercise ? renderExerciseScreen(page.exercise) : String(page.screenContent || '')
 }
 
 export function renderInteractionDesign(page) {
@@ -91,7 +138,7 @@ export function renderSlideBlock(outlinePage, page) {
     '',
     '### 屏幕内容',
     '',
-    String(page.screenContent).trim(),
+    screenContentForPage(page).trim(),
     '',
     '### 交互设计',
     '',

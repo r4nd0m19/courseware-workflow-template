@@ -214,6 +214,43 @@ export function loadRegistryPackages(indexPath, options = {}) {
   return { ...loaded, packages }
 }
 
+// Staging packages are built, tested and reviewable, but not yet core. Script
+// generation, component planning and vocabulary gates must still see them:
+// otherwise a page that uses a staged component (for example code-judge) is
+// rejected as "unregistered". The staging location stays visible in evidence so
+// no tool can mistake a staged package for an approved core component.
+export function stagingDirForRegistry(registryPath) {
+  if (!registryPath || !String(registryPath).trim()) return ''
+  return path.join(path.dirname(path.resolve(registryPath)), 'staging')
+}
+
+export function readStagingManifests(stagingDir) {
+  const manifests = []
+  if (!stagingDir || !fs.existsSync(stagingDir)) return manifests
+  for (const dirent of fs.readdirSync(stagingDir, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) continue
+    const packageDir = path.join(stagingDir, dirent.name)
+    const manifestPath = path.join(packageDir, 'component.json')
+    if (!fs.existsSync(manifestPath)) continue
+    try {
+      const manifest = readJson(manifestPath)
+      if (manifest?.id) manifests.push({ dir: packageDir, manifest })
+    } catch {
+      // A malformed staging package is reported by check-staged-components;
+      // other gates must not crash on it.
+    }
+  }
+  return manifests
+}
+
+export function loadStagingPackages(registryPath, options = {}) {
+  const stagingDir = options.stagingDir || stagingDirForRegistry(registryPath)
+  return readStagingManifests(stagingDir).map(({ dir, manifest }) => {
+    const inspected = inspectPackage(dir, options)
+    return { entry: { id: manifest.id, package: dir }, packageDir: dir, ...inspected, staged: true }
+  })
+}
+
 // Windows Node passes `\\?\`-prefixed paths to fs.cpSync's filter, and
 // path.relative cannot compare those against the original source root: it
 // returns the whole absolute path, so ancestors like "staging" look like part

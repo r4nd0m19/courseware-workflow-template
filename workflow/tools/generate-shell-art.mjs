@@ -11,6 +11,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { PNG } from 'pngjs'
 import { readJson, resolveShellDir, validateShellPackage } from './shell-lib.mjs'
 import { removeNearWhiteBackground, trimTransparentPadding, pixelateArt } from './image-alpha.mjs'
 
@@ -225,6 +226,45 @@ async function requestImage(prompt, referenceFile, seed, n, apiKey, model) {
   return images
 }
 
+// Offline fallback used only when the image service has no available channel.
+// It derives a distinct pixel-art variant from the lesson reference (palette
+// shift, optional mirror, nearest-neighbor scaling); provenance records it as
+// `local-variant` so it is never mistaken for an API generation.
+function localVariant(referenceFile, seed, slot) {
+  const cleaned = removeNearWhiteBackground(fs.readFileSync(referenceFile)).buffer
+  const png = PNG.sync.read(cleaned)
+  const target = 512
+  const out = new PNG({ width: target, height: target })
+  for (let i = 0; i < out.data.length; i += 4) out.data[i + 3] = 0
+  const scale = Math.min(target / png.width, target / png.height) * 0.92
+  const dw = Math.max(1, Math.round(png.width * scale))
+  const dh = Math.max(1, Math.round(png.height * scale))
+  const dx = Math.floor((target - dw) / 2)
+  const dy = Math.floor((target - dh) / 2)
+  const mirror = slot === 'end'
+  const palette = seed % 3
+  for (let y = 0; y < dh; y += 1) {
+    for (let x = 0; x < dw; x += 1) {
+      const sx = Math.min(png.width - 1, Math.floor(((mirror ? dw - 1 - x : x) * png.width) / dw))
+      const sy = Math.min(png.height - 1, Math.floor((y * png.height) / dh))
+      const si = (sy * png.width + sx) * 4
+      const alpha = png.data[si + 3]
+      if (!alpha) continue
+      const di = ((dy + y) * target + (dx + x)) * 4
+      let r = png.data[si]
+      let g = png.data[si + 1]
+      let b = png.data[si + 2]
+      if (palette === 1) [r, g, b] = [b, r, g]
+      else if (palette === 2) [r, g, b] = [g, b, r]
+      out.data[di] = Math.min(255, Math.round(r * 1.05))
+      out.data[di + 1] = Math.min(255, Math.round(g * 0.95))
+      out.data[di + 2] = Math.min(255, Math.round(b * 1.02))
+      out.data[di + 3] = alpha
+    }
+  }
+  return PNG.sync.write(out)
+}
+
 // Plan every slot before reading the API key: with --reuse an unchanged
 // manifest needs no network access at all. A slot is reusable only when the
 // prompt, reference hash, output file and recorded provenance all still match.
@@ -320,8 +360,19 @@ for (const plan of plans) {
       continue
     }
     try {
-      const images = await requestImage(prompt, referenceFile, seed, 1, apiKey, modelName)
-      const rawBuffer = images[0]
+      // The per-variant model must not leak into later slots: if the API
+      // recovers, those variants are real generations again.
+      let usedModel = modelName
+      let rawBuffer
+      try {
+        const images = await requestImage(prompt, referenceFile, seed, 1, apiKey, modelName)
+        rawBuffer = images[0]
+      } catch (error) {
+        if (process.env.COURSEWARE_ART_LOCAL_FALLBACK !== '1') throw error
+        console.warn(`warning: image API failed (${error.message}); using local reference variant for ${illustration.slot}`)
+        rawBuffer = localVariant(referenceFile, seed, illustration.slot)
+        usedModel = 'local-variant'
+      }
       let buffer = rawBuffer
       let backgroundRemoved = 0
       let trimmed = false
@@ -366,10 +417,10 @@ for (const plan of plans) {
           pixelScale: shell.assets.postprocess.pixelate.scale,
         } : {}),
         seed,
-        seedSent: !isOpenAIImageModel(modelName),
+        seedSent: !isOpenAIImageModel(usedModel),
         prompt,
-        model: modelName,
-        provider: PROVIDER,
+        model: usedModel,
+        provider: usedModel === 'local-variant' ? 'local' : PROVIDER,
         reference: illustration.reference,
         referenceSha256: referenceSha,
       })

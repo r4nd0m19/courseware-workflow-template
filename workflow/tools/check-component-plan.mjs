@@ -12,6 +12,7 @@ import {
   parseTableRows,
   hasPlaceholder,
 } from './script-lib.mjs'
+import { readStagingManifests, stagingDirForRegistry } from './registry-lib.mjs'
 
 const rawArgs = process.argv.slice(2)
 const options = { plan: '', briefs: '', approval: DEFAULT_SCRIPT_APPROVAL }
@@ -109,6 +110,13 @@ for (const c of style.components || []) {
 for (const c of registry?.components || []) {
   if (!registered.has(c.id)) registered.set(c.id, { source: 'registry', status: c.status })
 }
+if (registryArg && registryArg.trim()) {
+  for (const { manifest } of readStagingManifests(stagingDirForRegistry(registryArg))) {
+    if (!registered.has(manifest.id)) {
+      registered.set(manifest.id, { source: 'staging', status: manifest.status })
+    }
+  }
+}
 
 if (!fs.existsSync(planPath)) {
   fail('component plan', [`${planPath} not found; run speckit.component-plan first`])
@@ -197,7 +205,10 @@ for (const [id, item] of declarations) {
     }
     continue
   }
-  if (item.status === 'new' && registered.has(id)) {
+  // A staging package may exist because a previous run already built it; the
+  // approved script still records it as new until its first page passes
+  // review. Declaring it new again is the normal retry path.
+  if (item.status === 'new' && registered.has(id) && registered.get(id).source !== 'staging') {
     errors.push(`${item.slide}: ${id} declared new, but it is already registered; use existing/extend`)
   }
   if (item.status === 'extend' && !registered.has(id)) {

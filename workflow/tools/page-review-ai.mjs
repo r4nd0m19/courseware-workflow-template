@@ -204,8 +204,10 @@ const baseUrl =
 const model =
   opt('--model') ||
   process.env.COURSEWARE_REVIEW_MODEL ||
-  zcode?.model ||
+  // An explicit model in the review config wins over the provider's default
+  // model rule, so a vision model can be paired with a reused ZCode provider.
   fileConfig.model ||
+  zcode?.model ||
   (mockResponsePath ? 'mock' : '')
 const structuredOutput =
   opt('--structured-output') ||

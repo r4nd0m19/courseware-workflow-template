@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { readData, validateWithSchema } from './lib.mjs'
 import { parseScript, parseMarkdownSections, canonicalHeading, hasPlaceholder } from './script-lib.mjs'
-import { loadRegistryPackages } from './registry-lib.mjs'
+import { loadRegistryPackages, loadStagingPackages } from './registry-lib.mjs'
 import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
@@ -66,6 +66,20 @@ try {
 } catch {
   registry = { index: { components: [] }, packages: [] }
 }
+// Staged packages are already built and reviewable. The planner must be able
+// to pick them instead of planning a duplicate "new" component for the same
+// interaction; staged:true keeps their unapproved status visible.
+let stagingPackages = []
+try {
+  stagingPackages = loadStagingPackages(registryPath, { projectRoot: process.cwd() })
+} catch {
+  stagingPackages = []
+}
+const coreIds = new Set(registry.packages.map((pkg) => pkg.manifest?.id).filter(Boolean))
+const packages = [
+  ...registry.packages,
+  ...stagingPackages.filter((pkg) => pkg.manifest && !coreIds.has(pkg.manifest.id)),
+]
 const scriptSlides = parsed.slides.map((slide) => ({
   id: slide.id,
   title: slide.headingTitle,
@@ -93,12 +107,13 @@ const styleComponents = (style.components || []).map((component) => ({
   whenNotToUse: component.whenNotToUse || '',
   sourceRefs: component.sourceRefs || [],
 }))
-const registryComponents = registry.packages
+const registryComponents = packages
   .filter((pkg) => pkg.manifest)
   .map((pkg) => ({
     id: pkg.manifest.id,
     version: pkg.manifest.version,
     status: pkg.manifest.status,
+    staged: Boolean(pkg.staged),
     category: pkg.manifest.category,
     interactionLevels: pkg.manifest.interactionLevels || [],
     tags: pkg.manifest.tags || [],
@@ -108,7 +123,7 @@ const registryComponents = registry.packages
   }))
 function matchesFor(query, level) {
   const q = String(query || '').toLowerCase()
-  const scored = registry.packages
+  const scored = packages
     .filter((pkg) => pkg.manifest && pkg.manifest.status !== 'deprecated')
     .map((pkg) => {
       const m = pkg.manifest
@@ -117,7 +132,7 @@ function matchesFor(query, level) {
       if (q && `${m.id} ${m.name}`.toLowerCase().includes(q)) score += 3
       if (q && haystack.includes(q)) score += 1
       if (level && (m.interactionLevels || []).includes(level)) score += 2
-      return { id: m.id, version: m.version, score, whenToUse: m.whenToUse, learningFunction: m.learningFunction }
+      return { id: m.id, version: m.version, staged: Boolean(pkg.staged), score, whenToUse: m.whenToUse, learningFunction: m.learningFunction }
     })
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
@@ -154,6 +169,7 @@ const evidence = {
   rules: [
     '只做组件复用规划与简报，不写实现代码、HTML、CSS 或测试。',
     '尊重脚本已批准的 componentPlan：每个 new/extend id 必须且只能出现在 gaps 中，decision 与脚本一致。',
+    'registry.components 中 staged=true 的组件已经在 registry/staging 构建完成，可以直接复用，不得再规划成 new/extend 缺口；仍需在复用检索里记录命中。若已批准脚本仍把它标成 new/extend，那是上次构建未完成的重试，必须按脚本 decision 保留缺口行。',
     '每个互动需求先记参考源码检索，再记注册表检索；没有命中也要记录原因。',
     '每个 new/extend 必须有一份完整简报，包含模板要求的所有标题、状态机表、props 表、无障碍、降级和测试计划。',
     '不要把风格包 kind=generated 的条目当成可用实现；实现必须在 registry core。',

@@ -61,6 +61,7 @@ for (let i = 0; i < args.length; i += 1) {
     i += 1
   }
 }
+if (args.includes('--no-sandbox')) forwarded.push('--no-sandbox')
 for (const id of componentIds) {
   const mode = statusById.get(id)
   if (!mode) die(`${id}: no new/extend componentPlan declaration in ${scriptPath}`)

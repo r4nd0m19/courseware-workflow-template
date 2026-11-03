@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { assertScriptApproved, DEFAULT_SCRIPT_APPROVAL } from './approval-lib.mjs'
+import { copyJudgeRuntime, deckUsesCodeJudge, judgeRuntimeInstallHint, readDeck } from './judge-runtime-lib.mjs'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
@@ -73,6 +74,24 @@ if (narration) prepareArgs.push('--narration', narration)
 if (audioDir) prepareArgs.push('--audio-dir', audioDir)
 if (force) prepareArgs.push('--force')
 run('prepare-shell-site.mjs', prepareArgs, 'prepare-shell-site')
+
+// 2b. A code-judge slide compiles in the browser, so the site needs the local
+//     Clang/LLD WASM runtime. Copy it only when the deck uses that component;
+//     the assets are large and gitignored, never assumed to be in the shell.
+let deckData
+try {
+  deckData = readDeck(deck)
+} catch (error) {
+  fail(`deck data: ${error.message}`)
+}
+if (deckUsesCodeJudge(deckData)) {
+  try {
+    const copied = copyJudgeRuntime({ deck: deckData, siteDir: out })
+    console.log(`OK judge runtime — ${copied.bases.join(', ')} (${copied.files.length} file(s))`)
+  } catch (error) {
+    fail(`judge runtime: ${error.message}\nInstall it with: ${judgeRuntimeInstallHint()}`)
+  }
+}
 
 // 3. Inject the component bundle and host, then verify the rendered site.
 if (registry) {

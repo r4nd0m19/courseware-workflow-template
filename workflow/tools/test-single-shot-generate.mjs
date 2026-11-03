@@ -141,6 +141,35 @@ test('script outline and page modes pass structured JSON through', () => {
   assert.equal(JSON.parse(fs.readFileSync(pageOut, 'utf8')).id, 'S01')
 })
 
+test('shared config reuses the ZCode provider and textModel', () => {
+  const zcodeFile = write('shared-zcode-provider.json', {
+    config: {
+      providerConfigRules: {
+        providerRules: [{
+          providerId: 'fake',
+          enabled: true,
+          config: {
+            api: { type: 'openai-chat', baseUrl: 'https://example.invalid/v1' },
+            access: { apiKey: 'test-key' },
+          },
+        }],
+      },
+      modelConfigRules: {
+        providerModelRules: [{ providerId: 'fake', modelId: 'provider-model' }],
+      },
+    },
+  })
+  const configFile = write('shared-config.json', {
+    textModel: 'text-model',
+    zcodeConfig: zcodeFile,
+    zcodeProvider: 'fake',
+  })
+  const result = run(['--check-config', '--config', configFile])
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /model=text-model/)
+  assert.match(result.stdout, /key=zcode:fake/)
+})
+
 if (failed) {
   console.error(`${failed}/${total} single-shot-generate tests failed`)
   process.exit(1)

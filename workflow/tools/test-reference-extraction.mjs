@@ -214,7 +214,21 @@ console.log('PASS deterministic reference-verbatim extraction')
   assert.equal(JSON.parse(pageList.stdout).referenceVerbatim[0].id, 'ref-widget')
 
   const repoRoot = path.resolve(tools, '../..')
-  fs.symlinkSync(path.join(repoRoot, 'workflow'), path.join(tmp, 'workflow'), 'dir')
+  // Windows without Developer Mode cannot create directory symlinks; a junction
+  // needs no elevation, and a copy is the last-resort fallback.
+  const workflowLink = path.join(tmp, 'workflow')
+  try {
+    fs.symlinkSync(
+      path.join(repoRoot, 'workflow'),
+      workflowLink,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    )
+  } catch {
+    fs.cpSync(path.join(repoRoot, 'workflow'), workflowLink, {
+      recursive: true,
+      filter: (src) => !src.split(path.sep).includes('node_modules'),
+    })
+  }
   const built = spawnSync(process.execPath, [
     path.join(tools, 'generate-components.mjs'),
     '--components', 'ref-widget',

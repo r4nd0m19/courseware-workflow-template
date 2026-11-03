@@ -3,7 +3,7 @@ schema_version: "1.0"
 workflow:
   id: "courseware-production"
   name: "Courseware Production"
-  version: "0.44.1"
+  version: "0.46.1"
   author: "courseware"
   description: "壳（独立 courseware-shell 工作流，先审）→ 内容包 → 参考源码直拷风格包 → 结构化教学简报 → 结构化脚本生成 → 人类可读脚本（整份一次审）→ 概念/结构化自学审核/覆盖闸门 → 本课插画 → 组件复用规划/按页实现 → 分镜投影 → 任务 → 逐页构建/渲染/人工审 → 确定性 Alpha/结构化 Beta/Gold 汇总"
 
@@ -209,7 +209,7 @@ steps:
   # concepts.yml deterministically. No coding agent reads the repository.
   - id: brief
     type: shell
-    timeout: 300
+    timeout: 900
     run: "node workflow/tools/generate-brief.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --concepts {{ inputs.concepts }} --constitution .specify/memory/constitution.md --review-dir review/{{ inputs.lesson_slug }}"
 
   # The concept ledger is authored with the brief. Validate its schema and
@@ -225,7 +225,7 @@ steps:
 
   - id: self-review-brief
     type: shell
-    timeout: 300
+    timeout: 600
     run: "node workflow/tools/review-ai.mjs --mode brief --evidence review/{{ inputs.lesson_slug }}/brief-review-evidence.json --review-json review/{{ inputs.lesson_slug }}/self-review-brief.json --md review/{{ inputs.lesson_slug }}/self-review-brief.md"
 
   - id: check-self-review-brief
@@ -264,7 +264,7 @@ steps:
   # edit courseware.md or expand the page count on its own.
   - id: self-study-audit
     type: shell
-    timeout: 300
+    timeout: 900
     run: "node workflow/tools/generate-self-study-audit.mjs --lesson-slug {{ inputs.lesson_slug }} --lesson \"{{ inputs.lesson }}\" --script {{ inputs.courseware_script }} --content {{ inputs.content_pack }} --style {{ inputs.style_pack }} --registry {{ inputs.component_registry }} --concepts {{ inputs.concepts }} --declared-pages \"{{ inputs.declared_pages }}\" --review-dir review/{{ inputs.lesson_slug }} --out review/{{ inputs.lesson_slug }}/self-study-audit.json --md review/{{ inputs.lesson_slug }}/self-study-audit.md --raw review/{{ inputs.lesson_slug }}/self-study-audit-generation.json --report review/{{ inputs.lesson_slug }}/self-study-generation.json"
 
   - id: check-self-study
@@ -302,7 +302,7 @@ steps:
 
   - id: self-review-script
     type: shell
-    timeout: 300
+    timeout: 900
     run: "node workflow/tools/review-ai.mjs --mode script --evidence review/{{ inputs.lesson_slug }}/self-review-script-evidence.json --review-json review/{{ inputs.lesson_slug }}/self-review-script.json --md review/{{ inputs.lesson_slug }}/self-review-script.md"
 
   - id: check-self-review-script
@@ -350,7 +350,7 @@ steps:
 
   - id: shell-art-brief
     type: shell
-    timeout: 300
+    timeout: 600
     run: "node workflow/tools/single-shot-generate.mjs --mode art-brief --evidence review/{{ inputs.lesson_slug }}/art-brief-evidence.json --out {{ inputs.art_prompts }}"
 
   - id: build-shell-art
@@ -397,7 +397,7 @@ steps:
 
   - id: self-review-component-plan
     type: shell
-    timeout: 300
+    timeout: 600
     run: "node workflow/tools/review-ai.mjs --mode component-plan --evidence review/{{ inputs.lesson_slug }}/component-plan-review-evidence.json --review-json review/{{ inputs.lesson_slug }}/self-review-component-plan.json --md review/{{ inputs.lesson_slug }}/self-review-component-plan.md"
 
   - id: check-self-review-component-plan
@@ -438,7 +438,7 @@ steps:
 
   - id: build-reference-adaptation
     type: shell
-    timeout: 300
+    timeout: 600
     run: "node workflow/tools/single-shot-generate.mjs --mode reference-adaptation --evidence review/{{ inputs.lesson_slug }}/reference-adaptation-evidence.json --out review/{{ inputs.lesson_slug }}/reference-adaptation.json --md review/{{ inputs.lesson_slug }}/reference-adaptation.md"
 
   - id: check-reference-adaptation
@@ -585,7 +585,7 @@ steps:
               # apply-page-deck.mjs validates it and is the only writer.
               - id: implement-section
                 type: shell
-                timeout: 300
+                timeout: 600
                 run: "node workflow/tools/single-shot-generate.mjs --mode page-deck --evidence review/{{ inputs.lesson_slug }}/page-deck-evidence-{{ steps.advance_section.output.data.section.id }}.json --out review/{{ inputs.lesson_slug }}/page-deck-{{ steps.advance_section.output.data.section.id }}.json"
 
               - id: apply-page-deck

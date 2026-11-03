@@ -15,6 +15,20 @@ import { readData } from './lib.mjs'
 
 const tools = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(tools, '../..')
+// This golden round-trip needs the development fixtures (a built-in component,
+// a lesson brief, the registry index and a shell style pack). A fresh template
+// project has none of them, so skip instead of failing the install smoke test.
+const fixtures = [
+  path.join(root, 'registry/components/code-anatomy'),
+  path.join(root, 'specs/001-2d-arrays/component-briefs/code-anatomy.md'),
+  path.join(root, 'registry/index.json'),
+  path.join(root, 'shells/branch-choice/style-pack.manifest.json'),
+]
+const missing = fixtures.filter((file) => !fs.existsSync(file))
+if (missing.length) {
+  console.log(`SKIP structured component files golden round-trip (dev fixtures not available: ${missing.map((file) => path.relative(root, file)).join(', ')})`)
+  process.exit(0)
+}
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'courseware-component-files-'))
 const stagingRoot = fs.mkdtempSync(path.join(root, 'registry', '.tmp-component-files-'))
 const generatedStaging = fs.mkdtempSync(path.join(root, 'registry', '.tmp-component-generated-'))

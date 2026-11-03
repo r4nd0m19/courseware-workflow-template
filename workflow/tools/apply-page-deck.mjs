@@ -6,6 +6,7 @@
 // validates custom component props against their schema, and only then writes.
 import fs from 'node:fs'
 import path from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import Ajv from 'ajv'
 import { readData } from './lib.mjs'
 import { parseFlagValue } from './self-review-lib.mjs'
@@ -56,6 +57,31 @@ if (slide.component) {
 }
 if (slide.type === 'blank' && !slide.component) {
   errors.push('type=blank requires a component id')
+}
+// Staged exercises are approved once in the script; the page model may only
+// copy them. Anything else would let the visible tests drift from the script,
+// the teacher review copy and the screenshots.
+const exercise = evidence.scriptSlide?.exercise || evidence.exercise || null
+if (exercise) {
+  const props = slide.props && typeof slide.props === 'object' ? slide.props : {}
+  if (slide.type !== 'blank') errors.push(`exercise page must use type=blank, got ${JSON.stringify(slide.type)}`)
+  if (slide.component !== exercise.component) {
+    errors.push(`exercise page must use component ${exercise.component}, got ${JSON.stringify(slide.component)}`)
+  }
+  for (const field of ['statement', 'starterCode', 'tests']) {
+    if (!isDeepStrictEqual(props[field], exercise[field])) {
+      errors.push(`props.${field} must exactly match the approved script exercise`)
+    }
+  }
+  for (const field of ['timeLimitMs', 'maxOutputBytes']) {
+    if (props[field] !== exercise[field]) {
+      errors.push(`props.${field} must equal the approved script value ${exercise[field]}`)
+    }
+  }
+  if (props.disabled === true) errors.push('exercise pages cannot start disabled')
+  if (props.fallbackMode === 'static') errors.push('exercise pages must keep fallbackMode=interactive')
+} else if (slide.component === 'code-judge') {
+  errors.push('code-judge is only allowed when the approved script declares an exercise for this page')
 }
 function checkForbidden(value, where = 'slide') {
   if (Array.isArray(value)) {

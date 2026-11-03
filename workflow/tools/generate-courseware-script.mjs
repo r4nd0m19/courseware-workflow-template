@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { readData, validateWithSchema } from './lib.mjs'
 import { normalizeForMatch, hasPlaceholder } from './script-lib.mjs'
+import { cleanOneLine, screenContentForPage } from './script-render-lib.mjs'
+import { readStagingManifests, stagingDirForRegistry } from './registry-lib.mjs'
 
 const toolsDir = path.dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
@@ -110,6 +112,15 @@ const registryComponents = new Set(
     .map((component) => (typeof component === 'string' ? component : component?.id))
     .filter(Boolean),
 )
+// build-script-input normally includes staged components in registry.components;
+// this fallback keeps direct/manual invocations working with the same contract.
+const stagingIds = new Set(
+  readStagingManifests(stagingDirForRegistry(input.registry?.path))
+    .map(({ manifest }) => manifest.id)
+    .filter(Boolean),
+)
+const EXERCISE_COMPONENT = 'code-judge'
+const MAX_EXERCISES = 4
 // A generated style-pack entry is only design vocabulary; its implementation
 // must come from the core registry. A bare/reference style entry is usable.
 const generatedStyleComponents = new Set(
@@ -119,6 +130,7 @@ const generatedStyleComponents = new Set(
 )
 const knownComponents = new Set([
   ...registryComponents,
+  ...stagingIds,
   ...[...styleComponentInfo.keys()].filter((id) => !generatedStyleComponents.has(id)),
 ])
 const knownLayouts = new Set(
@@ -137,6 +149,7 @@ function summaryPage(page) {
     title: page.title,
     purpose: page.purpose,
     objectiveId: page.objectiveId,
+    ...(page.exercise ? { exercise: page.exercise.component } : {}),
     transitionHint: page.transitionHint || undefined,
   }
 }
@@ -215,6 +228,7 @@ function validateOutline(outline) {
   if (outline.pages.length > maxPages) errors.push(`outline has ${outline.pages.length} pages; maximum is ${maxPages}`)
   const pageIds = new Set()
   const pagesById = new Map()
+  let exerciseCount = 0
   for (const [index, page] of outline.pages.entries()) {
     const where = `page ${page.id || `#${index + 1}`}`
     if (pageIds.has(page.id)) errors.push(`${where}: duplicate page id`)
@@ -256,6 +270,39 @@ function validateOutline(outline) {
       if (!plan || !['new', 'extend'].includes(plan.status)) {
         errors.push(`${where}: component ${component} is not registered and has no new/extend componentPlan`)
       }
+    }
+    if (page.exercise) {
+      exerciseCount += 1
+      if (index === 0) errors.push(`${where}: a staged exercise cannot be the first page`)
+      if (outline.pages[index - 1]?.exercise) {
+        errors.push(`${where}: staged exercises cannot be on consecutive pages`)
+      }
+      if (exerciseCount > MAX_EXERCISES) {
+        errors.push(`${where}: at most ${MAX_EXERCISES} staged exercises are allowed`)
+      }
+      if (!(page.components || []).includes(page.exercise.component)) {
+        errors.push(`${where}: exercise.component ${page.exercise.component} is not in components`)
+      }
+      if (page.interaction?.component !== page.exercise.component) {
+        errors.push(`${where}: exercise page interaction.component must be ${page.exercise.component}`)
+      }
+      if (!['construct', 'modify'].includes(page.interaction?.level)) {
+        errors.push(`${where}: exercise page interaction.level must be construct or modify`)
+      }
+      if (!['construct', 'modify'].includes(page.interaction?.learningAction)) {
+        errors.push(`${where}: exercise page interaction.learningAction must be construct or modify`)
+      }
+      const judgePlan = planById.get(page.exercise.component)
+      if (judgePlan && judgePlan.status !== 'existing') {
+        errors.push(
+          `${where}: ${page.exercise.component} is already staged; do not declare it ${judgePlan.status} in componentPlan`,
+        )
+      }
+    } else if (
+      (page.components || []).includes(EXERCISE_COMPONENT) ||
+      page.interaction?.component === EXERCISE_COMPONENT
+    ) {
+      errors.push(`${where}: ${EXERCISE_COMPONENT} requires exercise (it is a staged checkpoint component)`)
     }
     if (!page.interaction?.component && page.interaction?.level !== 'watch') {
       errors.push(`${where}: non-watch interaction needs interaction.component`)
@@ -327,8 +374,9 @@ function present(haystack, needle, exactHaystack) {
 }
 function contentErrors(page, satisfied) {
   const errors = []
-  const screen = normalizeForMatch(page.screenContent)
-  const exactScreen = normalizedExact(page.screenContent)
+  const screenContent = screenContentForPage(page)
+  const screen = normalizeForMatch(screenContent)
+  const exactScreen = normalizedExact(screenContent)
   const interaction = normalizeForMatch(Object.values(page.interactionDesign || {}).join('\n'))
   const exactInteraction = normalizedExact(Object.values(page.interactionDesign || {}).join('\n'))
   const narration = normalizeForMatch((page.narration || []).join('\n'))
@@ -361,7 +409,7 @@ function contentErrors(page, satisfied) {
 
 function conceptErrors(page) {
   const errors = []
-  const screen = normalizeForMatch(page.screenContent)
+  const screen = normalizeForMatch(screenContentForPage(page))
   for (const concept of concepts.filter((entry) => entry.introducedOn === page.id)) {
     if (!screen.includes(normalizeForMatch(concept.term))) {
       errors.push(`concept ${concept.id}: screenContent is missing term "${concept.term}"`)
@@ -390,7 +438,43 @@ function validatePage(page, outlinePage) {
   }
   if (/[\r\n]/.test(page.title)) errors.push('page.title must be a single line')
   if (PRODUCTION_TITLE_RE.test(page.title.trim())) errors.push(`page.title starts with a production label`)
-  if (hasPlaceholder(page.screenContent) || hasPlaceholder(page.narration.join('\n')) || hasPlaceholder(Object.values(page.interactionDesign).join('\n'))) {
+  const screenContent = screenContentForPage(page)
+  if (outlinePage.exercise) {
+    if (!page.exercise) {
+      errors.push(`page must include exercise (${outlinePage.exercise.component})`)
+    } else {
+      if (page.exercise.component !== outlinePage.exercise.component) {
+        errors.push(`exercise.component ${page.exercise.component} != outline ${outlinePage.exercise.component}`)
+      }
+      if (page.screenContent !== undefined) {
+        errors.push('exercise page must not include screenContent; Node renders it from exercise')
+      }
+      for (const [label, value] of [
+        ['statement', page.exercise.statement],
+        ['starterCode', page.exercise.starterCode],
+      ]) {
+        if (hasPlaceholder(value)) errors.push(`exercise.${label} contains a placeholder`)
+      }
+      const testIds = new Set()
+      const labels = new Set()
+      for (const [index, test] of page.exercise.tests.entries()) {
+        if (testIds.has(test.id)) errors.push(`exercise.tests[${index}]: duplicate id ${test.id}`)
+        testIds.add(test.id)
+        if (labels.has(cleanOneLine(test.label))) {
+          errors.push(`exercise.tests[${index}]: duplicate label ${JSON.stringify(test.label)}`)
+        }
+        labels.add(cleanOneLine(test.label))
+        for (const field of ['label', 'input', 'expected']) {
+          if (hasPlaceholder(test[field])) {
+            errors.push(`exercise.tests[${index}].${field} contains a placeholder`)
+          }
+        }
+      }
+    }
+  } else if (page.exercise) {
+    errors.push('page includes exercise but the outline page does not declare one')
+  }
+  if (hasPlaceholder(screenContent) || hasPlaceholder(page.narration.join('\n')) || hasPlaceholder(Object.values(page.interactionDesign).join('\n'))) {
     errors.push('page contains TODO/TBD/待定/占位/[NEEDS CLARIFICATION]')
   }
   if (page.interactionDesign.level !== outlinePage.interaction.level) {
@@ -425,11 +509,11 @@ function validatePage(page, outlinePage) {
       errors.push(`errorFeedback must name misconception ${misconception}`)
     }
   }
-  if (normalizeForMatch(page.screenContent) === normalizeForMatch(page.narration.join('\n'))) {
+  if (normalizeForMatch(screenContent) === normalizeForMatch(page.narration.join('\n'))) {
     errors.push('narration must not be a copy of screenContent')
   }
   let fence = null
-  for (const line of String(page.screenContent || '').split(/\r?\n/)) {
+  for (const line of screenContent.split(/\r?\n/)) {
     const match = line.match(/^\s*(`{3,}|~{3,})/)
     if (match) {
       if (!fence) fence = match[1][0]
@@ -442,6 +526,22 @@ function validatePage(page, outlinePage) {
     }
   }
   return errors
+}
+
+function normalizeExercise(exercise) {
+  return {
+    component: exercise.component,
+    statement: exercise.statement,
+    starterCode: exercise.starterCode,
+    tests: exercise.tests.map((test) => ({
+      id: test.id,
+      label: test.label,
+      input: test.input,
+      expected: test.expected,
+    })),
+    timeLimitMs: exercise.timeLimitMs ?? 2000,
+    maxOutputBytes: exercise.maxOutputBytes ?? 65536,
+  }
 }
 
 function buildPageEvidence(page, outline, previous, next, repair) {
@@ -553,6 +653,7 @@ for (const [index, outlinePage] of outline.pages.entries()) {
   if (errors.length) {
     die(`page ${outlinePage.id} is still invalid after ${attempts} attempt(s):\n${errors.map((error) => `  - ${error}`).join('\n')}`)
   }
+  if (page.exercise) page.exercise = normalizeExercise(page.exercise)
   pages.push(page)
   pageAttempts.push({ id: outlinePage.id, attempts })
 }

@@ -104,11 +104,14 @@ function componentPackages() {
 }
 const components = componentPackages()
 const existingSlide = (deck.slides || []).find((slide) => slide.id === slideId) || null
-const hint = scriptSlide.machine?.interaction?.component
-  ? { type: 'blank', component: scriptSlide.machine.interaction.component }
-  : scriptSlide.machine?.interaction?.type === 'cover-hero'
-    ? { type: 'hero' }
-    : { type: scriptSlide.machine?.interaction?.type || 'blank' }
+const exercise = scriptSlide.machine?.exercise || null
+const hint = exercise
+  ? { type: 'blank', component: exercise.component }
+  : scriptSlide.machine?.interaction?.component
+    ? { type: 'blank', component: scriptSlide.machine.interaction.component }
+    : scriptSlide.machine?.interaction?.type === 'cover-hero'
+      ? { type: 'hero' }
+      : { type: scriptSlide.machine?.interaction?.type || 'blank' }
 
 const evidence = {
   schemaVersion: '1.0',
@@ -123,6 +126,7 @@ const evidence = {
     interactionDesign: scriptSlide.interactionDesign,
     narration: scriptSlide.narration,
     transition: scriptSlide.transition,
+    exercise,
     machine: scriptSlide.machine,
   },
   storyboardSlide: board,
@@ -138,6 +142,8 @@ const evidence = {
     'component 必须是 components 中的 id；props 必须符合对应 propsSchema。',
     '屏幕内容从脚本「屏幕内容」逐字搬入；不要把旁白放进屏幕字段。',
     '不得写 style、className、html、innerHTML、on* 等页面实现字段。',
+    'scriptSlide.exercise 非空时，本页必须是 type=blank + component=code-judge，props 只需原样复制 statement/starterCode/tests（以及 timeLimitMs/maxOutputBytes，若存在）；不得改动题目、起始代码或测试数据，不得添加隐藏测试。',
+    '阶段练习页只提供练习，不设置翻页门禁或解锁状态；不要生成任何 blocked/unlock/gate 字段。',
     '不要生成音频、截图或构建站点；这些由 workflow 处理。',
   ],
 }

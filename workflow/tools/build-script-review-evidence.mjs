@@ -73,6 +73,7 @@ for (const slide of parsed.slides) {
     transition: slide.transition,
     interaction: slide.machine?.interaction || board.interaction || null,
     componentPlan: slide.machine?.componentPlan || null,
+    exercise: slide.machine?.exercise || null,
     supplementTags: [...new Set(
       [...String(slide.screenContent || '').matchAll(/<!--\s*self-study-supplement:([A-Za-z0-9-]+)/g)].map(
         (match) => match[1],
@@ -134,8 +135,12 @@ if (densityAuthority === 'script') {
   }
 }
 
-const feature = readData('.specify/feature.json')
-const specPath = path.join(feature.feature_directory, 'spec.md')
+// New projects may not have .specify/feature.json; fall back to the lesson's
+// own spec directory, matching generate-brief.mjs.
+const feature = fs.existsSync('.specify/feature.json') ? readData('.specify/feature.json') : {}
+const specPath = feature.feature_directory
+  ? path.join(feature.feature_directory, 'spec.md')
+  : path.join('specs', lessonSlug, 'spec.md')
 const selfStudyAudit = path.join(reviewDir, 'self-study-audit.json')
 const selfStudyApply = path.join(reviewDir, 'self-study-apply.json')
 const selfStudyExists = fs.existsSync(selfStudyAudit) && fs.existsSync(selfStudyApply)

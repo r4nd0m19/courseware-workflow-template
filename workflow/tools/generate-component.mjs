@@ -67,7 +67,8 @@ const extractManifest = opt('--extract-manifest')
 const maxAttempts = Math.max(1, Number(opt('--max-attempts', '3')) || 3)
 const force = flag('--force')
 const skipBrowser = flag('--skip-browser')
-const sandbox = !flag('--no-sandbox')
+// bubblewrap is Linux-only; Windows component checks run without a sandbox.
+const sandbox = process.platform === 'win32' ? false : !flag('--no-sandbox')
 
 if (!componentId || !briefPath) {
   console.error(

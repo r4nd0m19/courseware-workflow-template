@@ -33,6 +33,35 @@
     }
   },
   "definitions": {
+    "exercise": {
+      "type": "object",
+      "description": "Staged coding checkpoint rendered into the page's screen content and carried into the deck as code-judge props.",
+      "required": ["component", "statement", "starterCode", "tests", "timeLimitMs", "maxOutputBytes"],
+      "additionalProperties": false,
+      "properties": {
+        "component": { "const": "code-judge" },
+        "statement": { "type": "string", "minLength": 1 },
+        "starterCode": { "type": "string", "minLength": 1 },
+        "tests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "input", "expected"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "input": { "type": "string" },
+              "expected": { "type": "string" }
+            }
+          }
+        },
+        "timeLimitMs": { "type": "integer", "minimum": 200, "maximum": 10000 },
+        "maxOutputBytes": { "type": "integer", "minimum": 4096, "maximum": 1048576 }
+      }
+    },
     "slide": {
       "type": "object",
       "required": [
@@ -136,6 +165,7 @@
             }
           }
         },
+        "exercise": { "$ref": "#/definitions/exercise" },
         "continuedFrom": { "type": "string", "pattern": "^S[0-9]+[A-Z]?$" },
         "continued": { "type": "boolean" },
         "status": { "type": "string", "enum": ["DRAFT", "APPROVED", "SKIP"] },

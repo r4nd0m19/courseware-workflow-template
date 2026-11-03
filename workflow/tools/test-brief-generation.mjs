@@ -120,4 +120,33 @@ if (gate.status !== 0) {
   console.error(gate.stdout, gate.stderr)
   process.exit(1)
 }
+
+// A fresh Spec Kit project has no .specify/feature.json. The review-evidence
+// builder must fall back to specs/<lesson>/spec.md like generate-brief.mjs.
+const lessonSpecDir = path.join(tmp, 'specs', 'smoke-brief')
+fs.mkdirSync(lessonSpecDir, { recursive: true })
+fs.copyFileSync(specPath, path.join(lessonSpecDir, 'spec.md'))
+const evidencePath = path.join(tmp, 'review', 'brief-review-evidence.json')
+const evidenceRun = spawnSync(
+  process.execPath,
+  [
+    path.join(tools, 'build-brief-review-evidence.mjs'),
+    '--lesson-slug', 'smoke-brief',
+    '--content', contentPath,
+    '--style', stylePath,
+    '--concepts', conceptsPath,
+    '--review-dir', path.join(tmp, 'review'),
+    '--out', evidencePath,
+    '--review-json', path.join(tmp, 'review', 'self-review-brief.json'),
+    '--md', path.join(tmp, 'review', 'self-review-brief.md'),
+  ],
+  { cwd: tmp, encoding: 'utf8' },
+)
+if (evidenceRun.status !== 0) {
+  console.error(evidenceRun.stdout, evidenceRun.stderr)
+  process.exit(1)
+}
+const evidence = readData(evidencePath)
+assert.equal(evidence.spec.path, path.join('specs', 'smoke-brief', 'spec.md'))
+assert.match(evidence.spec.text, /教学简报/)
 console.log('PASS structured teaching brief generation')

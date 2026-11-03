@@ -75,6 +75,10 @@ function readConfigFile(file) {
   }
 }
 const fileConfig = readConfigFile(configPath)
+// Text generation reuses the same config file as page review, including its
+// ZCode provider reference, so one file configures every AI step.
+const effectiveZcodeConfigPath = zcodeConfigPath || fileConfig.zcodeConfig || ''
+const effectiveZcodeProviderId = zcodeProviderId || fileConfig.zcodeProvider || ''
 function zcodeCandidates(value) {
   return (Array.isArray(value) ? value : [value])
     .map((item) => String(item || '').trim())
@@ -117,10 +121,10 @@ function readZcodeProvider(file, providerId) {
   if (!rule?.modelId) throw new Error(`provider ${chosen.providerId} has no model rule`)
   return { api, baseUrl, model: rule.modelId, apiKey, providerId: chosen.providerId }
 }
-const zcode = zcodeConfigPath ? readZcodeProvider(zcodeConfigPath, zcodeProviderId) : null
+const zcode = effectiveZcodeConfigPath ? readZcodeProvider(effectiveZcodeConfigPath, effectiveZcodeProviderId) : null
 const api = opt('--api') || process.env.COURSEWARE_REVIEW_API || zcode?.api || fileConfig.api || 'anthropic-messages'
 const baseUrl = opt('--base-url') || process.env.COURSEWARE_REVIEW_BASE_URL || zcode?.baseUrl || fileConfig.baseUrl || ''
-const model = opt('--model') || process.env.COURSEWARE_REVIEW_MODEL || zcode?.model || fileConfig.model || (mockResponsePath ? 'mock' : '')
+const model = opt('--model') || process.env.COURSEWARE_REVIEW_MODEL || fileConfig.textModel || fileConfig.model || zcode?.model || (mockResponsePath ? 'mock' : '')
 const apiKeyEnv = opt('--api-key-env') || fileConfig.apiKeyEnv || 'COURSEWARE_REVIEW_API_KEY'
 const apiKeyFile = opt('--api-key-file') || fileConfig.apiKeyFile || path.join(os.homedir(), '.config', 'courseware', 'page-review.key')
 const maxTokens = Number(opt('--max-tokens') || fileConfig.maxTokens || 8192)
@@ -445,6 +449,7 @@ Return one JSON object:
         "misconception": "M1 (optional)"
       },
       "componentPlan": [{"id": "component-id", "status": "existing|reference-verbatim|extend|new", "brief": "component-briefs/id.md (new/extend only)"}],
+      "exercise": {"kind": "code", "component": "code-judge"},  // optional staged checkpoint
       "continuedFrom": "S01 (optional)",
       "continued": false
     }
@@ -456,7 +461,9 @@ Rules:
 - Cover every required content item; contentRefs may only use ids from the content pack.
 - One semantic unit per page. Split at a semantic boundary instead of cramming; at most 30 pages.
 - Every objective needs at least one non-watch page. A watch page must use learningAction "observe".
-- A non-watch interaction must name a component that appears in components. Components/layouts must come from the supplied style pack or registry, or be declared new/extend with a brief path. A style-pack entry with kind "generated" is design vocabulary only: it needs a matching core registry entry; otherwise declare it new/extend.
+- A non-watch interaction must name a component that appears in components. Components/layouts must come from the supplied style pack or registry, or be declared new/extend with a brief path. A style-pack entry with kind "generated" is design vocabulary only: it needs a matching core registry entry; otherwise declare it new/extend. Registry components with staged=true are already built and reusable as existing.
+- Plan 1-3 staged coding checkpoints (at most 4) where writing and running code is the natural way to check understanding. A checkpoint page adds "exercise": {"kind": "code", "component": "code-judge"}, lists "code-judge" in components, uses level construct/modify with a code-writing learningAction, and declares code-judge as componentPlan status "existing". Never put an exercise on the first page or on two consecutive pages; code-judge must not appear without an exercise.
+- A checkpoint is a practice page only. Do not promise or describe a navigation lock, unlock state or "pass to continue" gate anywhere.
 - Titles are student-facing. Never start a title with 封面：/标题：/本页/第 X 页/Sxx.
 - Do not write Markdown page bodies, HTML, CSS, JavaScript, audio, screenshots, tests or gate results.
 - Do not use TODO/TBD/待定/占位/[NEEDS CLARIFICATION].${repairText(evidence)}`
@@ -478,6 +485,14 @@ Return one JSON object:
   "id": "S01",
   "title": "must equal the outline title",
   "screenContent": "Markdown shown to students; copy code, outputs, questions and options verbatim",
+  "exercise": {
+    "component": "code-judge",
+    "statement": "student-visible problem statement in plain text, newlines preserved",
+    "starterCode": "initial C++ code",
+    "tests": [{"id": "t1", "label": "short visible label", "input": "stdin text", "expected": "expected stdout text"}],
+    "timeLimitMs": 2000,
+    "maxOutputBytes": 65536
+  },
   "interactionDesign": {
     "attempt": "interaction attempt and why it fits this content",
     "learningAction": "must equal the outline value",
@@ -502,9 +517,11 @@ Return one JSON object:
 
 Rules:
 - Copy visible content from the referenced content items. Do not paraphrase code, output, quiz questions, quiz options or narration items that the checks require verbatim.
+- If the outline page has "exercise", return the exercise object and OMIT screenContent: the visible screen (statement, starter code, all tests) is rendered deterministically from exercise. Otherwise omit exercise and write screenContent.
+- Exercise rules: 1-6 tests, all of them visible to students — never hidden tests; every test needs a distinct id, a short label, input and expected output; starterCode must be valid, compilable C++ that represents the intended starting point (not the finished answer); statement must state the input format, output format and limits clearly. timeLimitMs and maxOutputBytes are optional (defaults 2000 and 65536). The checkpoint is practice only: never promise a navigation lock, unlock state or "pass to continue" gate.
 - screenContent is student-visible Markdown only. Never put narration into screenContent. Do not add Markdown headings (#, ##, ###) outside fenced code blocks.
 - narration is the full spoken script, one paragraph per array item. Do not read the screen word for word; add explanation, hints and feedback. Use [暂停] where the learner must act.
-- Fill every interactionDesign field. For watch, write whyStatic and do not invent feedback loops. For non-watch, feedback must name the misconception when one is supplied.
+- Fill every interactionDesign field. For watch, write whyStatic and do not invent feedback loops. For non-watch, feedback must name the misconception when one is supplied. On exercise pages, describe writing code, running the visible tests and revising; completion means the learner has run and understood the tests, not a locked page.
 - One page, one semantic unit. Do not merge the next page into this one.
 - No HTML, CSS, JavaScript, style, className, audio, screenshots, tests or gate results.
 - No TODO/TBD/待定/占位/[NEEDS CLARIFICATION].${repairText(evidence)}`
@@ -530,6 +547,7 @@ Rules:
 - Copy visible content from 屏幕内容; do not put narration into screen fields.
 - Never emit style, className, html, innerHTML, or on* fields.
 - Use the supplied typeTemplates as structural examples, replacing placeholder content with this lesson's content.
+- If scriptSlide.exercise is present, the slide must be type "blank" with component "code-judge", and props must copy statement, starterCode, tests, timeLimitMs and maxOutputBytes exactly from the exercise. Never change, shorten or add tests, and never add hidden tests or a navigation lock.
 - meta is optional and may only change existing deck meta fields (for example coverCode/coverOutput on the cover).
 - Do not generate audio, screenshots, build files or gate results.`
     const user = `Lesson: ${evidence.lesson} (${evidence.lessonSlug})

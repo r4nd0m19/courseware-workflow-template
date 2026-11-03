@@ -35,8 +35,12 @@ if (!lessonSlug || !contentPath || !stylePath || !conceptsPath) {
   process.exit(2)
 }
 
-const feature = readData('.specify/feature.json')
-const specPath = path.join(feature.feature_directory, 'spec.md')
+// New projects may not have .specify/feature.json; fall back to the lesson's
+// own spec directory, matching generate-brief.mjs.
+const feature = fs.existsSync('.specify/feature.json') ? readData('.specify/feature.json') : {}
+const specPath = feature.feature_directory
+  ? path.join(feature.feature_directory, 'spec.md')
+  : path.join('specs', lessonSlug, 'spec.md')
 function readText(file) {
   return fs.existsSync(path.resolve(file)) ? fs.readFileSync(path.resolve(file), 'utf8') : ''
 }

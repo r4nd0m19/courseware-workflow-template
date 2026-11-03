@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { validateWithSchema } from './lib.mjs'
 
 const args = process.argv.slice(2)
@@ -184,8 +185,11 @@ fs.writeFileSync(outFile, JSON.stringify(pack, null, 2))
 const reportFile = outFile.replace(/\.json$/i, '') + '.report.json'
 fs.writeFileSync(reportFile, JSON.stringify(report, null, 2))
 
-const schemaPath = new URL('../schemas/content-pack.schema.json', import.meta.url)
-  .pathname
+// fileURLToPath keeps Windows drive letters and percent-encoded characters
+// intact; URL.pathname yields "/D:/..." which the validator cannot open.
+const schemaPath = fileURLToPath(
+  new URL('../schemas/content-pack.schema.json', import.meta.url),
+)
 const check = validateWithSchema(schemaPath, pack)
 console.log(`items: ${items.length}`, report.byKind)
 console.log(`sensitive pages: ${report.sensitivePages.length}`)
