@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { buildReviewPrompt } from './review-ai-lib.mjs'
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url))
 const tool = path.join(toolDir, 'review-ai.mjs')
@@ -242,6 +243,63 @@ test('textZcodeProvider selects a separate provider for text steps', () => {
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /model=text-model/)
   assert.match(result.stdout, /key=zcode:text/)
+})
+
+test('script-editorial prompt asks for findings, not the checklist schema', () => {
+  const prompt = buildReviewPrompt({
+    mode: 'script-editorial',
+    evidence: { slides: [] },
+    skeleton: { checklist: [] },
+  })
+  assert.match(prompt.system, /"findings"/)
+  assert.match(prompt.system, /Do not return checklist/)
+  assert.doesNotMatch(prompt.system, /"checklist": \[\{"index": 0/)
+  assert.match(prompt.userText, /summary, findings and verdict/)
+})
+
+test('script-editorial review returns structured findings and markdown', () => {
+  const evidence = write('editorial-evidence.json', {
+    slides: [{ id: 'S14', screenContent: 'int a[3][4]; sum += a[i][j];' }],
+  })
+  const skeleton = write('editorial-skeleton.json', {
+    stage: 'script-editorial',
+    artifactPaths: [evidence],
+    reviewedArtifacts: [{ path: evidence, sha256: '0'.repeat(64) }],
+    summary: '',
+    findings: [],
+    verdict: 'fail',
+    reviewedAt: '2026-11-03T00:00:00Z',
+    reviewMeta: { mode: 'script-editorial' },
+  })
+  const mock = write('editorial-mock.json', {
+    content: [{ type: 'text', text: JSON.stringify({
+      summary: '发现一处代码问题。',
+      findings: [{
+        slideId: 'S14',
+        dimension: 'code-correctness',
+        severity: 'blocking',
+        evidence: 'sum += a[i][j];',
+        suggestion: '先声明并初始化 int sum = 0;。',
+      }],
+      verdict: 'revise',
+    }) }],
+  })
+  const review = path.join(tmp, 'editorial-review.json')
+  fs.copyFileSync(skeleton, review)
+  const result = run([
+    '--mode', 'script-editorial', '--evidence', evidence, '--review-json', review,
+    '--api', 'anthropic-messages', '--model', 'mock', '--mock-response', mock,
+  ])
+  assert.equal(result.status, 0, result.stderr)
+  const data = JSON.parse(fs.readFileSync(review, 'utf8'))
+  assert.equal(data.stage, 'script-editorial')
+  assert.equal(data.findings.length, 1)
+  assert.equal(data.findings[0].severity, 'blocking')
+  assert.equal(data.verdict, 'revise')
+  const markdown = fs.readFileSync(path.join(tmp, 'editorial-review.md'), 'utf8')
+  assert.match(markdown, /脚本编辑审稿/)
+  assert.match(markdown, /S14/)
+  assert.match(markdown, /先声明并初始化/)
 })
 
 if (failed) {

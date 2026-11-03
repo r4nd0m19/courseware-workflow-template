@@ -42,10 +42,11 @@ const evidencePath = parseFlagValue(
 )
 const outPath = parseFlagValue(args, '--out', path.join(reviewDir, 'self-review-script.json'))
 const mdPath = parseFlagValue(args, '--md', path.join(reviewDir, 'self-review-script.md'))
+const editorialOutPath = parseFlagValue(args, '--editorial-out', '')
 
 if (!lessonSlug || !scriptPath || !contentPath || !conceptsPath) {
   console.error(
-    'usage: node build-script-review-evidence.mjs --lesson-slug <slug> --script <courseware.md> [--storyboard <storyboard.yml>] --content <content-pack.json> --style <style-pack.manifest.json> --concepts <concepts.yml> --registry <registry/index.json> --review-sections <review-sections.yml> --review-dir review/<slug> [--evidence-out <json>] [--out <review.json>] [--md <review.md>]',
+    'usage: node build-script-review-evidence.mjs --lesson-slug <slug> --script <courseware.md> [--storyboard <storyboard.yml>] --content <content-pack.json> --style <style-pack.manifest.json> --concepts <concepts.yml> --registry <registry/index.json> --review-sections <review-sections.yml> --review-dir review/<slug> [--evidence-out <json>] [--out <review.json>] [--md <review.md>] [--editorial-out <review.json>]',
   )
   process.exit(2)
 }
@@ -265,6 +266,24 @@ const skeleton = {
 }
 
 writeSelfReview(skeleton, { outJson: outPath, outMd: mdPath })
+
+if (editorialOutPath) {
+  const editorialSkeleton = {
+    stage: 'script-editorial',
+    artifactPaths: artifacts.map((item) => item.path),
+    reviewedArtifacts: artifacts,
+    summary: '',
+    findings: [],
+    verdict: 'fail',
+    reviewedAt: new Date().toISOString(),
+    reviewMeta: { mode: 'script-editorial' },
+  }
+  fs.mkdirSync(path.dirname(path.resolve(editorialOutPath)), { recursive: true })
+  fs.writeFileSync(
+    path.resolve(editorialOutPath),
+    `${JSON.stringify(editorialSkeleton, null, 2)}\n`,
+  )
+}
 
 if (failedChecks.length) {
   console.error(

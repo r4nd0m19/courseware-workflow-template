@@ -8,7 +8,7 @@
 node workflow/tools/smoke-test.mjs
 ```
 
-覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、structured brief/script/self-study/component plan/component generation/reference-verbatim routing/convergence triage、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
+覆盖 content-pack/storyboard/narration schema、coverage 通过/失败、vocabulary 通过/失败、teaching 通过/失败（I3 / draft content）、self-review 通过/失败、style pack 验证/冻结、audio adapter 生成/校验、组件 bundle 生成/校验、structured brief/script/self-study/component plan/component generation/reference-verbatim routing/convergence triage、independent editorial review、script/component-plan/registry、脚本批准账本（通过、缺账本、批准后编辑、伪造 gate、DRAFT、paused run 均断言）、approved screens、review sections 等门禁。任何一项与预期不符 → exit 1。
 
 ## 0B. 壳批准（先于内容包）
 
@@ -182,7 +182,7 @@ node workflow/tools/check-teaching.mjs storyboard.yml content-pack.json
 
 ## 9. AI 自审检查
 
-0.38.0 起 `self-review-brief` / `self-review-script` / `self-review-component-plan` 是 `review-ai.mjs` 的**单次文本模型调用**：模型只拿到证据 JSON + 骨架，返回 checklist/density/complexity/concepts/issues/verdict；没有文件、命令或 MCP 工具。配置与页面自审共用（默认 `.courseware/page-review.json`，可用 `--config` / `COURSEWARE_REVIEW_CONFIG` 覆盖）。
+0.38.0 起 `self-review-brief` / `self-review-script` / `self-review-component-plan` 是 `review-ai.mjs` 的**单次文本模型调用**：模型只拿到证据 JSON + 骨架，返回 checklist/density/complexity/concepts/issues/verdict；没有文件、命令或 MCP 工具。配置与页面自审共用（默认 `.courseware/page-review.json`，可用 `--config` / `COURSEWARE_REVIEW_CONFIG` 覆盖）。0.47.0 起另有独立的 `--mode script-editorial`：它不复用 checklist，而是把整份脚本当作待编辑稿件，返回带页 ID/维度/严重度的 `findings`；`blocking` 由 `check-editorial-review.mjs` 阻断，`major`/`minor` 只追加到老师版脚本附录。审稿可用 `criticZcodeProvider` / `criticModel` 单独配模型（回退 `textZcodeProvider` / `textModel`，再回退 `zcodeProvider` / `model`）。
 
 确定性自审（0.22.0；不再启动 AI）：
 
@@ -296,6 +296,17 @@ node workflow/tools/review-ai.mjs --mode component-plan \
   --evidence review/<slug>/component-plan-review-evidence.json \
   --review-json review/<slug>/self-review-component-plan.json
 
+# 独立编辑审稿（0.47.0）：整份脚本 → 一次模型调用 → 结构化 findings
+# build-script-review-evidence 加 --editorial-out 生成骨架
+node workflow/tools/review-ai.mjs --mode script-editorial \
+  --evidence review/<slug>/self-review-script-evidence.json \
+  --review-json review/<slug>/script-editorial-review.json \
+  --md review/<slug>/script-editorial-review.md
+# 只阻断 blocking；未知页 ID/过期哈希也失败；失败写修复清单
+node workflow/tools/check-editorial-review.mjs \
+  review/<slug>/script-editorial-review.json --script specs/<slug>/courseware.md \
+  --fix-brief review/<slug>/script-editorial-fix.md
+
 # alpha / beta / gold：聚合或扫描，不调用模型
 node workflow/tools/build-self-review-alpha.mjs ...
 node workflow/tools/build-self-review-beta.mjs ...
@@ -320,8 +331,10 @@ node workflow/tools/render-self-review-md.mjs review/<slug>/self-review-page-S02
   --out review/<slug>/self-review-page-S02B.md --screenshots screenshots/<slug>
 
 # 老师版脚本（0.35.0）：只含屏幕内容/旁白/转场/一行学生动作，不含交互设计/制作字段
+# 0.47.0 起可传 --editorial-review 追加“编辑审稿建议”附录（只读建议，不改正文）
 node workflow/tools/render-teacher-script.mjs specs/<slug>/courseware.md \
-  --out review/<slug>/courseware.teacher.md
+  --out review/<slug>/courseware.teacher.md \
+  --editorial-review review/<slug>/script-editorial-review.json
 
 # 页面 deck（0.41.0）：证据 + 单次 slide JSON + 校验落盘
 node workflow/tools/build-page-deck-evidence.mjs --lesson-slug <slug> \

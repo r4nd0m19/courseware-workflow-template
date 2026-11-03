@@ -38,6 +38,67 @@ check('omits the interaction-design section', !markdown.includes('### 交互设�
 check('omits the machine-fields section', !markdown.includes('### 制作字段'))
 check('omits interaction YAML', !markdown.includes('interaction:'))
 check('omits componentPlan YAML', !markdown.includes('componentPlan:'))
+
+// Long evidence must not be cut at an arbitrary character count: the teacher
+// needs the full student-action evidence to judge the page.
+const longEvidence = '这是一段用于验证老师版脚本不会截断的学生动作证据，'.repeat(8)
+const longSource = path.join(tmp, 'long-evidence.md')
+fs.writeFileSync(
+  longSource,
+  fs.readFileSync(source, 'utf8').replace(
+    'evidence: "能用“指令按顺序执行”复述程序的含义"',
+    `evidence: "${longEvidence}"`,
+  ),
+)
+const longOut = path.join(tmp, 'long-evidence.teacher.md')
+const longResult = spawnSync(
+  process.execPath,
+  [path.join(toolDir, 'render-teacher-script.mjs'), longSource, '--out', longOut],
+  { encoding: 'utf8' },
+)
+const longMarkdown = fs.existsSync(longOut) ? fs.readFileSync(longOut, 'utf8') : ''
+check('renders long evidence', longResult.status === 0)
+check('does not truncate long evidence', longMarkdown.includes(longEvidence))
+check('does not add a truncation marker', !longMarkdown.includes('…'))
+
+// Advisory editorial findings belong in a clearly separated appendix, not in
+// the script body.
+const editorialPath = path.join(tmp, 'editorial-review.json')
+fs.writeFileSync(editorialPath, JSON.stringify({
+  stage: 'script-editorial',
+  artifactPaths: [source],
+  reviewedArtifacts: [{ path: source, sha256: '0'.repeat(64) }],
+  summary: '审稿总结',
+  findings: [{
+    slideId: 'S01',
+    dimension: 'code-correctness',
+    severity: 'major',
+    evidence: '程序是一组指令',
+    suggestion: '补一句关于执行顺序的说明。',
+  }],
+  verdict: 'revise',
+  reviewedAt: '2026-11-03T00:00:00Z',
+}, null, 2))
+const editorialOut = path.join(tmp, 'editorial.teacher.md')
+const editorialResult = spawnSync(
+  process.execPath,
+  [
+    path.join(toolDir, 'render-teacher-script.mjs'),
+    source,
+    '--out',
+    editorialOut,
+    '--editorial-review',
+    editorialPath,
+  ],
+  { encoding: 'utf8' },
+)
+const editorialMarkdown = fs.existsSync(editorialOut)
+  ? fs.readFileSync(editorialOut, 'utf8')
+  : ''
+check('renders the editorial appendix', editorialResult.status === 0)
+check('editorial appendix has a clear heading', editorialMarkdown.includes('## 编辑审稿建议'))
+check('editorial appendix includes the suggestion', editorialMarkdown.includes('补一句关于执行顺序的说明'))
+check('editorial appendix leaves the script body intact', editorialMarkdown.includes('### 屏幕内容'))
 if (failed) {
   console.error(`${failed} teacher-script test(s) failed`)
   process.exit(1)

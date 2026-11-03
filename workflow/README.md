@@ -2,10 +2,11 @@
 
 本目录把 `工作流草稿.md` 落成可安装的 Spec Kit preset + workflow + 校验工具。
 
-当前版本：**workflow 0.46.2 / 90 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
+当前版本：**workflow 0.47.0 / 92 步（production，0 个 command/prompt 步骤）+ 3 步（courseware-shell）+ 壳库（001 pilot 生产路径）**。
 
 **人工审核只有三类：壳、整份课程脚本、每一页。**
 
+- **独立编辑审稿（0.47.0）**：`self-review-script` 通过后，`editorial-review-script` 用一次无工具模型调用把整份脚本当作待编辑稿件，返回带页 ID、维度、严重度（`blocking`/`major`/`minor`）、证据引文和修改建议的结构化 `findings`。`check-editorial-review-script` 只阻断 `blocking`（并写 `review/<slug>/script-editorial-fix.md`）以及页 ID 不存在、审稿哈希过期；`major`/`minor` 作为建议由 `render-teacher-script` 追加到老师版脚本的「编辑审稿建议」附录，不改脚本正文。审稿绑定 `courseware.md` 哈希，任何编辑都会使其失效。可用 `criticZcodeProvider` / `criticModel` 单独指定审稿模型，未配置时回退 `textZcodeProvider` / `textModel`（再回退 `zcodeProvider` / `model`）。production workflow 92 步；preset 0.3.16。
 - **测验答案检查修复（0.46.2）**：`check-quiz-keys` 只统计非 watch 的答题页，按测验条目去重；概念引入页等预览页即使按概念台账要求引用测验，也不再被误判为“缺少选项块”。选项文本比较忽略 Markdown 行内代码与强调标记（`` `a[2][3]` `` 与 `a[2][3]` 等价），星号图案选项保持原样。脚本生成器新增答题页围栏块/顺序字母校验，失败时把门禁原文反馈给模型局部重试；整课生成后按 0.6 阈值做最多 2 轮答案分布修复（重排主导页的正确选项位置），仍不合格才失败。`single-shot-generate` 的 script-page 与 self-study-audit 提示词要求答题页使用 `A.`/`B.`/`C.` 围栏块并打乱正确选项位置。新增 `test-quiz-keys.mjs`、`test-script-quiz-repair.mjs` 并纳入 smoke。 文本步骤可用 `textZcodeProvider` 选择与视觉自审不同的 ZCode provider；未配置时回退 `zcodeProvider`。
 - **跨平台与共享配置修复（0.46.1）**：文本步骤（`review-ai`、`single-shot-generate`）现在和页面自审共用同一份配置文件，读取其中的 `zcodeConfig` / `zcodeProvider`，并支持 `textModel` 给长文本步骤、`model` 留给视觉自审；显式配置的 `model` 优先于 provider 的默认模型。简报/脚本自审证据与脚本输入工具在没有 `.specify/feature.json` 的新项目里回退到 `specs/<lesson>/spec.md`。`extract-content` / `extract-reference-component` 改用 `fileURLToPath` 读取 schema；Windows 上组件检查自动关闭 bubblewrap，`generate-components` 透传 `--no-sandbox`，参考提取测试用 junction/复制回退。AI 步骤超时放宽（简报/自学审核/脚本自审 900s，其余文本步骤 600s）。插画接口无可用通道时可显式设 `COURSEWARE_ART_LOCAL_FALLBACK=1`，用参考图生成本地变体并以 `model: local-variant` 记录溯源（默认关闭，绝不冒充 API 生成）。
 
@@ -69,7 +70,8 @@
 | `tools/build-page-evidence.mjs` | 汇总本页 density 信号/concepts/quiz/narration/rendered-text/参考残留/截图，生成自审 JSON 骨架；0.37.0 起不再跑 overflow/overlap，`density_authority=script` 时密度结论只作参考 |
 | `tools/build-self-review-inputs.mjs` / `build-script-review-evidence.mjs` / `build-self-review-{alpha,beta,gold}.mjs` | 确定性自审与脚本证据包；脚本证据包在 `density_authority=script` 时生成 density/complexity 骨架 |
 | `tools/generate-converge-report.mjs` | 结构化 Beta 收敛：Alpha/批准/截图/试用反馈 → 无工具模型 findings JSON → `converge-report.md`；无试用反馈时确定性空报告 |
-| `tools/review-ai.mjs` / `review-ai-lib.mjs` | 单次文本自审：brief/script/component-plan 证据 + 骨架 → 一次模型请求 → 结构化 JSON；无工具 |
+| `tools/review-ai.mjs` / `review-ai-lib.mjs` | 单次文本自审：brief/script/component-plan 证据 + 骨架 → 一次模型请求 → 结构化 JSON；无工具。0.47.0 的 `--mode script-editorial` 把整份脚本作为待编辑稿件，返回 findings（页 ID/维度/严重度/证据/建议） |
+| `tools/check-editorial-review.mjs` | 编辑审稿门禁：只阻断 `blocking`、未知页 ID 和过期哈希；`major`/`minor` 只作建议；失败写修复清单 |
 | `tools/build-brief-review-evidence.mjs` / `build-component-plan-review-evidence.mjs` | 为单次文本自审生成紧凑证据与骨架 |
 | `tools/single-shot-generate.mjs` | 单次生成：brief、self-study-audit、script-outline/script-page、art-brief、reference-adaptation、page-deck、component-plan、converge；无工具 |
 | `tools/build-script-input.mjs` | 脚本生成的紧凑输入包：spec/content/concepts/style/registry/模板/规则/输出路径/已有脚本 |
@@ -80,7 +82,7 @@
 | `tools/build-page-deck-evidence.mjs` / `apply-page-deck.mjs` | 页面 deck 生成的紧凑证据 + 校验落盘；`single-shot-generate --mode page-deck` 生成单页 slide |
 | `tools/build-art-brief-evidence.mjs` / `build-reference-adaptation-evidence.mjs` | 为插画简报/参考适配生成紧凑证据 |
 | `tools/render-self-review-md.mjs` | 从自审 JSON 渲染 Markdown（页自审不再让 AI 写 MD） |
-| `tools/render-teacher-script.mjs` | 从 `courseware.md` 生成老师版脚本：屏幕内容、旁白、转场、一行学生动作摘要；不显示交互设计与制作字段 |
+| `tools/render-teacher-script.mjs` | 从 `courseware.md` 生成老师版脚本：屏幕内容、旁白、转场、一行学生动作摘要；不显示交互设计与制作字段；可选 `--editorial-review` 追加编辑审稿建议附录（不改正文） |
 | `tools/check-reference-adaptation.mjs` / `check-reference-residue.mjs` | 每课参考适配映射校验 + 渲染页参考字符串残留扫描 |
 | `tools/check-rendered-text.mjs` / `rendered-text-lib.mjs` | 高信号渲染文本阻断 + 散文覆盖率提示；归一化规则集中在 lib |
 | `schemas/reference-adaptation.schema.json` | 参考适配映射（参考内容 → 本课替换、页、residue） |
@@ -473,7 +475,7 @@ node workflow/tools/run-workflow.mjs courseware-production \
 1. **壳阶段（独立工作流 `courseware-shell`，不依赖内容包）**：`validate-shell`（壳包契约 + 30 页占位 deck + 4 音色占位语音 + 播放器 + 截图）→ `review-shell` 人审 → `approve-shell` 写 `review/shells/<slug>/shell-approval.json`。
 2. **内容阶段开始**：`check-shell-approval`（壳哈希 + gate run）→ `validate-content` / `validate-style-pack-full`（含冻结哈希）/ `validate-source-fidelity --source-only`；`ensure-registry` / `validate-registry`。
 3. `generate-brief`（结构化 UbD 简报 → `spec.md` + `concepts.yml`）；`build-brief-review-evidence` → `review-ai --mode brief` 单次文本自审，`check-self-review-brief` 门禁；不再人审。
-4. `build-script-input` → `generate-courseware-script`（大纲 JSON → 逐页 page JSON → 校验/局部重试）→ `render-courseware-md` + `render-review-sections` → `courseware.md` + `review-sections.yml`；`build-script-review-evidence` → `review-ai --mode script` 单次文本自审；`validate-script-draft` → `generate-self-study-audit`（结构化判断 → check-self-study → 补充/新增页提案，自动应用并同步 review-sections）→ `validate-script`；`review-script` 人审（整份一次，看 `render-teacher-script` 生成的老师版）→ `approve-script`（只接受 gate 的 `approve`，并核对 run state）→ `verify-script-approval`（重新校验整份/每屏哈希与当前 run）。
+4. `build-script-input` → `generate-courseware-script`（大纲 JSON → 逐页 page JSON → 校验/局部重试）→ `render-courseware-md` + `render-review-sections` → `courseware.md` + `review-sections.yml`；`validate-script-draft` → `generate-self-study-audit`（结构化判断 → check-self-study → 补充/新增页提案，自动应用并同步 review-sections）→ `validate-script`；`build-script-review-evidence` → `review-ai --mode script` 单次文本自审 → `editorial-review-script` 独立编辑审稿 + `check-editorial-review-script`（只阻断 blocking）→ `render-teacher-script`；`review-script` 人审（整份一次，看老师版）→ `approve-script`（只接受 gate 的 `approve`，并核对 run state）→ `verify-script-approval`（重新校验整份/每屏哈希与当前 run）。
 5. **本课插画**：`build-art-brief-evidence` → `single-shot-generate --mode art-brief`（逐槽提示词）→ `build-shell-art`（`generate-shell-art --prompt-file … --reuse`，未变化不重生成、不需要 key）→ `check-shell-art --require-all`（provenance；不再单独人审，插画在每页截图里审）。
 6. `build-narration` → `check-narration`（四声线 manifest；壳路径不再有 `build-audio-adapter`）。
 7. `generate-component-plan` → 结构化复用/缺口/简报（Node 渲染 + `check-component-plan`）；`build-component-plan-review-evidence` → `review-ai --mode component-plan` 单次文本自审；不单独人审。**不在这里预建组件**；实现由页面循环在首次需要它的页面完成，组件随该页一起人审。
@@ -513,10 +515,10 @@ content: internal self-reviews/checks → review-script (once) → review-page (
 ```
 
 - **人工 gate 只有三类**：`review-shell`（在 `courseware-shell`）、`review-script`、`review-page`。其余 `self-review-*` 是内部检查，不再弹人工 gate；`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 已移除。
-- **脚本审核看老师版**：`render-teacher-script` 在 gate 前从 `courseware.md` 生成 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行学生动作；`review-script` 的 `show_file` 指向它。完整源文件仍是唯一内容源，批准账本绑定完整 `courseware.md`。
+- **脚本审核看老师版**：`render-teacher-script` 在 gate 前从 `courseware.md` 生成 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行学生动作；`review-script` 的 `show_file` 指向它。完整源文件仍是唯一内容源，批准账本绑定完整 `courseware.md`。0.47.0 起老师版会追加「编辑审稿建议」附录（`major`/`minor` 只作参考，不改脚本正文）。
 - **壳审核先于内容包**：壳工作流不依赖 `content_pack`/`lesson_slug`，只依赖壳包；通过后写 `review/shells/<shell_slug>/shell-approval.json`（壳包全文哈希 + gate run）。内容工作流开头 `check-shell-approval` 校验，壳改一个字节即失效。
 - **页面自审不是 coding agent**：`self-review-page` 是 `shell` 步骤，调用 `page-review-ai.mjs` 发一次 HTTP 请求；模型默认只拿到本页截图和已批准脚本页，只能返回 `submit_page_review` 结构化 JSON，没有文件/命令/MCP 工具。它不能读 `courseware.md`、跑 `check-overlap` 或修改页面。
-- **模型由用户配置（所有 AI 步骤共用一份）**：优先读项目内 `.courseware/page-review.json`（已 gitignore，适合 Windows/WSL 共用），否则读 `~/.config/courseware/page-review.json`；也支持 `COURSEWARE_REVIEW_CONFIG`、`COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。`api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。`model` 给页面视觉自审；`textModel` 给简报、脚本、自学审核、组件计划、插画简报、参考适配和逐页 deck 等文本步骤（未配时回退 `model`）。`zcodeConfig` 对所有 AI 步骤生效；`zcodeProvider` 供视觉自审，文本步骤可用 `textZcodeProvider` 指定另一个 provider（未配置时回退 `zcodeProvider`），不必每一步重复传命令行参数。模型必须支持图片输入；不支持时请求直接失败，不会退化成纯文本。
+- **模型由用户配置（所有 AI 步骤共用一份）**：优先读项目内 `.courseware/page-review.json`（已 gitignore，适合 Windows/WSL 共用），否则读 `~/.config/courseware/page-review.json`；也支持 `COURSEWARE_REVIEW_CONFIG`、`COURSEWARE_REVIEW_API`、`COURSEWARE_REVIEW_BASE_URL`、`COURSEWARE_REVIEW_MODEL`、`COURSEWARE_REVIEW_API_KEY`。`api` 支持 `anthropic-messages`（`/v1/messages`）和 `openai-chat`（`/v1/chat/completions`）。`model` 给页面视觉自审；`textModel` 给简报、脚本、自学审核、组件计划、插画简报、参考适配和逐页 deck 等文本步骤（未配时回退 `model`）；`criticModel` 可单独指定独立编辑审稿用的模型（未配时回退 `textModel`）。`zcodeConfig` 对所有 AI 步骤生效；`zcodeProvider` 供视觉自审，文本步骤可用 `textZcodeProvider` 指定另一个 provider（未配置时回退 `zcodeProvider`），编辑审稿可用 `criticZcodeProvider` 再单独指定（未配时回退 `textZcodeProvider`，再回退 `zcodeProvider`），不必每一步重复传命令行参数。模型必须支持图片输入；不支持时请求直接失败，不会退化成纯文本。
 - **配置预检**：`check-page-review-config` 在逐页循环前运行；缺配置时整次运行在开始制作页面前失败，不会做到一半才报错。
 
 最小配置（项目内 `.courseware/page-review.json` 或 `~/.config/courseware/page-review.json`，权限 600）：

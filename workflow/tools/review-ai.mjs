@@ -20,6 +20,7 @@ import {
 } from './page-review-lib.mjs'
 import {
   buildReviewPrompt,
+  EDITORIAL_MERGED_SCHEMA,
   mergeReview,
   REVIEW_MODES,
   validateReviewOutput,
@@ -95,11 +96,17 @@ function readConfigFile(file) {
 }
 const fileConfig = readConfigFile(configPath)
 // One shared config drives every AI step. Text reviews may use a different
-// ZCode provider from the visual page reviewer via textZcodeProvider; when it
-// is absent, both use zcodeProvider.
+// ZCode provider from the visual page reviewer via textZcodeProvider; the
+// editorial review can use a third provider via criticZcodeProvider. Both fall
+// back to zcodeProvider when absent.
+const isEditorialReview = mode === 'script-editorial'
 const effectiveZcodeConfigPath = zcodeConfigPath || fileConfig.zcodeConfig || ''
 const effectiveZcodeProviderId =
-  zcodeProviderId || fileConfig.textZcodeProvider || fileConfig.zcodeProvider || ''
+  zcodeProviderId ||
+  (isEditorialReview
+    ? fileConfig.criticZcodeProvider || fileConfig.textZcodeProvider || fileConfig.zcodeProvider
+    : fileConfig.textZcodeProvider || fileConfig.zcodeProvider) ||
+  ''
 
 function zcodeConfigCandidates(value) {
   return (Array.isArray(value) ? value : [value])
@@ -168,8 +175,10 @@ const baseUrl =
 const model =
   opt('--model') ||
   process.env.COURSEWARE_REVIEW_MODEL ||
-  // textModel keeps long text steps on a fast text model while `model` stays
-  // reserved for the vision page review.
+  // criticModel lets the editorial step use a different text model from the
+  // checklist self-review. textModel keeps long text steps on a fast text
+  // model while `model` stays reserved for the vision page review.
+  (isEditorialReview ? fileConfig.criticModel : '') ||
   fileConfig.textModel ||
   fileConfig.model ||
   zcode?.model ||
@@ -340,19 +349,24 @@ async function callModel() {
 }
 
 let modelResult
+function writeRawDiagnostic(payload) {
+  const rawOut = reviewJsonPath.replace(/\.json$/i, '.raw.json')
+  fs.mkdirSync(path.dirname(path.resolve(rawOut)), { recursive: true })
+  fs.writeFileSync(path.resolve(rawOut), `${JSON.stringify(payload, null, 2)}\n`)
+  return rawOut
+}
 try {
   modelResult = await callModel()
 } catch (error) {
-  const rawOut = reviewJsonPath.replace(/\.json$/i, '.raw.json')
-  fs.mkdirSync(path.dirname(path.resolve(rawOut)), { recursive: true })
-  fs.writeFileSync(path.resolve(rawOut), `${JSON.stringify({ error: error.message }, null, 2)}\n`)
+  const rawOut = writeRawDiagnostic({ error: error.message })
   fail(`${error.message}; raw diagnostic saved to ${rawOut}`)
 }
 let output
 try {
-  output = validateReviewOutput(modelResult.raw)
+  output = validateReviewOutput(modelResult.raw, mode)
 } catch (error) {
-  fail(error.message)
+  const rawOut = writeRawDiagnostic({ error: error.message, modelOutput: modelResult.raw })
+  fail(`${error.message}; raw diagnostic saved to ${rawOut}`)
 }
 const review = mergeReview({
   mode,
@@ -369,18 +383,29 @@ const review = mergeReview({
     ...(modelResult.responseId ? { responseId: modelResult.responseId } : {}),
   },
 })
-const schemaPath = fileURLToPath(new URL('../schemas/self-review.schema.json', import.meta.url))
+const schemaPath =
+  mode === 'script-editorial'
+    ? EDITORIAL_MERGED_SCHEMA
+    : fileURLToPath(new URL('../schemas/self-review.schema.json', import.meta.url))
 const { ok, errors } = validateWithSchema(schemaPath, review)
 if (!ok) fail(`merged review is invalid: ${errors.join('; ')}`)
 fs.mkdirSync(path.dirname(path.resolve(reviewJsonPath)), { recursive: true })
 fs.writeFileSync(path.resolve(reviewJsonPath), `${JSON.stringify(review, null, 2)}\n`)
 writeReviewMarkdown(review, mdPath)
+const reviewFindings = mode === 'script-editorial' ? review.findings || [] : []
+const reviewIssues = mode === 'script-editorial' ? [] : review.issues || []
+const issueCount = mode === 'script-editorial' ? reviewFindings.length : reviewIssues.length
+const blockingCount =
+  mode === 'script-editorial'
+    ? reviewFindings.filter((finding) => finding.severity === 'blocking').length
+    : reviewIssues.filter((issue) => issue.severity === 'blocking').length
 const summary = {
   ok: true,
   mode,
   verdict: review.verdict,
-  issues: review.issues.length,
-  blocking: review.issues.filter((issue) => issue.severity === 'blocking').length,
+  issues: issueCount,
+  blocking: blockingCount,
+  ...(mode === 'script-editorial' ? { findings: issueCount } : {}),
   model,
   api,
   durationMs: modelResult.durationMs,
@@ -391,4 +416,4 @@ const summary = {
   reviewMd: mdPath,
 }
 if (jsonOut) process.stdout.write(`${JSON.stringify(summary)}\n`)
-else console.log(`OK review AI — ${mode} ${review.verdict}, ${review.issues.length} issue(s), ${summary.durationMs} ms`)
+else console.log(`OK review AI — ${mode} ${review.verdict}, ${issueCount} issue(s), ${summary.durationMs} ms`)

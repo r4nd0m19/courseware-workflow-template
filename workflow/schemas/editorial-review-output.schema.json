@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://courseware.local/editorial-review-output.schema.json",
+  "title": "Single-shot script editorial review model output",
+  "description": "Open-ended editorial findings. The harness adds hashes, timestamps and metadata.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "findings", "verdict"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slideId", "dimension", "severity", "evidence", "suggestion"],
+        "properties": {
+          "slideId": { "type": "string", "minLength": 1 },
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "code-correctness",
+              "cross-reference",
+              "terminology-sequencing",
+              "answer-leakage",
+              "objective-alignment",
+              "language",
+              "practice-coverage",
+              "consistency",
+              "other"
+            ]
+          },
+          "severity": { "type": "string", "enum": ["blocking", "major", "minor"] },
+          "evidence": { "type": "string", "minLength": 1 },
+          "suggestion": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "verdict": { "type": "string", "enum": ["pass", "revise"] }
+  }
+}

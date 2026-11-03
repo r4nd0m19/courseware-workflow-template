@@ -452,6 +452,7 @@ try {
     0,
   )
   run('teacher script view', 'test-teacher-script.mjs', [], 0)
+  run('editorial review gate', 'test-editorial-review.mjs', [], 0)
   run('self-study audit pass', 'check-self-study.mjs', [selfStudy, '--script', script, '--proposal', selfStudyProposal], 0)
   run('self-study audit fail', 'check-self-study.mjs', [selfStudyFail, '--script', script, '--proposal', selfStudyProposal], 1)
   run('style pack full pass', 'validate-style-pack.mjs', [fullStyle, '--check-baselines'], 0)
@@ -1232,6 +1233,28 @@ try {
     )
   }
 
+  // ---- independent editorial review ----
+  total += 1
+  const editorialStep = findStep(workflowData.steps, 'editorial-review-script')
+  const editorialCheckStep = findStep(workflowData.steps, 'check-editorial-review-script')
+  const editorialPass =
+    editorialStep?.type === 'shell' &&
+    String(editorialStep.run || '').includes('review-ai.mjs') &&
+    String(editorialStep.run || '').includes('--mode script-editorial') &&
+    editorialCheckStep?.type === 'shell' &&
+    String(editorialCheckStep.run || '').includes('check-editorial-review.mjs') &&
+    String(teacherRenderStep.run || '').includes('--editorial-review') &&
+    topLevelIds.indexOf('editorial-review-script') > topLevelIds.indexOf('check-self-review-script') &&
+    topLevelIds.indexOf('editorial-review-script') < topLevelIds.indexOf('render-teacher-script') &&
+    topLevelIds.indexOf('check-editorial-review-script') < topLevelIds.indexOf('render-teacher-script')
+  console.log(`${editorialPass ? 'PASS' : 'FAIL'} independent editorial review`)
+  if (!editorialPass) {
+    failed += 1
+    console.error(
+      'editorial-review-script must run after check-self-review-script and before render-teacher-script; check-editorial-review-script must gate blocking findings; render-teacher-script must read the review',
+    )
+  }
+
   // ---- single-shot script/brief/component reviews ----
   total += 1
   const reviewAiSteps = ['self-review-brief', 'self-review-script', 'self-review-component-plan']
@@ -1705,12 +1728,12 @@ try {
   )
   const reviewAiTestOutput = `${reviewAiTest.stdout || ''}\n${reviewAiTest.stderr || ''}`
   const reviewAiToolPass =
-    reviewAiTest.status === 0 && /5\/5 review-ai tests passed/.test(reviewAiTestOutput)
+    reviewAiTest.status === 0 && /7\/7 review-ai tests passed/.test(reviewAiTestOutput)
   console.log(`${reviewAiToolPass ? 'PASS' : 'FAIL'} single-shot text review tool`)
   if (!reviewAiToolPass) {
     failed += 1
     console.error(reviewAiTestOutput.trimEnd())
-    console.error('review-ai.mjs must merge brief/script/component-plan reviews without a coding agent')
+    console.error('review-ai.mjs must merge brief/script/component-plan/editorial reviews without a coding agent')
   }
 
   // ---- single-shot page deck implementation ----
