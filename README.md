@@ -6,13 +6,13 @@
 
 - 工作流版本：`courseware-production` `0.46.2`（90 个顶层步骤，0 个 command/prompt 步骤）+ `courseware-shell` `0.1.0`（3 个顶层步骤）
 - preset：`courseware` `0.3.16`
-- 模板版本：`0.25.1`（2026-11-03）
+- 模板版本：`0.25.2`（2026-11-03）
 - 人工审核只有 **3 类**：壳（`courseware-shell`，先于内容包）、整份课程脚本、每一页。`review-inputs`/`review-brief`/`review-self-study-audit`/`review-shell-art`/`review-component-plan`/`review-alpha`/`review-beta`/`gold` 的人类 gate 已移除。
 - 脚本审核：`review-script` 显示自动生成的老师版 `review/<lesson>/courseware.teacher.md`，只含标题、屏幕内容、旁白、转场和一行“学生要做”摘要；交互设计与制作字段保留在 `courseware.md` 供工具使用，脚本批准账本仍绑定完整源文件。
 - 页面实现：`build-page-deck-evidence` + `single-shot-generate --mode page-deck` + `apply-page-deck`；模型只返回一页 slide JSON，Node 校验后写 deck，不再由 coding agent 构建/截图。
 - 0.44.1 工作流修复：新增 `declared_pages` 页数预算；校验 `audio_url_prefix` 并阻止 Git Bash 路径改写；修复 existing 组件跨页复用误报；修复脚本自审证据的 objective 与补充标签；`gate-review show` 自动定位课时 gate 目录。
 - 阶段练习页（0.46.0）：脚本大纲可以把某页标为 `exercise`（`code-judge`），页面模型只返回题面、起始代码和 1–6 组公开测试，屏幕内容由 Node 渲染；`apply-page-deck` 要求题面、代码、测试和时限逐字一致，拒绝隐藏测试、`disabled` 和静态降级。阶段练习只用于课堂练习，**不锁定翻页、没有通关门禁**；最多 4 个、非首页、不连续。模板自带判题运行时与 `code-judge` 暂存组件，安装时复制到项目；首次使用判题页前运行 `node judge-runtime/install.mjs` 下载并校验约 91MB 的 browsercc（已 gitignore）。
-- 0.46.2 修复：`check-quiz-keys` 只统计非 watch 的答题页并按测验条目去重，概念引入页等预览页不再被误判为缺少选项块；选项文本比较忽略 Markdown 行内代码/强调标记（`` `a[2][3]` `` 与 `a[2][3]` 等价），星号图案选项保持原样。脚本生成器新增答题页围栏块/顺序字母校验和最多 2 轮答案分布修复；script-page 与 self-study-audit 提示词要求答题页使用 `A.`/`B.`/`C.` 围栏块并打乱正确选项位置。新增对应回归测试并纳入 smoke。
+- 0.46.2 修复：`check-quiz-keys` 只统计非 watch 的答题页并按测验条目去重，概念引入页等预览页不再被误判为缺少选项块；选项文本比较忽略 Markdown 行内代码/强调标记（`` `a[2][3]` `` 与 `a[2][3]` 等价），星号图案选项保持原样。脚本生成器新增答题页围栏块/顺序字母校验和最多 2 轮答案分布修复；script-page 与 self-study-audit 提示词要求答题页使用 `A.`/`B.`/`C.` 围栏块并打乱正确选项位置。新增对应回归测试并纳入 smoke。 文本步骤可用 `textZcodeProvider` 选择与视觉自审不同的 ZCode provider；未配置时回退 `zcodeProvider`。
 - 0.46.1 修复：一份 AI 配置文件驱动页面自审与文本生成（`model` 用于看图审核，`textModel` 用于长文本）；新建项目没有 `.specify/feature.json` 时回退 `specs/<lesson>/spec.md`；Windows 路径、沙箱和参考提取兼容；AI 步骤超时放宽；推理模型建议 `maxTokens: 32768`、`timeoutMs: 300000`。
 - Beta 收敛（0.44.0）：`generate-converge-report.mjs` 读取 Alpha/批准/截图/`review/<lesson>/trial-feedback.md`，有试用反馈时一次无工具模型调用只返回 findings/verdict/followUps；没有反馈时直接生成空报告，不调用模型。报告不修改已批准内容，未关闭 blocker 由 Beta 确定性扫描拦下。
 - 脚本生成：`build-script-input` → `generate-courseware-script`（大纲 JSON → 逐页 page JSON → 校验/局部重试）→ `render-courseware-md` + `render-review-sections`；生产 workflow 的 `script` 步骤是 shell，不再调用 `speckit.script`。
@@ -101,7 +101,7 @@ node workflow/tools/page-review-ai.mjs --check-config
 - 模型必须支持图片；不支持会直接失败，不会退化成纯文本判断。`textModel` 只用于文本步骤，不要求图片能力。
 - 同一份配置驱动所有 AI 步骤：页面自审用 `model`，简报/脚本/组件/收敛等长文本步骤用 `textModel`（缺省回退 `model`）；显式命令行参数仍优先。
 - `structuredOutput` 建议 `json`；DeepSeek 兼容端点可能返回 DSML 文本，工具检测到会自动重试一次 JSON 模式。`maxTokens` 默认 8192，推理模型可能把几千 token 花在 thinking 上；长输出步骤建议 `maxTokens: 32768`、`timeoutMs: 300000`。
-- ZCode 用户可以在配置里写 `"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`，直接复用 ZCode 已配置的 provider/model/key，不需要另外复制 key。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 是候选路径数组，Windows 用 `~`、WSL 用 `/mnt/c/...`，谁存在用谁。
+- ZCode 用户可以在配置里写 `"zcodeConfig": ["~/.zcode/v2/provider_config.json", "/mnt/c/Users/<you>/.zcode/v2/provider_config.json"], "zcodeProvider": "<provider-id>"`，直接复用 ZCode 已配置的 provider/model/key，不需要另外复制 key。`zcodeProvider` 取 `providerConfigRules.providerRules[].providerId`（本机示例是 `new-provider-2`，不是通用默认值）；`zcodeConfig` 是候选路径数组，Windows 用 `~`、WSL 用 `/mnt/c/...`，谁存在用谁。文本步骤可以用 `textZcodeProvider` 指向另一个 provider（例如视觉自审用 `new-provider`、长文本用 `new-provider-2`）；未配置时回退 `zcodeProvider`。
 - 工作流在逐页循环前运行 `check-page-review-config`，配置缺失会提前失败。
 - `page-review-ai.mjs --dry-run` 可以只生成请求预览，不调用模型、不打印 key。
 

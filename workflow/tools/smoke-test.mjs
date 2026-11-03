@@ -1705,7 +1705,7 @@ try {
   )
   const reviewAiTestOutput = `${reviewAiTest.stdout || ''}\n${reviewAiTest.stderr || ''}`
   const reviewAiToolPass =
-    reviewAiTest.status === 0 && /4\/4 review-ai tests passed/.test(reviewAiTestOutput)
+    reviewAiTest.status === 0 && /5\/5 review-ai tests passed/.test(reviewAiTestOutput)
   console.log(`${reviewAiToolPass ? 'PASS' : 'FAIL'} single-shot text review tool`)
   if (!reviewAiToolPass) {
     failed += 1
@@ -1920,7 +1920,7 @@ try {
   )
   const generateTestOutput = `${generateTest.stdout || ''}\n${generateTest.stderr || ''}`
   const generateToolPass =
-    generateTest.status === 0 && /5\/5 single-shot-generate tests passed/.test(generateTestOutput)
+    generateTest.status === 0 && /6\/6 single-shot-generate tests passed/.test(generateTestOutput)
   console.log(`${generateToolPass ? 'PASS' : 'FAIL'} single-shot art/reference generator`)
   if (!generateToolPass) {
     failed += 1

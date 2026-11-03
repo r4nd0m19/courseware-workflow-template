@@ -94,10 +94,12 @@ function readConfigFile(file) {
   }
 }
 const fileConfig = readConfigFile(configPath)
-// One shared config drives every AI step: page review may pass --zcode-* flags,
-// while text reviews inherit zcodeConfig/zcodeProvider from the same JSON file.
+// One shared config drives every AI step. Text reviews may use a different
+// ZCode provider from the visual page reviewer via textZcodeProvider; when it
+// is absent, both use zcodeProvider.
 const effectiveZcodeConfigPath = zcodeConfigPath || fileConfig.zcodeConfig || ''
-const effectiveZcodeProviderId = zcodeProviderId || fileConfig.zcodeProvider || ''
+const effectiveZcodeProviderId =
+  zcodeProviderId || fileConfig.textZcodeProvider || fileConfig.zcodeProvider || ''
 
 function zcodeConfigCandidates(value) {
   return (Array.isArray(value) ? value : [value])

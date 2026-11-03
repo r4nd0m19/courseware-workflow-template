@@ -75,10 +75,12 @@ function readConfigFile(file) {
   }
 }
 const fileConfig = readConfigFile(configPath)
-// Text generation reuses the same config file as page review, including its
-// ZCode provider reference, so one file configures every AI step.
+// Text generation reuses the same config file as page review. textZcodeProvider
+// lets text steps use a different ZCode provider from the visual page reviewer;
+// when omitted, both use zcodeProvider.
 const effectiveZcodeConfigPath = zcodeConfigPath || fileConfig.zcodeConfig || ''
-const effectiveZcodeProviderId = zcodeProviderId || fileConfig.zcodeProvider || ''
+const effectiveZcodeProviderId =
+  zcodeProviderId || fileConfig.textZcodeProvider || fileConfig.zcodeProvider || ''
 function zcodeCandidates(value) {
   return (Array.isArray(value) ? value : [value])
     .map((item) => String(item || '').trim())

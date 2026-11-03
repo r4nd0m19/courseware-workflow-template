@@ -170,6 +170,49 @@ test('shared config reuses the ZCode provider and textModel', () => {
   assert.match(result.stdout, /key=zcode:fake/)
 })
 
+test('textZcodeProvider selects a separate provider for text steps', () => {
+  const zcodeFile = write('text-zcode-provider.json', {
+    config: {
+      providerConfigRules: {
+        providerRules: [
+          {
+            providerId: 'visual',
+            enabled: true,
+            config: {
+              api: { type: 'openai-chat', baseUrl: 'https://visual.example.invalid/v1' },
+              access: { apiKey: 'visual-key' },
+            },
+          },
+          {
+            providerId: 'text',
+            enabled: true,
+            config: {
+              api: { type: 'openai-chat', baseUrl: 'https://text.example.invalid/v1' },
+              access: { apiKey: 'text-key' },
+            },
+          },
+        ],
+      },
+      modelConfigRules: {
+        providerModelRules: [
+          { providerId: 'visual', modelId: 'visual-model' },
+          { providerId: 'text', modelId: 'provider-text-model' },
+        ],
+      },
+    },
+  })
+  const configFile = write('text-provider-config.json', {
+    textModel: 'text-model',
+    zcodeConfig: zcodeFile,
+    zcodeProvider: 'visual',
+    textZcodeProvider: 'text',
+  })
+  const result = run(['--check-config', '--config', configFile])
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /model=text-model/)
+  assert.match(result.stdout, /key=zcode:text/)
+})
+
 if (failed) {
   console.error(`${failed}/${total} single-shot-generate tests failed`)
   process.exit(1)
