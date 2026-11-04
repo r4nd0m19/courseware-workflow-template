@@ -201,7 +201,7 @@ git commit -m "chore: sync workflow"
 
 ## 发布
 
-远端仓库：`https://github.com/r4nd0m19/courseware-workflow-template`（私有，`main`）。
+远端仓库：`https://github.com/r4nd0m19/courseware-workflow-template`（公开，`main`）。
 
 推送前先做一次素材/许可/隐私复核：preset 的 `license: private`、壳与参考素材授权、截图和个人信息。日常更新：
 
@@ -209,7 +209,7 @@ git commit -m "chore: sync workflow"
 git push origin main
 ```
 
-公开仓库前另做一次审查，并确认 GitHub secret scanning / push protection / Dependabot 已开启。没有用户明确授权，不要主动推送到任何外部服务。
+公开仓库应保持 GitHub secret scanning / push protection / Dependabot 开启；发布前另做一次素材/许可/隐私审查。没有用户明确授权，不要主动推送到任何外部服务。
 
 ## 安全
 

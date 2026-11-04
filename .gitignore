@@ -5,6 +5,32 @@ workflow/tools/.cache/
 __pycache__/
 .specify/
 
+# 课件运行时状态与本地资料（模板仓库不发布这些内容）
+.courseware/
+.zcode/
+.codex/
+review/
+screenshots/
+research/
+reference-crawl/
+archive/
+generated/
+shells/
+specs/
+prototype/
+style-pack/source/
+style-pack/baselines/install-guide.png
+tools/r0/credentials.local.json
+tools/r0/*.local.json
+
+# 本地密钥/环境文件
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+
 # browsercc toolchain is downloaded by judge-runtime/install.mjs (~91MB)
 judge-runtime/browsercc/
 registry/.tmp-component-files-*/
