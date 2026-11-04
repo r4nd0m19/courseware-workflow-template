@@ -24,7 +24,7 @@
 - 页面审核：默认 `page_review_scope=visual-script`，AI 只拿本页截图和已批准脚本页，判断可见内容是否与脚本一致、排版是否有问题；0.37.0 起页面证据不再跑 overflow/overlap（交给截图 AI + 老师），精确文本/quiz/概念/旁白/参考残留/截图绑定仍阻断。视觉自审通过后才进入老师逐页审核；`page_review_scope=evidence` 可回滚到完整证据包。
 - 自审：`inputs`/`alpha`/`beta`/`gold` 确定性汇总；**density 与交互/组件复杂度在脚本自审阶段判定**（`density_authority=script` 默认），页面自审不再判断 density；`density_authority=page` 保留旧路径用于回滚。参考适配每课一次；高信号渲染文本确定性检查 + 散文覆盖率提示。页面自审是**单次模型调用**（证据 + 内联截图 → 结构化 JSON，无文件/命令工具），模型/端点/key 由用户配置。
 - 播放器：`player.html` 固定 1440×900 画布、整体缩放；无外层工具栏，页面上只看到课件本身；宽屏两侧用课件自身背景延伸，不再留天空色空白；浏览器缩放不再重排，审核链接使用播放器。
-- 许可：private（对外发布前需确认 preset 许可与素材授权）
+- 许可：private（仓库公开可查看；preset 许可未变，复用/再分发前需确认 preset 许可与素材授权）
 
 ## 在 Codex 图形界面里使用
 
@@ -64,7 +64,7 @@ specify integration install zcode
 specify integration use zcode
 ```
 
-安装后运行 workflow 时传 `-i integration=zcode`。人工审核仍用 ZCode 的原生 `AskUserQuestion`，不需要 MCP 面板。
+安装后可传 `-i integration=zcode`（仅兼容保留，不影响生产流程；0.44.0 起 AI 步骤由 Node 直接调用模型）。人工审核仍用 ZCode 的原生 `AskUserQuestion`，不需要 MCP 面板。
 
 一个项目可以放多个课件：内容工作流每次传 `-i lesson_slug=<slug>`，运行时状态隔离到 `review/<slug>/`、`screenshots/<slug>/`、`review/<slug>/gui-gates/`；壳工作流按 `-i shell_slug=<slug>` 把审核证据放在 `review/shells/<slug>/`，壳 gate 的 pending 在 `review/gui-gates/`。`shells/`、`registry/`、`workflow/` 共享。
 
@@ -167,7 +167,7 @@ Windows 原生安装（不在 WSL 里）时，如果 `specify.exe` 不在 PATH�
 Codex 里的完整流程命令见 `AGENTS.md`。注意：
 
 - **先跑壳工作流**：`node workflow/tools/run-workflow.mjs courseware-shell -i shell=shells/<id> -i shell_slug=<id>`；壳批准后，内容工作流开头的 `check-shell-approval` 才会通过。
-- 内容工作流必须显式传 `-i integration=codex` 和 `-i shell_slug=<id>`；
+- 内容工作流必须传 `-i shell_slug=<id>`；`-i integration=codex` 仅为兼容保留，可省略（0.44.0 起 AI 步骤不经 harness）；
 - 非交互运行必须用 `node workflow/tools/run-workflow.mjs courseware-production ...`，不要直接 `specify workflow run`；退出码 3 表示停在人工 gate。agent 把审核文件/链接发给老师，用原生提问 UI 拿到明确的 approve/reject 后运行 `node workflow/tools/gate-review.mjs decide <run-id> --step <step> --choice <choice> --by teacher`，再用 `node workflow/tools/run-workflow.mjs resume <run-id>` 继续；不要在老师回答前调用 `decide`，不要传 `-i`。
 - 页级工具 fail closed：`build-screen` / `check-rendered-section` / `freeze-section` 只在 `courseware-production` run 内运行；`freeze-section` 还要求同一 run 最近的 `review-page` gate 已 `approve` 且消息包含本页 section id。调试/测试必须显式加 `--manual`（`build-screen` 也可 `--alpha`），不能把批量渲染当成正常流程。逐页 `review-page` 位于嵌套循环内，Spec Kit 恢复时会重跑父 body，因此工作流用 `check-pending-gui-gate.mjs` + `SPECKIT_WORKFLOW_RUN_ID` 跳过 gate 前的重建/自审，确保老师刚点的 verdict 不会因 `reviewedAt` 改写而失效。内置 gate 的终端后备路径仍是 `node workflow/tools/run-workflow.mjs resume <run-id>`；
 - 工作流需要 `concepts=...`、`style_pack=...` 等输入；模板不提供具体课件数据。
